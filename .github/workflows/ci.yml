@@ -7,6 +7,12 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
+# Least privilege. CI reads the tree and nothing else — it does not comment,
+# label, publish, or write back. Any job that later needs more asks for it at the
+# job level, not here.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -48,16 +54,27 @@ jobs:
       - name: Boundaries
         run: pnpm boundaries
 
-      # Both apps build regardless of the ADR-0001 runtime verdict — that is the
-      # fitness function keeping the deployment choice reversible
-      # (docs/engineering/repo-map.md, addendum §22).
-      - name: Build
-        run: pnpm build
+      - name: build:web
+        run: pnpm build:web
+
+      # ADR-0001 rule 2: BOTH server entrypoints build from day one, even after a
+      # "go" verdict. A target that is never built is a target that rots, and a
+      # rotted target turns a reversible decision into a one-way door. These two
+      # steps are that fitness function — do not collapse them into one.
+      - name: build:server:node
+        run: pnpm build:server:node
+
+      - name: build:server:cloudflare
+        run: pnpm build:server:cloudflare
 
       - name: Unit tests
         run: pnpm test:unit
 
       # Testcontainers drives the docker daemon that ubuntu-latest ships with; no
-      # service container or extra setup is required.
+      # service container or extra setup is required. DEBUG makes the container
+      # lifecycle visible in the log, so "a real Postgres booted" is something a
+      # reader can verify rather than take on trust.
       - name: Integration tests
         run: pnpm test:integration
+        env:
+          DEBUG: testcontainers*

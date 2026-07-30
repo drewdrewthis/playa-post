@@ -19,7 +19,11 @@ Node **22** (`.nvmrc`), pnpm from `packageManager` in `package.json`.
 ```bash
 pnpm install            # workspace install
 pnpm dev                # web (:5173) + server (:3000) in parallel
-pnpm build              # builds BOTH apps — web via vite, server via tsup
+pnpm build              # web + BOTH server bundles
+pnpm build:web          # vite + PWA service worker
+pnpm build:server:node  # tsup, platform=node   -> apps/server/dist/node/main.js
+pnpm build:server:cloudflare  # tsup, platform=neutral (workerd conditions)
+                        #        -> apps/server/dist/cloudflare/worker.js
 pnpm typecheck          # root tsconfig + every workspace package
 pnpm lint               # eslint flat config
 pnpm boundaries         # dependency-cruiser — the architecture fitness function
@@ -28,12 +32,22 @@ pnpm test:unit          # no infrastructure; fast enough to run on save
 pnpm test:integration   # Testcontainers Postgres; needs a running docker daemon
 ```
 
-`pnpm lint:boundaries` is an alias for `pnpm boundaries`.
+There is **one** boundary script, `pnpm boundaries` — no `lint:boundaries` alias,
+because two names for one command is two things to keep in sync. The CI *job*
+that runs it is named `lint:boundaries` per the implementation plan's ten-job
+list; job name and script name are allowed to differ, and that mapping is
+recorded in the plan.
+
+**Both server entrypoints build, always** (ADR-0001 rule 2). Do not "simplify"
+CI by dropping the Cloudflare build: a target that is never built is a target
+that rots, and a rotted target turns a reversible deployment choice into a
+one-way door. `apps/server/src/entrypoints/http/health.ts` is shared by both so
+the two runtimes cannot drift; a unit test asserts they return identical output.
 
 CI (`.github/workflows/ci.yml`) runs install → typecheck → lint → boundaries →
-build → unit → integration. **Run the same commands locally before you push.** A
-red PR is a broken promise, not a work-in-progress signal — that is what draft
-status is for.
+build:web → build:server:node → build:server:cloudflare → unit → integration.
+**Run the same commands locally before you push.** A red PR is a broken promise,
+not a work-in-progress signal — that is what draft status is for.
 
 ## Boundary rules — executable, not advisory
 
@@ -65,9 +79,10 @@ its own fixture and by nothing else. **Do not "fix" a fixture.** Adding a rule
 without adding its fixture fails that test on purpose.
 
 Two more rules from the repo map — `no-container-outside-composition` and
-`no-sql-outside-persistence` — land in M2 with the DI container and the first
-repository. They are not configured yet because there is no code for them to
-bind to.
+`no-sql-outside-persistence` — are **M1b.9** in the implementation plan: they
+ship in the M2 PR that introduces the code they bind to (the DI container and
+the first repository). They are not configured yet because a rule with nothing
+to check reports green forever, which is worse than no rule at all.
 
 ## Conventions
 
@@ -102,6 +117,12 @@ bind to.
 - **`packages/contracts` is intentionally an empty barrel.** It is the only legal
   import surface from `apps/web` into the server side. See its README before
   putting anything in it.
+- **`exactOptionalPropertyTypes` is on.** `{ foo?: string }` will not accept
+  `{ foo: undefined }`. Write `undefined`-valued optionals as omissions, or type
+  them `foo?: string | undefined` when "explicitly absent" is a real state.
+- **Integration tests need no `db:start`.** `startPostgresTestDatabase()` boots
+  its own `postgres:16` and applies `supabase/migrations` by default; call
+  `truncateAllTables()` in `beforeEach` rather than restarting the container.
 
 ## How work ships
 

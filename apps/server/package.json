@@ -3,11 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "./dist/main.js",
+  "main": "./dist/node/main.js",
   "scripts": {
     "dev": "tsx watch src/entrypoints/http/main.ts",
     "build": "tsup",
-    "start": "node dist/main.js",
+    "build:node": "TSUP_TARGET=node tsup",
+    "build:cloudflare": "TSUP_TARGET=cloudflare tsup",
+    "start": "node dist/node/main.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

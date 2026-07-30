@@ -9,6 +9,10 @@
 
     "strict": true,
     "noUncheckedIndexedAccess": true,
+    // Distinguishes "absent" from "present and undefined". Enabled at M1 because
+    // it is the one strictness flag that becomes prohibitively expensive later:
+    // every optional-property write in the codebase turns into a candidate error.
+    "exactOptionalPropertyTypes": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,

@@ -35,4 +35,4 @@ designed for the client, not a re-export of the internal.
 
 `pnpm boundaries` fails any import from `apps/web` into `apps/server`. This
 package is the sanctioned alternative. A deliberately-violating fixture proving
-the rule fires lives in `tests/fitness/__fixtures__/web-to-server-internals/`.
+the rule fires lives in `tests/fitness/__fixtures__/no-web-to-server-internals/`.

@@ -10,10 +10,12 @@
   "scripts": {
     "dev": "pnpm --parallel --filter \"./apps/*\" dev",
     "build": "pnpm --recursive --filter \"./apps/*\" build",
+    "build:web": "pnpm --filter @playa-post/web build",
+    "build:server:node": "pnpm --filter @playa-post/server build:node",
+    "build:server:cloudflare": "pnpm --filter @playa-post/server build:cloudflare",
     "typecheck": "tsc --noEmit && pnpm --recursive typecheck",
     "lint": "eslint .",
     "boundaries": "depcruise --config .dependency-cruiser.cjs apps packages",
-    "lint:boundaries": "pnpm run boundaries",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration"

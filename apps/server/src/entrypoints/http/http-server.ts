@@ -2,13 +2,10 @@ import Fastify, { type FastifyInstance } from 'fastify';
 
 import type { Configuration } from '../../composition/config';
 
-/** Body of `GET /healthz`. Deliberately carries no build, version, or dependency detail. */
-export interface HealthResponse {
-  readonly status: 'ok';
-}
+import { HEALTH_PATH, readHealth, type HealthResponse } from './health';
 
 /**
- * Build the HTTP entrypoint.
+ * Build the Node HTTP entrypoint.
  *
  * Its single responsibility is *runtime binding*: turn configuration into a
  * listening-capable server and mount transports on it. It holds no product
@@ -26,9 +23,9 @@ export function createHttpServer(configuration: Configuration): FastifyInstance 
   // not a wrapper around one. `logLevel: 'silent'` is how tests stay quiet.
   const server = Fastify({ logger: { level: configuration.logLevel } });
 
-  // Liveness only. It must not query the database: a health check that fails when
-  // a dependency is slow turns one degraded dependency into a restart loop.
-  server.get('/healthz', (): HealthResponse => ({ status: 'ok' }));
+  // Liveness only, and shared with the Cloudflare entrypoint so the two runtimes
+  // cannot drift (ADR-0001 rule 2).
+  server.get(HEALTH_PATH, (): HealthResponse => readHealth());
 
   return server;
 }

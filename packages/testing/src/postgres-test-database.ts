@@ -1,5 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { Client } from 'pg';
@@ -12,13 +13,28 @@ import { Client } from 'pg';
  */
 export const POSTGRES_TEST_IMAGE = 'postgres:16';
 
+/**
+ * The repository's own `supabase/migrations`, applied unless a caller opts out.
+ *
+ * Resolved from this file rather than from `process.cwd()` so the harness behaves
+ * identically whether Vitest runs from the repo root, from the package, or from
+ * an editor.
+ */
+export const REPOSITORY_MIGRATIONS_DIRECTORY = fileURLToPath(
+  new URL('../../../supabase/migrations', import.meta.url),
+);
+
 export interface StartPostgresTestDatabaseOptions {
   /**
-   * Directory of `.sql` files to apply, in lexical filename order, after the
-   * container is up. Missing directory means "no schema" — that is not an error,
-   * which is what lets a test opt out of schema entirely.
+   * Directory of `.sql` files to apply, in lexical filename order.
+   *
+   * Omitted → {@link REPOSITORY_MIGRATIONS_DIRECTORY}, so an integration test gets
+   * the real schema by default and cannot silently drift from what
+   * `supabase db reset` produces. `null` → apply nothing, for tests that own their
+   * own schema. A directory that does not exist is not an error: it yields an
+   * empty database, which is exactly M1's state.
    */
-  readonly migrationsDirectory?: string;
+  readonly migrationsDirectory?: string | null;
   /** Override the image. Defaults to {@link POSTGRES_TEST_IMAGE}. */
   readonly image?: string;
 }
@@ -28,32 +44,47 @@ export interface PostgresTestDatabase {
   readonly connectionString: string;
   /** An already-connected client. The test owns it; {@link stop} closes it. */
   readonly client: Client;
-  /** Filenames applied from `migrationsDirectory`, in the order they ran. */
+  /** The directory migrations were read from, or `null` if the caller opted out. */
+  readonly migrationsDirectory: string | null;
+  /** Filenames applied from {@link migrationsDirectory}, in the order they ran. */
   readonly appliedMigrations: readonly string[];
+  /**
+   * Empty every table while keeping the migrated schema, and return the tables
+   * truncated (schema-qualified, sorted).
+   *
+   * This is the between-tests reset. It deliberately does **not** re-run
+   * migrations: re-applying schema per test would cost seconds each and would
+   * hide migrations that are not idempotent.
+   */
+  truncateAllTables(): Promise<readonly string[]>;
   /** Closes the connection and destroys the container. Always call this. */
   stop(): Promise<void>;
 }
 
 /**
- * Start a disposable Postgres 16 container, apply a directory of `.sql` files,
- * and hand back a live connection.
+ * Start a disposable Postgres 16 container, apply the repository's migrations, and
+ * hand back a live connection.
  *
  * This is a **test fixture loader, not a migration system** (addendum §18 forbids
  * building one): no version table, no down-migrations, no state tracking. It
- * replays the same checked-in SQL that the Supabase CLI applies for real, into a
+ * replays the same checked-in SQL the Supabase CLI applies for real, into a
  * container that is destroyed when the test finishes.
  *
  * @example
  * ```ts
- * const database = await startPostgresTestDatabase({
- *   migrationsDirectory: fileURLToPath(new URL('../../../supabase/migrations', import.meta.url)),
- * });
+ * const database = await startPostgresTestDatabase();   // repo migrations applied
  * afterAll(() => database.stop());
+ * beforeEach(() => database.truncateAllTables());
  * ```
  */
 export async function startPostgresTestDatabase(
   options: StartPostgresTestDatabaseOptions = {},
 ): Promise<PostgresTestDatabase> {
+  const migrationsDirectory =
+    options.migrationsDirectory === undefined
+      ? REPOSITORY_MIGRATIONS_DIRECTORY
+      : options.migrationsDirectory;
+
   const container: StartedPostgreSqlContainer = await new PostgreSqlContainer(
     options.image ?? POSTGRES_TEST_IMAGE,
   ).start();
@@ -64,7 +95,7 @@ export async function startPostgresTestDatabase(
 
   let appliedMigrations: readonly string[];
   try {
-    appliedMigrations = await applyMigrations(client, options.migrationsDirectory);
+    appliedMigrations = await applyMigrations(client, migrationsDirectory);
   } catch (error) {
     // A half-migrated container is worse than none: leaking it would strand a
     // docker container for the rest of the CI run.
@@ -76,7 +107,17 @@ export async function startPostgresTestDatabase(
   return {
     connectionString,
     client,
+    migrationsDirectory,
     appliedMigrations,
+
+    async truncateAllTables(): Promise<readonly string[]> {
+      const tables = await listTruncatableTables(client);
+      if (tables.length > 0) {
+        await client.query(`truncate table ${tables.join(', ')} restart identity cascade`);
+      }
+      return tables;
+    },
+
     async stop(): Promise<void> {
       await client.end();
       await container.stop();
@@ -86,9 +127,9 @@ export async function startPostgresTestDatabase(
 
 async function applyMigrations(
   client: Client,
-  migrationsDirectory: string | undefined,
+  migrationsDirectory: string | null,
 ): Promise<readonly string[]> {
-  if (migrationsDirectory === undefined) {
+  if (migrationsDirectory === null) {
     return [];
   }
 
@@ -111,6 +152,25 @@ async function listMigrationFilenames(migrationsDirectory: string): Promise<stri
     }
     throw error;
   }
+}
+
+/**
+ * Every user table, schema-qualified and quoted.
+ *
+ * Catalog-driven rather than a hand-maintained list, so a table added by a future
+ * migration is reset without anyone remembering to update this file. The failure
+ * mode being prevented is a test that passes because stale rows from the previous
+ * test happened to satisfy it.
+ */
+async function listTruncatableTables(client: Client): Promise<string[]> {
+  const { rows } = await client.query<{ qualified_name: string }>(
+    `select quote_ident(schemaname) || '.' || quote_ident(tablename) as qualified_name
+       from pg_tables
+      where schemaname not in ('pg_catalog', 'information_schema')
+        and schemaname not like 'pg\\_toast%'
+      order by 1`,
+  );
+  return rows.map((row) => row.qualified_name);
 }
 
 function isDirectoryMissing(error: unknown): boolean {

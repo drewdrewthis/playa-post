@@ -89,8 +89,8 @@ is the ability to detect drift.
 | # | Work item | Shape |
 |---|---|---|
 | M1.1 | pnpm workspace skeleton | `pnpm-workspace.yaml`, root `package.json`, `tsconfig.base.json` (strict, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), the `apps/*` and `packages/*` directories per addendum §3. Empty modules are *not* created (§4). |
-| M1.2 | Boundary enforcement | ESLint flat config + `dependency-cruiser`, seven rules, with deliberately-violating fixtures under `tests/fitness/__fixtures__/` and a test asserting each is flagged by rule name. `pnpm lint:boundaries`. |
-| M1.3 | Test harness | Vitest workspace with `unit` and `integration` projects; `packages/testing` exports a Testcontainers Postgres harness that applies `supabase/migrations` and truncates between tests. Unit tests must run without Docker. |
+| M1.2 | Boundary enforcement | ESLint flat config + `dependency-cruiser`, with deliberately-violating fixtures under `tests/fitness/__fixtures__/` and a test asserting each is flagged by rule name. `pnpm boundaries`. Five rules live at M1a; two deferred to M1b.9 — see M1-AC2. |
+| M1.3 | Test harness | Vitest workspace with `unit` and `integration` projects; `packages/testing` exports a Testcontainers Postgres harness that applies `supabase/migrations` **by default** and exposes `truncateAllTables()` for between-test reset. Unit tests must run without Docker. |
 | M1.4 | Local Supabase + migration flow | `supabase/config.toml`, `migrations/`, `seed/`, `sql/`; `pnpm db:start|db:reset|db:migrate|db:types` (Kysely types generated from the live schema, checked in). |
 | M1.5 | Security baseline migration | Schema `app`; roles `app_rw` (`NOSUPERUSER NOBYPASSRLS NOINHERIT`, member of nothing) and `app_migrator` (owner); the full ADR-0002 §3 revoke set **including functions, sequences, types and `ALTER DEFAULT PRIVILEGES FOR ROLE app_migrator`**; and the §4 verbatim policy shape (`ENABLE` + `FORCE` + `app_rw_full_access AS PERMISSIVE FOR ALL TO app_rw USING (true) WITH CHECK (true)` + `COMMENT ON POLICY`). A canary table exists from the baseline so assertions are non-vacuous. |
 | M1.6 | Security fitness suite + B-row manifest | `tests/security/` with **B1, B2, B3, B4** and B12's secondary rule implemented, and `b-rows.manifest.json` declaring all eighteen rows as `implemented` or `pending: <milestone>`. |
@@ -102,16 +102,84 @@ is the ability to detect drift.
 **The ten CI jobs, named:** `typecheck`, `lint`, `lint:boundaries`, `test:unit`, `test:integration`,
 `test:security`, `build:web`, `build:server:cloudflare`, `build:server:node`, `secret-scan`.
 
+> **Job name vs script name.** The CI *job* is `lint:boundaries`; the *script* it runs is
+> `pnpm boundaries`. There is deliberately only one script name — an alias pair is two things to
+> keep in sync and eventually one of them rots. Ratified in M1a.
+
+### M1a / M1b — the split, and why
+
+M1 was scoped as ten work items in one milestone. M1a shipped roughly half of them
+([PR #2](https://github.com/drewdrewthis/playa-post/pull/2)); the rest are M1b. Recording the split
+rather than quietly carrying it, because the M1b items are **not** optional polish — several of them
+are the gate that makes an M2 feature safe to write at all, and merging M2 code past an unbuilt gate is
+how a "we'll add the security suite later" milestone becomes permanent.
+
+**M1a — executable skeleton (delivered, PR #2):**
+
+| Item | What landed | What did not |
+|---|---|---|
+| M1.1 | pnpm workspace, strict `tsconfig.base.json` including `exactOptionalPropertyTypes` | — |
+| M1.2 | Five boundary rules + one violating fixture each + fitness test | Two literal-content rules — see M1-AC2 |
+| M1.3 | Vitest `unit`/`integration` projects; Testcontainers Postgres 16 harness applying `supabase/migrations` by default and exposing `truncateAllTables()` | — |
+| M1.4 | `supabase/config.toml` (with `app` deliberately unexposed), `migrations/` + workflow README | `seed/`, `sql/`, the `db:*` scripts, checked-in Kysely types |
+| M1.7 | GitHub Actions: install, typecheck, lint, boundaries, `build:web`, `build:server:node`, `build:server:cloudflare`, unit, integration | `test:security`, `secret-scan`, the ten *named* jobs, branch protection |
+| M1.8 | `packages/configuration` (Zod, fails fast naming the key, never echoing values) | `packages/observability` |
+| M1.9 | `CLAUDE.md` | PR template, `.env.example`, secret-scan hook |
+
+**M1b — enforcement completion. Each row must merge before the M2 work in its gate column:**
+
+| # | Item | Gate — must land before |
+|---|---|---|
+| M1b.1 | M1.4 remainder: `db:start\|db:reset\|db:migrate\|db:types`, `seed/`, `sql/`, checked-in Kysely types | any M2 repository or migration |
+| M1b.2 | M1.5 security-baseline migration: schema `app`, `app_rw`/`app_migrator`, the full ADR-0002 §3 revoke set and §4 policy shape, canary table | M2's **first product table** |
+| M1b.3 | M1.6 `tests/security/` B1–B4 + B12 secondary + `b-rows.manifest.json` | M2's **first viewer-scoped query** |
+| M1b.4 | M1.8 remainder: `packages/observability` — redaction allowlist, correlation IDs, span-attribute redaction | M2 logging anything request-shaped |
+| M1b.5 | M1.7 remainder: ten named CI jobs + branch protection ([#4](https://github.com/drewdrewthis/playa-post/issues/4)) | **any M2 merge** — this is the gate that makes every other row enforceable |
+| M1b.6 | M1.9 remainder: PR template (AC + evidence + boundary checkbox), `.env.example`, secret-scan hook | M2's first PR |
+| M1b.7 | M1-AC13 no-placeholder-layers fitness test ([#5](https://github.com/drewdrewthis/playa-post/issues/5)) | M2 creating `apps/server/src/modules/` — it is vacuous until then and load-bearing from then |
+| M1b.8 | M1.10 `ac-index.md` regenerated by CI ([#6](https://github.com/drewdrewthis/playa-post/issues/6)) | M2 exit |
+| M1b.9 | Boundary rules `no-container-outside-composition` and `no-sql-outside-persistence` | ships **in** the M2 PR that introduces the container (ADR-0003) and the first repository respectively |
+
+M1b.5 is the load-bearing one. Until branch protection requires the named jobs, every other rule in
+this document is advisory.
+
+### Ratified toolchain constraint — TypeScript pinned to 6.0.3
+
+`typescript` is pinned to **6.0.3**, not `latest` (7.0.2), and M1a's fitness test guards the pin.
+
+TypeScript 7 is outside the supported range of **both** `dependency-cruiser` (`>=2.0.0 <7.0.0`) and
+`typescript-eslint` (`>=4.8.4 <6.1.0`). The typescript-eslint break is loud. The dependency-cruiser one
+**fails open**: on TS 7 it stops recognising `.ts` as a scannable extension, so `pnpm boundaries`
+reports "no dependency violations found" over **zero modules** and exits 0 — the boundary gate appears
+green while enforcing nothing.
+
+Guard: `tests/fitness/boundaries.fitness.test.ts` asserts `totalCruised > 0` on the real tree, so the
+zero-file failure mode fails CI instead of passing it. Do not raise the pin until both tools declare
+support; when they do, the guard stays.
+
 ### Acceptance criteria
 
 - **M1-AC1** `pnpm install && pnpm typecheck && pnpm lint && pnpm test:unit` exits 0 on a clean clone
-  with no network beyond the npm registry. Separately, with Docker available,
-  `pnpm db:start && pnpm test:integration` exits 0. *Evidence: two terminal transcripts, exit codes shown.*
-- **M1-AC2** Each of the seven boundary rules is proven by its fixture: `no-domain-to-infrastructure`,
+  with no network beyond the npm registry. Separately, with **a running Docker daemon and no other
+  setup**, `pnpm test:integration` exits 0 — the harness starts its own `postgres:16` container via
+  Testcontainers and applies `supabase/migrations` itself, so there is no `db:start` prerequisite and no
+  long-lived local database. *Evidence: two terminal transcripts, exit codes shown.*
+  *(Amended in M1a: the original wording assumed a `pnpm db:start` step that the Testcontainers design
+  makes unnecessary. `db:start` still ships in M1b.1 for local Supabase development — Auth, Storage,
+  Studio — but integration tests must not depend on it, or they stop being runnable from a cold clone.)*
+- **M1-AC2** Each **live** boundary rule is proven by its own fixture under
+  `tests/fitness/__fixtures__/<rule-name>/`, and no fixture trips a rule other than its own.
+  Live at M1a — the five addendum §19 minimums: `no-domain-to-infrastructure`,
   `no-application-to-transport`, `no-transport-to-persistence`, `no-web-to-server-internals`,
-  `no-cross-module-persistence`, `no-container-outside-composition`, `no-sql-outside-persistence`.
-  `pnpm lint:boundaries` reports exactly seven violations naming those rules; with fixtures excluded it
-  exits 0. *Evidence: both transcripts quoted, the seven rule names visible.*
+  `no-cross-module-persistence`. `pnpm boundaries` over the fixtures reports violations naming exactly
+  those rules; over `apps/ packages/` it exits 0 having cruised a non-zero number of modules.
+  *Evidence: both transcripts quoted, the rule names visible, module count visible.*
+  *(Amended in M1a from seven to five. `no-container-outside-composition` and
+  `no-sql-outside-persistence` are deferred to **M1b.9** — the first needs a DI container to point at
+  and the second is a rule about SQL string literals rather than an import edge, so dependency-cruiser
+  is the wrong tool for it. Both ship in the M2 PR that introduces the code they bind to. A rule
+  configured against nothing is the empty abstraction addendum §4 forbids, and worse, it reports green
+  forever. This deferral is tracked here, not only in `repo-map.md`.)*
 - **M1-AC3** `pnpm db:reset` on a clean machine applies all migrations and exits 0; after `pnpm db:types`,
   `git diff --exit-code packages/database/src/schema.ts` exits 0. *Evidence: quoted commands with exit codes.*
 - **M1-AC4 (B1)** Connecting as `anon` and as `authenticated` and selecting from every table in schema
@@ -142,6 +210,12 @@ is the ability to detect drift.
 - **M1-AC10** Booting the server with a required env var absent exits non-zero within 2 s and prints the
   missing key's name and expected type, printing no value of any other secret. *Evidence: transcript with
   exit code.*
+  *(M1a status: the mechanism exists and is proven for **malformed** values —
+  `ConfigurationError` names the offending keys and omits their values, with a unit test asserting a
+  password in a rejected `PORT` does not reach the message. It is **vacuous for absence** until a
+  variable is actually required: M1a's schema has a safe default for every key, precisely because none
+  of them is a secret yet. **First load-bearing at M2**, when `DATABASE_URL` becomes required — the AC
+  is not satisfied by M1a alone.)*
 - **M1-AC11** The logger drops non-allowlisted fields: `logger.info({ body: 'secret text', userId: 'u1' })`
   emits a line containing `u1` and not `secret text`. The same holds for OpenTelemetry span attributes
   (ADR-0002 Q3). *Evidence: quoted emitted JSON line + quoted exported span attributes.*
@@ -158,8 +232,15 @@ is the ability to detect drift.
   unmapped. Proven by adding an AC. *Evidence: the failing run naming the unmapped AC, then the passing
   run, plus the generated index.*
 
-**Done means:** a new agent can clone, run `pnpm install && pnpm db:reset && pnpm test`, and get green;
-any of the seven boundary violations fails the build; all five B3 privilege regressions are caught.
+**Done means (M1 as a whole, i.e. M1a + M1b):** a new agent can clone, run
+`pnpm install && pnpm db:reset && pnpm test`, and get green; any of the seven boundary violations fails
+the build; all five B3 privilege regressions are caught.
+
+**M1a done means:** a new agent can clone, run `pnpm install && pnpm typecheck && pnpm lint &&
+pnpm boundaries && pnpm build && pnpm test`, and get green with only Node 22 and Docker; each of the
+five live boundary violations fails the build, proven by its fixture; and both server entrypoints
+build. M1a explicitly does **not** satisfy M1-AC3 through M1-AC14 — those are M1b, gated per the table
+above.
 
 ---
 
@@ -304,7 +385,7 @@ B17 · M2.20 Playwright e2e for the slice.
   reserved handle (`admin`), a duplicate differing only by case (citext), a confusable of an existing
   handle, an out-of-charset handle, and an over-length handle. A change attempt returns `HANDLE_IMMUTABLE`.
   *Evidence: six quoted error responses.*
-- **M2-AC26 (regression)** `pnpm lint:boundaries` and `pnpm test:security` stay green with the nine new
+- **M2-AC26 (regression)** `pnpm boundaries` and `pnpm test:security` stay green with the nine new
   modules present — identity, connections, graph, bulletins, views, notifications, moderation, sync,
   audit (storage is not built) — and no module imports another module's persistence layer.
   *Evidence: both transcripts, exit 0, with the nine module names visible in the dependency-cruiser summary.*
