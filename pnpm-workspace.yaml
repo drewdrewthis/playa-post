@@ -1,0 +1,13 @@
+packages:
+  - apps/*
+  - packages/*
+
+# pnpm blocks dependency build scripts by default. Only these are allowed to run.
+# The `false` entries are optional native accelerators pulled in transitively by
+# testcontainers; the library works without them and skipping them keeps CI fast.
+allowBuilds:
+  cpu-features: false
+  esbuild: true
+  protobufjs: false
+  ssh2: false
+  unrs-resolver: true

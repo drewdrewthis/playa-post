@@ -1,0 +1,26 @@
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Vite / PWA generated output
+apps/web/dev-dist/
+
+# Local env — never commit secrets (addendum §17)
+.env
+.env.*
+!.env.example
+
+# Supabase CLI local state
+supabase/.branches/
+supabase/.temp/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Nested worktrees
+.worktrees/
