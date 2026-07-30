@@ -67,11 +67,18 @@ Dependent envelopes whose predecessor failed return `rejected` / `PRECONDITION_F
 
 ### Precedence (hard invariants, evaluated before any handler)
 
-1. **Erasure wins over everything.** A mutation touching an erased subject → `rejected` / `GONE`.
-2. **Blocking wins over pending connection, introduction, bulletin exposure, and notification.**
-3. **Revoked authorization wins.** Withdrawn invitations, removed connections, and lost visibility are
+1. **Actorship is checked first.** Every identifier in a mutation payload — `connectionId`, `bulletinId`,
+   `invitationId`, `viewId`, `targetUserId`, `connector` — is verified to belong to, or be reachable by,
+   the authenticated actor **before the handler runs**. An actor with no relationship to the subject gets
+   a structured failure with zero state change and zero outbox rows. The conflict envelope is a leak
+   channel: returning `currentVersion`/`currentState` for a resource the actor is not party to would
+   disclose a third party's private directional trust through an error path, so actorship is checked
+   **before** version comparison, never after. Cross-reference ADR-0002's B13 write-path IDOR matrix.
+2. **Erasure wins over everything.** A mutation touching an erased subject → `rejected` / `GONE`.
+3. **Blocking wins over pending connection, introduction, bulletin exposure, and notification.**
+4. **Revoked authorization wins.** Withdrawn invitations, removed connections, and lost visibility are
    re-checked at apply time, never at enqueue time.
-4. A stale mutation must not resurrect archived, deleted, or erased data — handlers check lifecycle
+5. A stale mutation must not resurrect archived, deleted, or erased data — handlers check lifecycle
    state, not just row existence.
 
 ### Per-mutation-type conflict matrix (v1)
@@ -125,4 +132,5 @@ erased subjects are purged from all caches before rendering (PDF §5).
 ## Verification
 
 `accepted` when the M2 slice replays one mutation successfully (same ID twice → one effect,
-second returns `replayed`), and the M5 conflict matrix has one integration test per row above.
+second returns `replayed`), and the M5 conflict matrix has one integration test per row above. Every
+mutation type in the conflict matrix carries a B13 row (ADR-0002).

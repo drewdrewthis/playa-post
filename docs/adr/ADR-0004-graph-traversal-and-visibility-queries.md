@@ -31,8 +31,11 @@ No projections, no cache, no graph database in v1.**
      people are not merely filtered from the result — they are not traversable, and no path routes
      through them;
    - prunes deactivated and erased users;
-   - returns, per person: `degree`, `path_via` (the first-hop connector name, when the viewer may see it),
-     `mutual_count`, and a `disclosure` level of `full` | `topology_only`.
+   - returns, per person: `degree`, `path_via` (the first-hop connector's **name** only when that
+     intermediary is at `full` disclosure for this viewer; otherwise the field carries the intermediary's
+     ghost surrogate ID, never a name), `mutual_count` (returned **only** for `full`-disclosure people —
+     a `topology_only` node carries no `mutual_count`, since polled over time it leaks the existence and
+     timing of connections the viewer cannot see), and a `disclosure` level of `full` | `topology_only`.
 2. **No product depth cap.** `max_depth` is an *operational safety bound* (default 4, configurable) and
    `node_budget` a row cap (default 1500). When either binds, the read model returns
    `truncated: true` with the reason, and the client shows an explicit "more of your network beyond
@@ -46,24 +49,38 @@ No projections, no cache, no graph database in v1.**
    see elsewhere (a shared bulletin author, a second-degree connector), which reconstructs exactly the
    identity the disclosure rule withheld. Surrogates are stable for one viewer (so layout is stable
    across reloads) and useless across viewers. Ghost nodes carry **no** name, handle, avatar, role, or
-   mutual count — degree and adjacency only.
-5. **Trust never leaves its owner.** Edges incident to the viewer carry the viewer's own trust value
+   mutual count — only their depth from the viewer (1st/2nd/3rd) and the restricted adjacency of
+   decision 5. ("Depth" here is distance from the viewer; it is not a count of the ghost's connections,
+   which decision 5 withholds.)
+5. **Ghost adjacency is restricted to fully-visible neighbours; topology-only nodes carry no counts.**
+   The surrogate ID (decision 4) makes a hidden person non-correlatable *across* viewers; it does nothing
+   about re-identification *within* one viewer's own view — a ghost adjacent to exactly {Moss, Juniper,
+   Kestrel}, three people the viewer already sees at `full` disclosure, is uniquely determined by
+   structure alone to anyone with ordinary social knowledge of that network. Decided, privacy-
+   conservatively: a topology-only node's returned adjacency is restricted to edges incident to people
+   the viewer can already see at `full` disclosure, and the node exposes **no** `mutual_count` and no
+   degree-of-connection count. This keeps the ghost meaningful as topology ("your network continues
+   here") while removing the neighbour-set fingerprint that identifies them. Residual, stated honestly:
+   a ghost adjacent to three or more fully-visible people is still narrowable by a viewer with ordinary
+   social knowledge of the group. Accepted as a bounded residual, not eliminated, and escalated to the
+   product owner (cross-reference: escalation E4, `docs/engineering/implementation-plan.md`).
+6. **Trust never leaves its owner.** Edges incident to the viewer carry the viewer's own trust value
    (0–100, plus a distinct `unset`). Edges between two other people carry **no** weight — they render at
    uniform width. *(This is a visible deviation from the prototype; see Escalations in the
    implementation plan.)* `unset` is a first-class value distinct from `0` (PDF §4) and must be modelled
    as `NULL` with a `NOT NULL`-free column, never defaulted to zero.
-6. **Read model, not domain entities** (§7). The graph query returns a purpose-built projection; no
+7. **Read model, not domain entities** (§7). The graph query returns a purpose-built projection; no
    aggregate reconstruction. It lives in `modules/graph/persistence/sql/visible-people.sql` +
    `ListVisibleGraphQuery`.
-7. **Bulletin visibility uses the same authorized-people CTE**, composed as a subquery — one definition
+8. **Bulletin visibility uses the same authorized-people CTE**, composed as a subquery — one definition
    of "who can this viewer reach", used by graph, board, search, Notify Me, and intro eligibility
    (ADR-0002 §6).
-8. **Incremental loading before caching.** If the graph read exceeds budget, first response is degree
+9. **Incremental loading before caching.** If the graph read exceeds budget, first response is degree
    ≤ 2; further degrees load on pan/zoom demand. Only if measured p95 still exceeds the budget do we add
    a materialized per-viewer projection — and that will need its own ADR because it introduces staleness
    into a privacy-critical read.
 
-**Performance budget (the trigger for step 8):** p95 for the initial graph read < 300 ms server-side at
+**Performance budget (the trigger for step 9):** p95 for the initial graph read < 300 ms server-side at
 a synthetic 5 000-person network with 20 connections per person. Measured by a benchmark integration
 test checked in at M2 and run in CI as a non-blocking report, blocking in M5.
 
@@ -82,10 +99,13 @@ test checked in at M2 and run in CI as a non-blocking report, blocking in M5.
 
 - **Positive:** one traversal definition, enforced in the database, unit-testable with fixtures;
   blocks and erasure are effective on the next read with no invalidation logic; nothing to keep in sync.
-- **Negative:** every graph load costs a recursive CTE. Accepted at v1 scale; step 8 is the escape hatch,
+- **Negative:** every graph load costs a recursive CTE. Accepted at v1 scale; step 9 is the escape hatch,
   gated on measurement.
 - **Negative:** surrogate ghost IDs mean the client cannot cache ghost nodes across viewers or sessions
   keyed by identity. That is intended.
+- **Negative (accepted residual):** structural re-identification of ghosts is bounded, not eliminated —
+  restricting adjacency to fully-visible neighbours (decision 5) removes the neighbour-set fingerprint but
+  a ghost adjacent to three or more fully-visible people remains narrowable by ordinary social knowledge.
 - **Risk:** the recursive CTE is the highest-complexity SQL in the system and the easiest place to write
   a leak. Mitigation: it is covered by ADR-0002's B5/B7/B8 scenario matrix and by property-style fixture
   tests over hand-drawn graphs with known expected visibility per viewer.
@@ -96,4 +116,6 @@ test checked in at M2 and run in CI as a non-blocking report, blocking in M5.
 ## Verification
 
 `accepted` when `modules/graph` renders the M2 slice's connection, the fixture-graph visibility matrix
-(including a blocked path and a topology-only node) is green in CI, and B8 passes.
+(including a blocked path and a topology-only node) is green in CI, and B8 passes, including its extended
+structural re-identification case (a fixture graph where a ghost's neighbour set would uniquely determine
+it, asserting the decision-5 adjacency restriction holds).

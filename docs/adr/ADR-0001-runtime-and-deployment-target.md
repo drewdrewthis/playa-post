@@ -45,6 +45,7 @@ Timebox: **5 working days**. Every criterion is pass/fail with the stated observ
 | S1 | tRPC over fetch | A tRPC v11 procedure served by the fetch adapter returns HTTP 200 with the typed payload; the web app's generated client calls it with no `any`. Evidence: response body + `tsc` clean. |
 | S2 | Kysely explicit transaction | A use case writing one domain row **and** one outbox row in a single `BEGIN…COMMIT` commits atomically; an injected mid-transaction error leaves **0** rows in both tables. Evidence: two SQL `SELECT count(*)` outputs. |
 | S3 | Pooled connectivity | 200 sequential requests through Supabase Supavisor (transaction mode) produce **zero** `prepared statement "sN" already exists` errors and zero connection exhaustion; p95 query round-trip from the Worker < 150 ms. Evidence: run log + latency summary. |
+| S3a | Deployed connection identity | From the deployed Worker/Node process through Supavisor, `SELECT current_user, session_user` returns `app_rw` for both, and `rolbypassrls = false` and `rolsuper = false` for that role. Evidence: quoted query output from the deployed process, not from a local psql. |
 | S4 | Supabase JWT validation | Valid Supabase access token → 200; tampered signature → 401; expired token → 401; token for another project/audience → 401. Verified with WebCrypto against the project JWKS, no vendored crypto. Evidence: four `curl` transcripts. |
 | S5 | Web Push | A VAPID-signed, AES-GCM-encrypted push sent from the Worker to a real browser subscription causes a notification to appear. Evidence: screenshot of the delivered notification + 201 from the push service. |
 | S6 | Queues | Producer→consumer round trip; a deliberately failing consumer retries with backoff and lands in a DLQ after max attempts; a duplicated delivery produces exactly one effect. Evidence: queue metrics/log showing retries, DLQ depth 1, and a single-row `SELECT`. |
@@ -55,7 +56,10 @@ Timebox: **5 working days**. Every criterion is pass/fail with the stated observ
 
 **NO-GO if any of the following is true** (any single one is sufficient):
 
-- Any of S1–S7 cannot be made to pass.
+- Any of S1–S7 (including S3a) cannot be made to pass. Connecting as `postgres` or `service_role` to make
+  the deploy work — the likely "temporary fix" if S3a fails — defeats ADR-0002 decisions 2 and 4 entirely,
+  because every catalog assertion in B3 stops meaning anything once the runtime process isn't actually
+  `app_rw`; a failure here is a no-go, not a workaround.
 - Passing any criterion requires forking, patching, or vendoring a dependency, or hand-rolling crypto,
   a connection pool, a queue, or a migration runner (violates addendum §18).
 - S2 passes only intermittently — a flaky transaction under the pooler is a no-go, not a known issue.
@@ -91,5 +95,5 @@ This fallback requires no further approval — it is pre-committed here.
 ## Verification
 
 This ADR moves to `accepted` (target named in the title) when the M3 spike report — committed at
-`docs/engineering/spikes/M3-runtime-spike.md` — records a captured observation for every one of S1–S10
-and an explicit GO or NO-GO verdict, and CI builds both entrypoints on `main`.
+`docs/engineering/spikes/M3-runtime-spike.md` — records a captured observation for every one of the 11
+criteria (S1–S9, S3a, S10) and an explicit GO or NO-GO verdict, and CI builds both entrypoints on `main`.

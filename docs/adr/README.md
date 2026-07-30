@@ -9,7 +9,7 @@ evidence exists in the repo or in CI. `superseded by ADR-NNNN` when replaced.
 | ADR | Title | Status |
 |-----|-------|--------|
 | [0001](ADR-0001-runtime-and-deployment-target.md) | Runtime and deployment target (Cloudflare Worker vs Node on Railway) | proposed |
-| [0002](ADR-0002-authorization-and-visibility-enforcement.md) | Authorization and visibility enforcement strategy | proposed |
+| [0002](ADR-0002-authorization-and-visibility-enforcement.md) | Authorization and visibility enforcement strategy | proposed (revised — core decision endorsed by stress test; bar is now B1–B18) |
 | [0003](ADR-0003-dependency-injection.md) | Dependency injection via explicit factory composition | proposed |
 | [0004](ADR-0004-graph-traversal-and-visibility-queries.md) | Graph traversal and visibility queries | proposed |
 | [0005](ADR-0005-offline-sync-protocol.md) | Offline sync protocol, idempotency, and conflict rules | proposed |
@@ -23,6 +23,14 @@ Normative inputs, in precedence order:
 2. `docs/Burner_Trust_Network_Final_Handoff.pdf`
 3. `docs/product/decisions.md`
 4. `design/Playa Post.dc.html` (product evidence only — not architecture)
+
+Also normative, on a different axis: `docs/product/launch-definition-of-done.md` defines when v1 is done.
+
+ADR-0002 was stress-tested on 2026-07-30
+(`docs/engineering/reviews/2026-07-30-adr-0002-stress-test.md`, verdict *sound-with-changes*). Its core
+decision — application-layer authorization as the mechanism, database privileges as a blast door — was
+endorsed and **should not be reopened**; the revision hardened the policy shape and grew the bypass suite
+from B1–B12 to **B1–B18**. Read that review before proposing changes to ADR-0002.
 
 New ADR: copy the section headings from any file above, take the next number, open as `proposed`.
 Per addendum §18, any custom infrastructure requires an ADR naming why hardened options are insufficient.

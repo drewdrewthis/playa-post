@@ -1,26 +1,30 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Dependencies / build
 node_modules/
 dist/
 build/
+.turbo/
 coverage/
 *.tsbuildinfo
 
 # Vite / PWA generated output
 apps/web/dev-dist/
 
-# Local env — never commit secrets (addendum §17)
-.env
-.env.*
-!.env.example
-
-# Supabase CLI local state
+# Local tooling state
+.supabase/
 supabase/.branches/
 supabase/.temp/
+*.log
+
+# Nested git worktrees
+.worktrees/
 
 # Editor / OS
 .DS_Store
 .idea/
 .vscode/*
 !.vscode/extensions.json
-
-# Nested worktrees
-.worktrees/
