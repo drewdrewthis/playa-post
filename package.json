@@ -12,7 +12,7 @@
     "build": "pnpm --recursive --filter \"./apps/*\" build",
     "typecheck": "tsc --noEmit && pnpm --recursive typecheck",
     "lint": "eslint .",
-    "boundaries": "depcruise apps packages",
+    "boundaries": "depcruise --config .dependency-cruiser.cjs apps packages",
     "lint:boundaries": "pnpm run boundaries",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
