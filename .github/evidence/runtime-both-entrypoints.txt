@@ -1,0 +1,64 @@
+Script started on 2026-07-30 19:41:20+00:00 [COMMAND="bash /tmp/runtime.sh" <not executed on terminal>]
++ SRV=1992367
++ PORT=3111
++ LOG_LEVEL=info
++ node apps/server/dist/node/main.js
+++ seq 1 40
++ for i in $(seq 1 40)
++ curl -sf localhost:3111/healthz
++ sleep 0.25
+{"level":30,"time":1785440480297,"pid":1992367,"hostname":"ip-10-0-3-222","msg":"Server listening at http://127.0.0.1:3111"}
++ for i in $(seq 1 40)
++ curl -sf localhost:3111/healthz
+{"level":30,"time":1785440480372,"pid":1992367,"hostname":"ip-10-0-3-222","reqId":"req-1","req":{"method":"GET","url":"/healthz","host":"localhost:3111","remoteAddress":"127.0.0.1","remotePort":56024},"msg":"incoming request"}
++ break
++ curl -i -s localhost:3111/healthz
+{"level":30,"time":1785440480376,"pid":1992367,"hostname":"ip-10-0-3-222","reqId":"req-1","res":{"statusCode":200},"responseTime":3.5572910000000206,"msg":"request completed"}
+{"level":30,"time":1785440480382,"pid":1992367,"hostname":"ip-10-0-3-222","reqId":"req-2","req":{"method":"GET","url":"/healthz","host":"localhost:3111","remoteAddress":"127.0.0.1","remotePort":56034},"msg":"incoming request"}
+HTTP/1.1 200 OK
+[1mcontent-type[0m: application/json; charset=utf-8
+[1mcontent-length[0m: 15
+[1mDate[0m: Thu, 30 Jul 2026 19:41:20 GMT
+[1mConnection[0m: keep-alive
+[1mKeep-Alive[0m: timeout=72
+
+{"status":"ok"}{"level":30,"time":1785440480383,"pid":1992367,"hostname":"ip-10-0-3-222","reqId":"req-2","res":{"statusCode":200},"responseTime":1.3151300000000106,"msg":"request completed"}
++ echo
+
++ curl -s -o /dev/null -w 'unmounted route -> HTTP %{http_code}\n' localhost:3111/nope
+{"level":30,"time":1785440480390,"pid":1992367,"hostname":"ip-10-0-3-222","reqId":"req-3","req":{"method":"GET","url":"/nope","host":"localhost:3111","remoteAddress":"127.0.0.1","remotePort":56038},"msg":"incoming request"}
+unmounted route -> HTTP 404
+{"level":30,"time":1785440480390,"pid":1992367,"hostname":"ip-10-0-3-222","reqId":"req-3","msg":"Route GET:/nope not found"}
+{"level":30,"time":1785440480390,"pid":1992367,"hostname":"ip-10-0-3-222","reqId":"req-3","res":{"statusCode":404},"responseTime":0.4156820000000039,"msg":"request completed"}
++ kill 1992367
++ wait 1992367
++ PORT=99999
++ node apps/server/dist/node/main.js
+file:///home/ubuntu/Projects/playa-post/.worktrees/m1-scaffold/apps/server/dist/node/main.js:14548
+    throw new ConfigurationError(invalidKeys);
+          ^
+
+ConfigurationError: Invalid environment configuration. Offending variables: PORT. Values are omitted from this message on purpose.
+    at loadConfiguration [90m(file:///home/ubuntu/Projects/playa-post/.worktrees/m1-scaffold/[39mapps/server/dist/node/main.js:14548:11[90m)[39m
+    at loadServerConfiguration [90m(file:///home/ubuntu/Projects/playa-post/.worktrees/m1-scaffold/[39mapps/server/dist/node/main.js:14563:10[90m)[39m
+    at [90mfile:///home/ubuntu/Projects/playa-post/.worktrees/m1-scaffold/[39mapps/server/dist/node/main.js:14583:21
+[90m    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)[39m
+[90m    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)[39m
+[90m    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)[39m {
+  invalidKeys: [ [32m'PORT'[39m ]
+}
+
+Node.js v22.22.0
++ echo 'invalid-config exit: 1'
+invalid-config exit: 1
++ node --input-type=module -e '
+import worker from '\''./apps/server/dist/cloudflare/worker.js'\'';
+const r = worker.fetch(new Request('\''https://playa.post/healthz'\''));
+console.log('\''cloudflare bundle ->'\'', r.status, await r.json());
+const n = worker.fetch(new Request('\''https://playa.post/nope'\''));
+console.log('\''cloudflare bundle unmounted ->'\'', n.status);
+'
+cloudflare bundle -> [33m200[39m { status: [32m'ok'[39m }
+cloudflare bundle unmounted -> [33m404[39m
+
+Script done on 2026-07-30 19:41:20+00:00 [COMMAND_EXIT_CODE="0"]
