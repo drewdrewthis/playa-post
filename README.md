@@ -2,6 +2,10 @@
 
 Private, opt-in community network: real-world relationships form a navigable trust graph; short typed bulletins support offers, requests, events, collaboration, appreciation, and introductions.
 
+**New here? Start with [`docs/engineering/repo-map.md`](docs/engineering/repo-map.md)**, then the
+normative [architecture addendum](docs/engineering/architecture-addendum.md) and the
+[implementation plan](docs/engineering/implementation-plan.md).
+
 ## What lives here
 - Product code for the Playa Post PWA + API (React/Vite PWA, tRPC, PostgreSQL/Supabase — see docs/).
 - `docs/` — canonical handoff spec (PDF).
