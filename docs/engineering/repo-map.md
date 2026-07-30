@@ -65,7 +65,7 @@ Allowed: `Transport → Application → Domain ← Infrastructure`.
 
 ## Boundary rules — these are executable, not advisory
 
-`pnpm lint:boundaries` (dependency-cruiser + ESLint) fails the build on:
+`pnpm boundaries` (dependency-cruiser + ESLint) fails the build on:
 
 | Rule | Meaning |
 |---|---|
@@ -79,6 +79,17 @@ Allowed: `Transport → Application → Domain ← Infrastructure`.
 
 Deliberately-violating fixtures live in `tests/fitness/__fixtures__/`; a test asserts each is caught.
 If you find yourself wanting to add an exception, that is the signal to change the design, not the rule.
+
+**Live as of M1a:** the first five — the addendum §19 minimums, each proven by its own fixture. The
+last two are deferred to **M1b.9** in the implementation plan (not merely "later"): they ship in the M2
+PR that introduces the code they bind to — `no-container-outside-composition` with the DI container,
+`no-sql-outside-persistence` with the first repository. A rule configured against nothing is the empty
+abstraction §4 forbids, and it reports green forever.
+
+Likewise the `db:*`, `test:security`, and `test:e2e` commands below: they arrive with M1b.1, M1b.3, and
+M4 respectively. Working today: `pnpm install/dev/build/build:web/build:server:node/
+build:server:cloudflare/typecheck/lint/boundaries/test/test:unit/test:integration`. The script is
+`pnpm boundaries` — one name, no alias; the CI *job* that runs it is named `lint:boundaries`.
 
 Cross-module interaction goes through: a small public application interface, a published event, a shared
 contract with clear ownership, or a coordinating application service. Never a direct reach-in.
@@ -116,7 +127,7 @@ pnpm dev               # web + server
 ```bash
 pnpm typecheck
 pnpm lint
-pnpm lint:boundaries   # architecture fitness functions
+pnpm boundaries        # architecture fitness functions
 pnpm test:unit         # domain + application, no infrastructure
 pnpm test:integration  # Testcontainers Postgres, real SQL
 pnpm test:security     # ADR-0002 bypass suite

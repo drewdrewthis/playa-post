@@ -1,0 +1,59 @@
+Script started on 2026-07-30 19:40:15+00:00 [COMMAND="bash /tmp/ts7-probe.sh" <not executed on terminal>]
++ node --version
+v22.22.0
++ ./node_modules/.bin/tsc --version
+Version 6.0.3
++ pnpm boundaries
+[2m$ depcruise --config .dependency-cruiser.cjs apps packages[22m
+
+[32m✔[39m no dependency violations found (30 modules, 35 dependencies cruised)
+
++ echo 'boundaries exit code with TypeScript 6: 0'
+boundaries exit code with TypeScript 6: 0
++ pnpm add -DE -w typescript@7.0.2
++ tail -4
+
+Packages: +13 -11
++++++++++++++-----------
+Done in 4.3s using pnpm v11.18.0
++ ./node_modules/.bin/tsc --version
+Version 7.0.2
++ pnpm boundaries
+[2m$ depcruise --config .dependency-cruiser.cjs apps packages[22m
+
+[32m✔[39m no dependency violations found (0 modules, 0 dependencies cruised)
+
+[33m‼ [1mmissing-typescript-transpiler[22m: dependency-cruiser detected a TypeScript environment,
+    but not a compatible TypeScript compiler (typescript: >=2.0.0 <7.0.0). This means
+    it's likely to have missed TypeScript sources and dependencies.
+
+    Install typescript to get better results (e.g. npm i -D typescript@^6).
+
+    => Support for typescript@>=7 will follow when its API is published and stable.
+[39m
++ echo 'boundaries exit code with TypeScript 7: 0'
+boundaries exit code with TypeScript 7: 0
++ pnpm exec vitest run --project unit tests/fitness/boundaries.fitness.test.ts
++ tail -20
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  |unit| tests/fitness/boundaries.fitness.test.ts > boundary rules (addendum §19) > against the deliberately-violating fixtures > exits non-zero, which is what makes CI fail on a boundary break
+AssertionError: expected +0 not to be +0 // Object.is equality
+ ❯ tests/fitness/boundaries.fitness.test.ts:169:50
+    167|
+    168|     it('exits non-zero, which is what makes CI fail on a boundary brea…
+    169|       expect(cruiseExitCode([fixturesRoot])).not.toBe(0);
+       |                                                  ^
+    170|     });
+    171|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  7 failed | 10 passed (17)
+   Start at  19:40:23
+   Duration  1.83s (transform 28ms, setup 0ms, import 45ms, tests 1.63s, environment 0ms)
+
+
+Script done on 2026-07-30 19:40:25+00:00 [COMMAND_EXIT_CODE="0"]

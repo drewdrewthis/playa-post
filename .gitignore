@@ -9,9 +9,22 @@ dist/
 build/
 .turbo/
 coverage/
+*.tsbuildinfo
+
+# Vite / PWA generated output
+apps/web/dev-dist/
 
 # Local tooling state
 .supabase/
+supabase/.branches/
 supabase/.temp/
 *.log
+
+# Nested git worktrees
+.worktrees/
+
+# Editor / OS
 .DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

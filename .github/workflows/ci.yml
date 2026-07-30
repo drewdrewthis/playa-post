@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+# Least privilege. CI reads the tree and nothing else — it does not comment,
+# label, publish, or write back. Any job that later needs more asks for it at the
+# job level, not here.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Keeps CI honest about Node 22 (see .nvmrc and package.json engines).
+  NODE_VERSION: '22'
+
+jobs:
+  verify:
+    name: lint · boundaries · build · test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Version comes from the `packageManager` field in package.json, so the
+      # workflow cannot drift from what developers run locally.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      # Architecture fitness function, addendum §19. Runs before the build on
+      # purpose: a boundary break is a design defect, and finding it should not
+      # depend on the code also compiling.
+      - name: Boundaries
+        run: pnpm boundaries
+
+      - name: build:web
+        run: pnpm build:web
+
+      # ADR-0001 rule 2: BOTH server entrypoints build from day one, even after a
+      # "go" verdict. A target that is never built is a target that rots, and a
+      # rotted target turns a reversible decision into a one-way door. These two
+      # steps are that fitness function — do not collapse them into one.
+      - name: build:server:node
+        run: pnpm build:server:node
+
+      - name: build:server:cloudflare
+        run: pnpm build:server:cloudflare
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      # Testcontainers drives the docker daemon that ubuntu-latest ships with; no
+      # service container or extra setup is required. DEBUG makes the container
+      # lifecycle visible in the log, so "a real Postgres booted" is something a
+      # reader can verify rather than take on trust.
+      - name: Integration tests
+        run: pnpm test:integration
+        env:
+          DEBUG: testcontainers*

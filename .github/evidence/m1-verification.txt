@@ -1,0 +1,104 @@
+Script started on 2026-07-30 19:40:42+00:00 [COMMAND="bash /tmp/proof.sh" <not executed on terminal>]
++ node --version
+v22.22.0
++ pnpm --version
+11.18.0
++ docker --version
+Docker version 29.5.3, build d1c06ef
++ git rev-parse HEAD
+c857fcf31496571a74542ddbe655d92982e15aaf
++ pnpm install --frozen-lockfile
++ tail -3
+Already up to date
+
+Done in 979ms using pnpm v11.18.0
++ pnpm typecheck
++ tail -8
+packages/contracts typecheck$ tsc --noEmit
+packages/testing typecheck$ tsc --noEmit
+packages/contracts typecheck: Done
+packages/configuration typecheck: Done
+packages/testing typecheck: Done
+apps/web typecheck: Done
+apps/server typecheck$ tsc --noEmit
+apps/server typecheck: Done
++ pnpm lint
+[2m$ eslint .[22m
++ echo 'lint exit: 0'
+lint exit: 0
++ pnpm boundaries
+[2m$ depcruise --config .dependency-cruiser.cjs apps packages[22m
+
+[32m✔[39m no dependency violations found (30 modules, 35 dependencies cruised)
+
++ echo 'boundaries exit: 0'
+boundaries exit: 0
++ pnpm build:web
++ tail -8
+PWA v1.3.0
+mode      generateSW
+precache  5 entries (139.62 KiB)
+files generated
+  dist/sw.js.map
+  dist/sw.js
+  dist/workbox-9c191d2f.js.map
+  dist/workbox-9c191d2f.js
++ pnpm build:server:node
++ tail -5
+[NODE] CLI Cleaning output folder
+[NODE] ESM Build start
+[NODE] ESM dist/node/main.js     533.82 KB
+[NODE] ESM dist/node/main.js.map 886.57 KB
+[NODE] ESM ⚡️ Build success in 63ms
++ pnpm build:server:cloudflare
++ tail -5
+[CLOUDFLARE] CLI Cleaning output folder
+[CLOUDFLARE] ESM Build start
+[CLOUDFLARE] ESM dist/cloudflare/worker.js     543.00 B
+[CLOUDFLARE] ESM dist/cloudflare/worker.js.map 2.61 KB
+[CLOUDFLARE] ESM ⚡️ Build success in 8ms
++ ls -l apps/server/dist/node apps/server/dist/cloudflare
+apps/server/dist/cloudflare:
+total 8
+-rw-rw-r-- 1 ubuntu ubuntu  543 Jul 30 19:40 worker.js
+-rw-rw-r-- 1 ubuntu ubuntu 2680 Jul 30 19:40 worker.js.map
+
+apps/server/dist/node:
+total 1444
+-rw-rw-r-- 1 ubuntu ubuntu 546637 Jul 30 19:40 main.js
+-rw-rw-r-- 1 ubuntu ubuntu 926673 Jul 30 19:40 main.js.map
++ pnpm test:unit
++ tail -8
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post/.worktrees/m1-scaffold
+
+
+ Test Files  4 passed (4)
+      Tests  29 passed (29)
+   Start at  19:40:58
+   Duration  3.43s (transform 233ms, setup 0ms, import 501ms, tests 3.43s, environment 0ms)
+
++ pnpm test:integration
++ tail -8
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post/.worktrees/m1-scaffold
+
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  19:41:02
+   Duration  3.61s (transform 38ms, setup 0ms, import 378ms, tests 3.10s, environment 0ms)
+
++ pnpm exec depcruise --config .dependency-cruiser.cjs tests/fitness/__fixtures__
+
+  [31merror[39m no-web-to-server-internals: [1mtests/fitness/__fixtures__/no-web-to-server-internals/apps/web/src/features/bulletins/api/list-bulletins.ts[22m → [1mtests/fitness/__fixtures__/no-web-to-server-internals/apps/server/src/modules/bulletins/domain/bulletin.ts[22m
+  [31merror[39m no-transport-to-persistence: [1mtests/fitness/__fixtures__/no-transport-to-persistence/apps/server/src/modules/bulletins/transport/bulletins.router.ts[22m → [1mtests/fitness/__fixtures__/no-transport-to-persistence/apps/server/src/modules/bulletins/persistence/postgres-bulletin.repository.ts[22m
+  [31merror[39m no-domain-to-infrastructure: [1mtests/fitness/__fixtures__/no-domain-to-infrastructure/apps/server/src/modules/bulletins/domain/bulletin.ts[22m → [1mtests/fitness/__fixtures__/no-domain-to-infrastructure/apps/server/src/modules/bulletins/persistence/postgres-bulletin.repository.ts[22m
+  [31merror[39m no-domain-to-infrastructure: [1mtests/fitness/__fixtures__/no-domain-to-infrastructure/apps/server/src/modules/bulletins/domain/bulletin.ts[22m → [1mkysely[22m
+  [31merror[39m no-cross-module-persistence: [1mtests/fitness/__fixtures__/no-cross-module-persistence/apps/server/src/modules/bulletins/application/list-visible-bulletins.query.ts[22m → [1mtests/fitness/__fixtures__/no-cross-module-persistence/apps/server/src/modules/connections/persistence/postgres-connection.repository.ts[22m
+  [31merror[39m no-application-to-transport: [1mtests/fitness/__fixtures__/no-application-to-transport/apps/server/src/modules/bulletins/application/create-bulletin.service.ts[22m → [1mtests/fitness/__fixtures__/no-application-to-transport/apps/server/src/modules/bulletins/transport/bulletin.input.ts[22m
+[31m
+x 6 dependency violations (6 errors, 0 warnings). 11 modules, 6 dependencies cruised.
+[39m
++ echo 'depcruise-over-fixtures exit: 6'
+depcruise-over-fixtures exit: 6
+
+Script done on 2026-07-30 19:41:07+00:00 [COMMAND_EXIT_CODE="0"]
