@@ -42,7 +42,7 @@ phrase     := '"' <text, max 64 chars> '"'
 | Field | Domain | Semantics |
 |---|---|---|
 | `type:` | the 7 PDF types: `offer request event collab thanks intro update` (D2 — **no `note`**) | enum, validated |
-| `from:` | a handle or display-name fragment, resolved **only** against authors already in the viewer's authorized set | author narrowing, never people search |
+| `from:` | a handle or display-name fragment, resolved **only** against authors already in the viewer's authorized set | author narrowing, never people search. **Filter-then-resolve**: the token is matched against the already-authorized author set; a fragment that matches nobody in that set yields **zero rows**, never a validation error (cross-reference ADR-0002's indistinguishability section and B17). |
 | `tag:` | tag slug | exact match |
 | `loc:` | location label fragment | substring on the bulletin's location label |
 | `deg:` | `1 2 3 …` (integers) | the author's degree *from the viewer*, from the ADR-0004 read model |
@@ -50,10 +50,16 @@ phrase     := '"' <text, max 64 chars> '"'
 | `is:` | `mine dismissed reported expiring queued` | viewer-relative state. `queued` is evaluated **client-side only** over the Dexie pending queue — the server has no such state; the server rejects it in a *saved* view or Notify Me query. |
 | bare word / phrase | free text | full-text match over **title, body, tags, location only — not author name**. |
 
-`-` negates any term. Unknown fields, unknown enum values, over-length input, or more than 16 terms →
-**rejected with a structured validation error naming the offending token**, never silently ignored.
-Silently dropping an unparsed term would show the user results they did not ask for and, in a saved
-Notify Me query, notify them about the wrong things.
+`-` negates any term. Unknown **fields**, unknown enum values, malformed syntax, over-length input, or
+more than 16 terms → **rejected with a structured validation error naming the offending token**, never
+silently ignored. Silently dropping an unparsed term would show the user results they did not ask for
+and, in a saved Notify Me query, notify them about the wrong things.
+
+This rejection rule applies to unknown fields and malformed syntax — it does **not** apply to a
+well-formed `from:` value that resolves to nobody in the authorized set. That case is deliberately the
+one exception: it is filter-then-resolve (see the `from:` row above), and it returns zero rows, never an
+error. Rejecting an unresolvable `from:` would make the error a people-existence oracle — it would answer
+"does a person named X exist" — which PDF §3/§4 forbid.
 
 ### Deliberate deviations from the prototype (both narrow, both privacy-driven)
 

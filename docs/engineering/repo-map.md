@@ -18,13 +18,18 @@ no messaging. It works offline.
 | 1 | `docs/engineering/architecture-addendum.md` | **Normative** architecture. Structure, boundaries, DI, CQRS-lite, outbox, testing, deployment, DoD. |
 | 2 | `docs/Burner_Trust_Network_Final_Handoff.pdf` | Product handoff: principles, scope, UX, data concepts, privacy/moderation rules. |
 | 3 | `docs/product/decisions.md` | Settled product decisions D1–D3 resolving spec↔prototype conflicts. |
-| 4 | `design/Playa Post.dc.html` | The settled UX prototype. **Product evidence, not architecture.** Never copy its structure. |
-| — | `docs/engineering/implementation-plan.md` | Milestones M1–M5 with acceptance criteria. Where the work is going. |
+| 4 | `design/Playa Post.dc.html` | The settled UX prototype. **Product evidence, not architecture.** Never copy its structure — but the deployed UI *must* match it visually (launch DoD clause 5). |
+| — | `docs/product/launch-definition-of-done.md` | **Owner-stated and normative.** What "v1 is done" means: live, not mocked, real seed data, user-perspective E2E on the deployed app, visually correct vs the prototype, feature complete — with an independent QA sign-off gate. |
+| — | `docs/engineering/implementation-plan.md` | Milestones M1–M6 with acceptance criteria, risks, and the open owner escalations E1–E6. Where the work is going. |
 | — | `docs/adr/` | Architecture Decision Records. Read the index in `docs/adr/README.md`. |
-| — | `docs/procedures/` | Operational runbooks (deploy, rollback, secret rotation, replaying a dead outbox event). Created in M4. |
+| — | `docs/engineering/reviews/` | Review findings that shaped the plan and ADR-0002 (AC review; ADR-0002 stress test). |
+| — | `docs/engineering/ac-index.md` | Generated: every AC → the CI job or manual procedure that proves it. |
+| — | `docs/procedures/` | Operational runbooks (deploy, rollback, secret rotation, replaying a dead outbox event, `app_migrator` break-glass). Created in M4. |
 
 If the PDF and the addendum disagree, the addendum wins. If the prototype and either disagree, the
-prototype loses. Decisions D1–D3 record three such resolutions already made — do not reopen them.
+prototype loses on *architecture* — but the prototype remains the visual target. Decisions D1–D3 record
+three resolutions already made — do not reopen them. Six escalations (E1–E6) are open with the owner and
+carry proposed defaults that proceed unless objected to; see the end of the implementation plan.
 
 ## Where code lives
 
@@ -81,12 +86,20 @@ contract with clear ownership, or a coordinating application service. Never a di
 ## Security model in one paragraph
 
 Authentication is Supabase (magic link), verified at the tRPC boundary and mapped to an **internal**
-user ID (ADR-0008). Authorization is **server-side and authoritative** (ADR-0002): product tables live
-in schema `app`, which is not exposed to PostgREST; the API connects as a least-privileged `app_rw` role;
-RLS is enabled everywhere as a deny-by-default backstop; and every viewer-scoped read passes `viewer_id`
-explicitly into a checked-in SQL visibility function. The client may hide things for usability, but
-client checks are never authoritative and hidden data must never reach the client (addendum §15).
-`tests/security/` (B1–B12) is the proof; adding a viewer-scoped query means adding a row to that matrix.
+user ID (ADR-0008). Authorization is **server-side and authoritative** (ADR-0002): product tables live in
+schema `app`, which is not exposed to PostgREST; the API connects as a least-privileged, non-owning
+`app_rw` role; RLS is `ENABLE`d **and `FORCE`d** everywhere as a deny-by-default backstop with one exact
+`app_rw_full_access` policy per table; and every viewer-scoped read passes a **branded `ViewerId`** —
+constructible only from the authenticated `Actor`, never from request input — into a checked-in
+`SECURITY INVOKER` visibility function. Unauthorized and non-existent are indistinguishable. Operator
+reads are the single sanctioned bypass, on their own read-only role and entrypoint, audited per read.
+The client may hide things for usability, but client checks are never authoritative and hidden data must
+never reach the client (addendum §15).
+
+**`tests/security/` (B1–B18) is the control, not a test suite** — ADR-0002 deliberately gives up
+database-enforced viewer visibility, so this suite is what replaces it. `b-rows.manifest.json` declares
+all eighteen rows; a row that is neither implemented nor explicitly marked `pending: <milestone>` fails
+the job. Read ADR-0002 before touching anything in `tests/security/`.
 
 ## How to run it
 
@@ -136,9 +149,21 @@ architecture changes; proven libraries over custom infrastructure; SOLID with at
 dependency inversion.
 
 Plus, in this repo specifically:
-- a new viewer-scoped query adds a row to the ADR-0002 B5 matrix;
-- a new offline mutation type adds a row to the ADR-0005 conflict matrix;
-- a new grammar field adds a row to the ADR-0007 table plus a golden-file test.
+- a new viewer-scoped query adds a row to the ADR-0002 **B5** matrix **and** composes the shared
+  authorized-set CTE (B12 fails the build otherwise);
+- a new offline mutation type adds a row to the ADR-0005 conflict matrix **and** a **B13** write-path
+  IDOR row proving zero state change and zero outbox rows for an unrelated actor;
+- a new grammar field adds a row to the ADR-0007 table plus a golden-file test;
+- a new person representation in any payload is projected through `app.visible_people`'s disclosure
+  level (ADR-0002 §6a) — never built by joining `app.users` directly;
+- no new field carries sensitive content into a log line, a span attribute, a queue payload, or a push
+  payload (PDF §6, ADR-0002 Q3/§11);
+- every AC in the plan is mapped in `docs/engineering/ac-index.md`, or CI fails.
+
+And for v1 as a whole, `docs/product/launch-definition-of-done.md` is the terminating bar: live, not
+mocked, real seed data, user-perspective E2E on the deployed app with captured evidence, visually correct
+against the prototype, feature complete per PDF §3 as modified by `decisions.md` — signed off by a QA
+pass independent of the implementers. Plan milestone M6 exists to satisfy exactly that, clause by clause.
 
 ## Decision-making
 
