@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Karla:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#dcd6c8;font-family:'Karla',sans-serif}
+a{color:#8a755a}a:hover{color:#2e2418}
+@keyframes youpulse{from{box-shadow:0 0 14px rgba(255,236,214,.45)}to{box-shadow:0 0 30px rgba(255,236,214,.9)}}
+@keyframes sheetup{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes toastin{from{transform:translateY(8px);opacity:0}to{transform:translateY(0);opacity:1}}
+input[type=range]{-webkit-appearance:none;appearance:none;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;border:3px solid currentColor;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+::-webkit-scrollbar{width:0;height:0}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:36px 20px;background:{{ t.desk }};transition:background .4s">
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ isDark }}" hint-size="402px,874px">
+<div style="height:100%;position:relative;display:flex;flex-direction:column;overflow:hidden;background:{{ t.bg }};transition:background .4s">
+
+<div style="flex:none;padding:60px 20px 8px;display:flex;align-items:flex-start;justify-content:space-between">
+<div style="display:flex;flex-direction:column;gap:2px">
+<div style="font:italic 400 30px 'Instrument Serif',serif;color:{{ t.wordmark }};text-shadow:{{ t.wordmarkGlow }}">The Playa Post</div>
+<div style="font:600 10.5px 'Karla',sans-serif;color:{{ t.sub }};letter-spacing:.08em">{{ headerSub }}</div>
+</div>
+<div style="display:flex;gap:8px;margin-top:4px">
+<div onClick="{{ openNotifs }}" style="position:relative;width:38px;height:38px;border-radius:50%;border:1px solid {{ t.cardBd }};background:{{ t.card }};color:{{ t.ink }};display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer" style-hover="transform:scale(1.08)">◔
+<sc-if value="{{ hasNotifs }}" hint-placeholder-val="{{ true }}">
+<span style="position:absolute;top:-3px;right:-3px;min-width:16px;height:16px;border-radius:999px;background:{{ t.fabBg }};color:{{ t.fabFg }};font:700 10px/16px 'Karla',sans-serif;text-align:center;padding:0 3px;box-sizing:border-box">{{ notifCount }}</span>
+</sc-if>
+</div>
+<div onClick="{{ toggleTheme }}" style="width:38px;height:38px;border-radius:50%;border:1px solid {{ t.cardBd }};background:{{ t.card }};color:{{ t.ink }};display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer" style-hover="transform:scale(1.08)">{{ themeIcon }}</div>
+</div>
+</div>
+
+<sc-if value="{{ offline }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ goYou }}" style="flex:none;margin:6px 20px 0;padding:8px 12px;border-radius:8px;background:{{ t.warnBg }};border:1px dashed {{ t.warn }};color:{{ t.warn }};font:600 11px 'Karla',sans-serif;letter-spacing:.05em;cursor:pointer;display:flex;justify-content:space-between"><span>OFFLINE — SHOWING LAST SYNC</span><span>{{ queuedLabel }}</span></div>
+</sc-if>
+
+<div style="flex:1;position:relative;overflow:hidden">
+
+<sc-if value="{{ onGraph }}" hint-placeholder-val="{{ true }}">
+<div data-screen-label="Graph" style="position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab" onPointerDown="{{ gDown }}" onPointerMove="{{ gMove }}" onPointerUp="{{ gUp }}" onPointerLeave="{{ gUp }}" onWheel="{{ gWheel }}">
+<div style="position:absolute;left:0;top:0;width:1200px;height:1200px;transform:{{ gXform }};transform-origin:0 0">
+<svg width="1200" height="1200" viewBox="0 0 1200 1200" style="position:absolute;left:0;top:0">
+<sc-for list="{{ edges }}" as="e" hint-placeholder-count="0">
+<line x1="{{ e.x1 }}" y1="{{ e.y1 }}" x2="{{ e.x2 }}" y2="{{ e.y2 }}" style="stroke:{{ e.stroke }};stroke-width:{{ e.w }}px;opacity:{{ e.o }};stroke-dasharray:{{ e.dash }}"></line>
+</sc-for>
+</svg>
+<sc-for list="{{ nodes }}" as="n" hint-placeholder-count="6">
+<div onClick="{{ n.onTap }}" style="position:absolute;left:{{ n.x }}px;top:{{ n.y }}px;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;opacity:{{ n.op }}">
+<div style="width:{{ n.d }}px;height:{{ n.d }}px;border-radius:50%;background:{{ n.bg }};color:{{ n.fg }};display:flex;align-items:center;justify-content:center;font:700 {{ n.fs }}px 'Karla',sans-serif;box-shadow:{{ n.glow }};border:{{ n.ring }};animation:{{ n.anim }};filter:{{ n.blur }};transition:transform .15s" style-hover="transform:scale(1.12)">{{ n.init }}</div>
+<sc-if value="{{ n.showLabel }}" hint-placeholder-val="{{ true }}">
+<div style="font:600 11px 'Karla',sans-serif;color:{{ t.labelFg }};background:{{ t.labelBg }};padding:1px 5px;border-radius:4px">{{ n.label }}</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+<div style="position:absolute;right:14px;bottom:36px;display:flex;flex-direction:column;gap:8px;z-index:5">
+<div onClick="{{ zoomIn }}" style="width:38px;height:38px;border-radius:50%;border:1px solid {{ t.cardBd }};background:{{ t.card }};color:{{ t.ink }};display:flex;align-items:center;justify-content:center;font-size:19px;cursor:pointer">+</div>
+<div onClick="{{ zoomOut }}" style="width:38px;height:38px;border-radius:50%;border:1px solid {{ t.cardBd }};background:{{ t.card }};color:{{ t.ink }};display:flex;align-items:center;justify-content:center;font-size:19px;cursor:pointer">−</div>
+<div onClick="{{ zoomFit }}" style="width:38px;height:38px;border-radius:50%;border:1px solid {{ t.cardBd }};background:{{ t.card }};color:{{ t.ink }};display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer">◎</div>
+</div>
+<div style="position:absolute;left:0;right:60px;bottom:6px;text-align:center;font:italic 400 13px 'Instrument Serif',serif;color:{{ t.faint }};pointer-events:none">drag to pan · zoom into a cluster · tap a person</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ onBoard }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Board" style="position:absolute;inset:0;display:flex;flex-direction:column">
+<div style="flex:none;padding:10px 20px 0;display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;align-items:center;gap:8px;background:{{ t.card }};border:1px solid {{ t.cardBd }};border-radius:10px;padding:9px 12px">
+<span style="color:{{ t.faint }};font-size:14px">⌕</span>
+<input value="{{ query }}" onChange="{{ onQuery }}" placeholder="type:offer trust:>=60 …" style="flex:1;border:none;outline:none;background:transparent;color:{{ t.ink }};font:500 12.5px 'IBM Plex Mono',monospace"></input>
+<sc-if value="{{ hasQuery }}" hint-placeholder-val="{{ false }}">
+<span onClick="{{ clearQuery }}" style="font:700 11px 'Karla',sans-serif;color:{{ t.faint }};cursor:pointer;padding:2px 4px">✕</span>
+</sc-if>
+<span onClick="{{ toggleHelp }}" style="font:700 12px 'IBM Plex Mono',monospace;color:{{ t.accentText }};cursor:pointer;padding:2px 4px">?</span>
+</div>
+<sc-if value="{{ helpOpen }}" hint-placeholder-val="{{ false }}">
+<div style="background:{{ t.card }};border:1px dashed {{ t.cardBd }};border-radius:10px;padding:10px 12px;font:500 11px/1.7 'IBM Plex Mono',monospace;color:{{ t.sub }}">type:offer · from:moss · deg:1|2 · trust:>=60 · is:queued|mine · -word negates · "quoted phrase" · bare words search text</div>
+</sc-if>
+<sc-if value="{{ queryActive }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:8px">
+<span style="flex:none;white-space:nowrap;font:600 11px 'IBM Plex Mono',monospace;color:{{ t.sub }}">{{ matchCount }} match{{ matchS }}</span>
+<span onClick="{{ saveQuery }}" style="flex:none;white-space:nowrap;margin-left:auto;font:700 10.5px 'Karla',sans-serif;letter-spacing:.05em;color:{{ t.accentText }};border:1px dashed {{ t.accentText }};padding:4px 10px;border-radius:999px;cursor:pointer">☆ SAVE AS VIEW</span>
+</div>
+</sc-if>
+</div>
+<div style="flex:none;display:flex;gap:8px;overflow-x:auto;padding:10px 20px 12px">
+<sc-for list="{{ chips }}" as="c" hint-placeholder-count="5">
+<div onClick="{{ c.onTap }}" style="padding:9px 14px;border-radius:999px;background:{{ c.bg }};color:{{ c.fg }};border:1px {{ c.bstyle }} {{ c.bd }};font:600 12px 'Karla',sans-serif;white-space:nowrap;cursor:pointer;transition:background .15s">{{ c.label }}</div>
+</sc-for>
+</div>
+<div style="flex:1;overflow-y:auto;padding:2px 20px 24px;display:flex;flex-direction:column;gap:12px">
+<sc-for list="{{ bulletins }}" as="b" hint-placeholder-count="4">
+<div onClick="{{ b.onOpen }}" style="background:{{ b.cardBg }};border:1px {{ b.bdStyle }} {{ b.cardBd }};border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:7px;cursor:pointer;transform:{{ b.tilt }}" style-hover="border-color:{{ t.faint }}">
+<div style="display:flex;align-items:center;gap:8px">
+<span style="font:700 10px 'Karla',sans-serif;letter-spacing:.08em;color:{{ b.tint }};border:1px dashed {{ b.tint }};padding:3px 7px;border-radius:3px">{{ b.label }}</span>
+<sc-if value="{{ b.pill }}" hint-placeholder-val="{{ false }}">
+<span style="font:700 10px 'Karla',sans-serif;letter-spacing:.06em;color:{{ b.pillC }};background:{{ b.pillBg }};padding:3px 8px;border-radius:999px">{{ b.pill }}</span>
+</sc-if>
+<span style="margin-left:auto;font:11px 'Karla',sans-serif;color:{{ t.faint }}">{{ b.time }}</span>
+</div>
+<div style="font:400 17px/1.35 'Instrument Serif',serif;color:{{ t.ink }}">{{ b.title }}</div>
+<div style="font:600 11px 'Karla',sans-serif;color:{{ t.sub }}">◦ {{ b.loc }} · {{ b.author }}</div>
+</div>
+</sc-for>
+<sc-if value="{{ boardEmpty }}" hint-placeholder-val="{{ false }}">
+<div style="text-align:center;padding:40px 20px;font:italic 400 16px 'Instrument Serif',serif;color:{{ t.faint }}">Nothing matches. Quiet playa.</div>
+</sc-if>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ onSaved }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Saved views" style="position:absolute;inset:0;overflow-y:auto;padding:12px 20px 24px;display:flex;flex-direction:column;gap:12px">
+<div style="font:italic 400 15px 'Instrument Serif',serif;color:{{ t.sub }}">Saved views run over what you can already see — never more.</div>
+<sc-for list="{{ views }}" as="v" hint-placeholder-count="2">
+<div style="background:{{ t.card }};border:1px solid {{ t.cardBd }};border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<div onClick="{{ v.onOpen }}" style="font:400 19px 'Instrument Serif',serif;color:{{ t.ink }};cursor:pointer">{{ v.name }}</div>
+<div onClick="{{ v.onBell }}" style="font:700 10px 'Karla',sans-serif;letter-spacing:.06em;padding:5px 10px;border-radius:999px;cursor:pointer;background:{{ v.bellBg }};color:{{ v.bellFg }};border:1px solid {{ v.bellBd }}">{{ v.bellLabel }}</div>
+</div>
+<div style="font:500 11.5px 'IBM Plex Mono',monospace;color:{{ t.accentText }}">{{ v.q }}</div>
+<div style="display:flex;align-items:center;justify-content:space-between">
+<span style="font:500 12px 'Karla',sans-serif;color:{{ t.sub }}">{{ v.count }} match now</span>
+<span onClick="{{ v.onDelete }}" style="font:700 10px 'Karla',sans-serif;color:{{ t.faint }};cursor:pointer;letter-spacing:.05em;padding:4px">DELETE</span>
+</div>
+<div onClick="{{ v.onOpen }}" style="font:600 11px 'Karla',sans-serif;color:{{ t.accentText }};cursor:pointer;letter-spacing:.04em">OPEN ON BOARD →</div>
+</div>
+</sc-for>
+<div style="font:12px 'Karla',sans-serif;color:{{ t.faint }};line-height:1.5">Any board search can be saved. Notify Me pings you when a new bulletin matches the query.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ onYou }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="You" style="position:absolute;inset:0;overflow-y:auto;padding:12px 20px 28px;display:flex;flex-direction:column;gap:16px">
+<div style="background:{{ t.card }};border:1px solid {{ t.cardBd }};border-radius:14px;padding:16px;display:flex;align-items:center;gap:14px">
+<div style="width:54px;height:54px;border-radius:50%;background:{{ t.youBg }};color:{{ t.youFg }};display:flex;align-items:center;justify-content:center;font:700 20px 'Karla',sans-serif;box-shadow:{{ t.youGlow }}">R</div>
+<div style="display:flex;flex-direction:column;gap:2px">
+<div style="font:400 22px 'Instrument Serif',serif;color:{{ t.ink }}">Rae</div>
+<div style="font:600 12px 'Karla',sans-serif;color:{{ t.sub }}">{{ connCount }} connections · {{ trustedCount }} trusted</div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font:700 10.5px 'Karla',sans-serif;letter-spacing:.1em;color:{{ t.faint }}">CONNECT</div>
+<div style="background:{{ t.card }};border:1px solid {{ t.cardBd }};border-radius:12px;padding:14px 16px;display:flex;gap:14px;align-items:center">
+<div style="flex:none;position:relative;width:100px;height:100px;background:#fff;border:1px solid {{ t.cardBd }};border-radius:8px">
+<sc-for list="{{ qrCells }}" as="q" hint-placeholder-count="0">
+<span style="position:absolute;left:{{ q.x }}px;top:{{ q.y }}px;width:4px;height:4px;background:#2e2418"></span>
+</sc-for>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;min-width:0">
+<div style="font:500 12px 'IBM Plex Mono',monospace;color:{{ t.accentText }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">playapost.net/j/RAE-7Q2F</div>
+<div style="font:11px/1.45 'Karla',sans-serif;color:{{ t.faint }}">Scan or tap to connect. Nothing happens until you both consent.</div>
+<div onClick="{{ shareInvite }}" style="text-align:center;padding:10px;border-radius:999px;background:{{ t.fabBg }};color:{{ t.fabFg }};font:700 12px 'Karla',sans-serif;cursor:pointer;letter-spacing:.03em">Share invite</div>
+</div>
+</div>
+<div onClick="{{ toggleBlocked }}" style="display:flex;align-items:center;justify-content:space-between;background:{{ t.card }};border:1px solid {{ t.cardBd }};border-radius:10px;padding:12px 14px;cursor:pointer">
+<span style="font:600 13px 'Karla',sans-serif;color:{{ t.ink }}">Blocked people</span>
+<span style="font:600 12px 'Karla',sans-serif;color:{{ t.sub }}">{{ blockedCount }} {{ blockedChevron }}</span>
+</div>
+<sc-if value="{{ blockedOpen }}" hint-placeholder-val="{{ false }}">
+<sc-for list="{{ blockedRows }}" as="br" hint-placeholder-count="1">
+<div style="display:flex;align-items:center;justify-content:space-between;background:{{ t.card }};border:1px dashed {{ t.cardBd }};border-radius:10px;padding:11px 14px;margin-left:14px">
+<span style="font:500 13px 'Karla',sans-serif;color:{{ t.sub }}">{{ br.name }}</span>
+<span onClick="{{ br.onUnblock }}" style="font:700 10.5px 'Karla',sans-serif;letter-spacing:.05em;color:{{ t.accentText }};border:1px dashed {{ t.accentText }};padding:4px 10px;border-radius:999px;cursor:pointer">UNBLOCK</span>
+</div>
+</sc-for>
+<sc-if value="{{ blockedEmpty }}" hint-placeholder-val="{{ false }}">
+<div style="font:italic 400 13px 'Instrument Serif',serif;color:{{ t.faint }};margin-left:14px;padding:2px 0 4px">No one. Keep it that way if you can.</div>
+</sc-if>
+</sc-if>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font:700 10.5px 'Karla',sans-serif;letter-spacing:.1em;color:{{ t.faint }}">WHO SEES YOUR NAME</div>
+<sc-for list="{{ nameRows }}" as="r" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;justify-content:space-between;background:{{ t.card }};border:1px solid {{ t.cardBd }};border-radius:10px;padding:12px 14px">
+<span style="font:600 13px 'Karla',sans-serif;color:{{ t.ink }}">{{ r.label }}</span>
+<span onClick="{{ r.onTap }}" style="font:700 10.5px 'Karla',sans-serif;letter-spacing:.05em;color:{{ t.accentText }};border:1px dashed {{ t.accentText }};padding:4px 10px;border-radius:999px;cursor:pointer">{{ r.value }}</span>
+</div>
+</sc-for>
+<div style="font:11px 'Karla',sans-serif;color:{{ t.faint }};line-height:1.5">To anyone outside these limits you appear as a blurred, unnamed circle — like the ones on your graph. They know someone is there, not who.</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font:700 10.5px 'Karla',sans-serif;letter-spacing:.1em;color:{{ t.faint }}">WHO CAN PIN TO YOUR BOARD</div>
+<sc-for list="{{ noteRows }}" as="r" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;justify-content:space-between;background:{{ t.card }};border:1px solid {{ t.cardBd }};border-radius:10px;padding:12px 14px">
+<span style="font:600 13px 'Karla',sans-serif;color:{{ t.ink }}">{{ r.label }}</span>
+<span onClick="{{ r.onTap }}" style="font:700 10.5px 'Karla',sans-serif;letter-spacing:.05em;color:{{ t.accentText }};border:1px dashed {{ t.accentText }};padding:4px 10px;border-radius:999px;cursor:pointer">{{ r.value }}</span>
+</div>
+</sc-for>
+<div style="font:11px 'Karla',sans-serif;color:{{ t.faint }};line-height:1.5">Notes are how people reach you — this is your front gate. Anyone outside these limits has to earn an intro through someone you both know.</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font:700 10.5px 'Karla',sans-serif;letter-spacing:.1em;color:{{ t.faint }}">SYNC</div>
+<div onClick="{{ toggleOffline }}" style="display:flex;align-items:center;justify-content:space-between;background:{{ t.card }};border:1px solid {{ t.cardBd }};border-radius:10px;padding:12px 14px;cursor:pointer">
+<span style="font:600 13px 'Karla',sans-serif;color:{{ t.ink }}">Simulate going offline</span>
+<span style="width:44px;height:26px;border-radius:999px;background:{{ swBg }};position:relative;transition:background .2s"><span style="position:absolute;top:3px;left:{{ swKnob }};width:20px;height:20px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)"></span></span>
+</div>
+<sc-for list="{{ syncRows }}" as="s" hint-placeholder-count="1">
+<div style="display:flex;align-items:center;justify-content:space-between;background:{{ t.card }};border:1px solid {{ t.cardBd }};border-radius:10px;padding:11px 14px">
+<span style="font:500 12.5px 'Karla',sans-serif;color:{{ t.sub }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:230px">{{ s.text }}</span>
+<span style="font:700 10px 'Karla',sans-serif;letter-spacing:.06em;color:{{ s.pillC }};background:{{ s.pillBg }};padding:3px 8px;border-radius:999px">{{ s.pill }}</span>
+</div>
+</sc-for>
+<div style="font:11px 'Karla',sans-serif;color:{{ t.faint }};line-height:1.5">Offline, you keep the last synced graph and board. Anything you post queues and syncs later.</div>
+<div onClick="{{ replayOnboard }}" style="font:600 11px 'Karla',sans-serif;color:{{ t.accentText }};cursor:pointer;letter-spacing:.04em;padding:4px 0">REPLAY WELCOME →</div>
+</div>
+</div>
+</sc-if>
+</div>
+
+<div style="flex:none;display:flex;align-items:center;justify-content:space-between;padding:10px 26px 28px;border-top:1px solid {{ t.tabBd }};background:{{ t.tabBg }}">
+<div onClick="{{ goGraph }}" style="display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;color:{{ gC }};padding:4px 8px;width:52px"><span style="font-size:17px">◉</span><span style="font:600 10.5px 'Karla',sans-serif">Graph</span></div>
+<div onClick="{{ goBoard }}" style="display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;color:{{ bC }};padding:4px 8px;width:52px"><span style="font-size:17px">▤</span><span style="font:600 10.5px 'Karla',sans-serif">Board</span></div>
+<div onClick="{{ openCompose }}" style="width:50px;height:50px;border-radius:50%;background:{{ t.fabBg }};color:{{ t.fabFg }};display:flex;align-items:center;justify-content:center;font:300 27px 'Karla',sans-serif;box-shadow:{{ t.fabGlow }};cursor:pointer;margin-top:-14px" style-hover="transform:scale(1.06)">+</div>
+<div onClick="{{ goSaved }}" style="display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;color:{{ sC }};padding:4px 8px;width:52px"><span style="font-size:17px">☆</span><span style="font:600 10.5px 'Karla',sans-serif">Saved</span></div>
+<div onClick="{{ goYou }}" style="display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;color:{{ yC }};padding:4px 8px;width:52px"><span style="font-size:17px">◍</span><span style="font:600 10.5px 'Karla',sans-serif">You</span></div>
+</div>
+
+<sc-if value="{{ notifOpen }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Notifications" style="position:absolute;inset:0;z-index:35;background:{{ t.bg }};display:flex;flex-direction:column">
+<div style="flex:none;padding:60px 16px 12px;display:flex;align-items:center;gap:12px;border-bottom:1px solid {{ t.cardBd }}">
+<div onClick="{{ closeNotifs }}" style="font:600 20px 'Karla',sans-serif;color:{{ t.ink }};cursor:pointer;padding:4px 8px">‹</div>
+<div style="font:400 22px 'Instrument Serif',serif;color:{{ t.ink }};flex:1">Notifications</div>
+<sc-if value="{{ hasNotifs }}" hint-placeholder-val="{{ true }}">
+<div onClick="{{ clearNotifs }}" style="font:700 10px 'Karla',sans-serif;letter-spacing:.06em;color:{{ t.faint }};cursor:pointer;padding:6px">CLEAR ALL</div>
+</sc-if>
+</div>
+<div style="flex:1;overflow-y:auto;padding:14px 20px;display:flex;flex-direction:column;gap:12px">
+<div style="font:11px 'Karla',sans-serif;color:{{ t.faint }};line-height:1.5">Everything that landed on your board or changed your graph. Tap an item to open what caused it.</div>
+<sc-for list="{{ notifRows }}" as="nf" hint-placeholder-count="4">
+<div onClick="{{ nf.onGo }}" style="display:flex;align-items:flex-start;gap:8px;background:{{ t.card }};border:1px solid {{ t.cardBd }};border-radius:12px;padding:13px 14px;cursor:pointer" style-hover="border-color:{{ t.faint }}">
+<div style="flex:1;display:flex;flex-direction:column;gap:2px">
+<div style="font:400 15.5px/1.35 'Instrument Serif',serif;color:{{ t.ink }}">{{ nf.label }}</div>
+<sc-if value="{{ nf.hasSub }}" hint-placeholder-val="{{ false }}">
+<div style="font:500 11px 'Karla',sans-serif;color:{{ t.faint }}">{{ nf.sub }} · {{ nf.time }} ago</div>
+</sc-if>
+</div>
+<span style="font:600 13px 'Karla',sans-serif;color:{{ t.accentText }};padding-top:2px">→</span>
+<div onClick="{{ nf.onDismiss }}" style="font:700 12px 'Karla',sans-serif;color:{{ t.faint }};cursor:pointer;padding:2px 6px">✕</div>
+</div>
+</sc-for>
+<sc-if value="{{ notifsEmpty }}" hint-placeholder-val="{{ false }}">
+<div style="text-align:center;padding:50px 20px;font:italic 400 16px 'Instrument Serif',serif;color:{{ t.faint }}">All quiet. The dust settles.</div>
+</sc-if>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasPost }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closePost }}" style="position:absolute;inset:0;background:{{ t.scrim }};z-index:32"></div>
+<div style="position:absolute;left:12px;right:12px;bottom:14px;z-index:33;background:{{ t.sheetBg }};border:1px solid {{ t.sheetBd }};border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:10px;box-shadow:{{ t.sheetShadow }};animation:sheetup .22s ease-out">
+<div style="display:flex;align-items:center;gap:8px">
+<span style="font:700 10px 'Karla',sans-serif;letter-spacing:.08em;color:{{ dp.tint }};border:1px dashed {{ dp.tint }};padding:3px 7px;border-radius:3px">{{ dp.label }}</span>
+<span style="font:11px 'Karla',sans-serif;color:{{ t.faint }}">{{ dp.time }}</span>
+<span onClick="{{ closePost }}" style="margin-left:auto;font:700 11px 'Karla',sans-serif;color:{{ t.faint }};cursor:pointer;padding:6px;letter-spacing:.08em">CLOSE</span>
+</div>
+<div style="font:italic 400 24px/1.2 'Instrument Serif',serif;color:{{ t.ink }}">{{ dp.title }}</div>
+<div style="font:600 12px 'Karla',sans-serif;color:{{ t.sub }}">◦ {{ dp.loc }}</div>
+<div style="font:400 15.5px/1.5 'Instrument Serif',serif;color:{{ t.ink }}">{{ dp.body }}</div>
+<sc-if value="{{ dp.contact }}" hint-placeholder-val="{{ false }}">
+<div style="font:500 12px/1.6 'IBM Plex Mono',monospace;color:{{ t.accentText }};border:1px dashed {{ t.cardBd }};border-radius:8px;padding:9px 11px">{{ dp.contact }}</div>
+</sc-if>
+<div style="font:600 11.5px 'Karla',sans-serif;color:{{ t.sub }};border-top:1px dashed {{ t.cardBd }};padding-top:9px">{{ dp.authorLine }}</div>
+<sc-if value="{{ dp.isInvite }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;gap:8px;margin-top:2px">
+<div onClick="{{ acceptInvite }}" style="flex:1;text-align:center;padding:12px;border-radius:999px;background:{{ t.ink }};color:{{ t.bgSolid }};font:600 13px 'Karla',sans-serif;cursor:pointer">Accept</div>
+<div onClick="{{ declineInvite }}" style="flex:1;text-align:center;padding:12px;border-radius:999px;border:1px solid {{ t.cardBd }};color:{{ t.sub }};font:600 13px 'Karla',sans-serif;cursor:pointer">Decline</div>
+</div>
+</sc-if>
+<sc-if value="{{ dp.canNote }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ dp.onNote }}" style="text-align:center;padding:12px;border-radius:999px;background:{{ t.ink }};color:{{ t.bgSolid }};font:600 13px 'Karla',sans-serif;cursor:pointer;margin-top:2px">Pin a note to {{ dp.authorName }}’s board</div>
+</sc-if>
+<sc-if value="{{ dp.needsIntro }}" hint-placeholder-val="{{ false }}">
+<div style="font:italic 400 13px/1.45 'Instrument Serif',serif;color:{{ t.warn }};background:{{ t.warnBg }};border:1px dashed {{ t.warn }};border-radius:10px;padding:9px 12px">{{ dp.introHint }}</div>
+<div onClick="{{ dp.onIntro }}" style="text-align:center;padding:12px;border-radius:999px;background:{{ dp.introBg }};color:{{ dp.introFg }};border:1px solid {{ dp.introBd }};font:600 13px 'Karla',sans-serif;cursor:pointer">{{ dp.introLabel }}</div>
+</sc-if>
+<sc-if value="{{ dp.isMine }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ dp.onDelete }}" style="text-align:center;padding:12px;border-radius:999px;border:1px solid {{ t.errBd }};color:{{ t.err }};font:600 13px 'Karla',sans-serif;cursor:pointer;margin-top:2px">Delete post</div>
+</sc-if>
+<sc-if value="{{ dp.canModerate }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;gap:8px;margin-top:2px">
+<div onClick="{{ dp.onDismiss }}" style="flex:1;text-align:center;padding:12px;border-radius:999px;border:1px solid {{ t.cardBd }};color:{{ t.sub }};font:600 13px 'Karla',sans-serif;cursor:pointer">Dismiss</div>
+<div onClick="{{ dp.onReport }}" style="flex:1;text-align:center;padding:12px;border-radius:999px;border:1px solid {{ t.errBd }};color:{{ t.err }};font:600 13px 'Karla',sans-serif;cursor:pointer">Report abuse</div>
+</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:{{ t.scrim }};z-index:30"></div>
+<div style="position:absolute;left:12px;right:12px;bottom:14px;z-index:31;background:{{ t.sheetBg }};border:1px solid {{ t.sheetBd }};border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:9px;box-shadow:{{ t.sheetShadow }};animation:sheetup .22s ease-out">
+<div style="display:flex;align-items:baseline;justify-content:space-between">
+<div style="font:italic 400 26px 'Instrument Serif',serif;color:{{ t.ink }}">{{ sel.name }}</div>
+<div onClick="{{ closeSheet }}" style="font:700 11px 'Karla',sans-serif;color:{{ t.faint }};cursor:pointer;padding:6px;letter-spacing:.08em">CLOSE</div>
+</div>
+<div style="font:500 13px 'Karla',sans-serif;color:{{ t.sub }}">{{ sel.role }}</div>
+<div style="font:700 10px 'Karla',sans-serif;color:{{ t.faint }};letter-spacing:.08em;text-transform:uppercase">{{ sel.degLabel }}</div>
+<div style="border-top:1px dashed {{ t.cardBd }};padding-top:10px;display:flex;flex-direction:column;gap:7px">
+<sc-if value="{{ sel.canTrust }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;align-items:baseline;justify-content:space-between">
+<span style="font:600 12px 'Karla',sans-serif;color:{{ t.ink }}">Your trust</span>
+<span style="font:600 18px 'IBM Plex Mono',monospace;color:{{ t.accentText }}">{{ sel.trustVal }}</span>
+</div>
+<input type="range" min="0" max="100" value="{{ sel.trustVal }}" onChange="{{ sel.onTrust }}" style="width:100%;height:4px;border-radius:2px;background:{{ sel.trackBg }};color:{{ t.accentText }};cursor:pointer;margin:4px 0"></input>
+<div style="font:italic 400 13.5px/1.4 'Instrument Serif',serif;color:{{ t.sub }}">{{ sel.trustHint }}</div>
+<div style="font:11px 'Karla',sans-serif;color:{{ t.faint }}">directional · only you see it</div>
+</sc-if>
+<sc-if value="{{ sel.noTrust }}" hint-placeholder-val="{{ false }}">
+<span style="font:italic 400 13px 'Instrument Serif',serif;color:{{ t.faint }}">connect first to set trust</span>
+</sc-if>
+</div>
+<sc-if value="{{ sel.farNote }}" hint-placeholder-val="{{ false }}">
+<div style="font:italic 400 13.5px/1.45 'Instrument Serif',serif;color:{{ t.warn }};background:{{ t.warnBg }};border:1px dashed {{ t.warn }};border-radius:10px;padding:10px 12px">{{ sel.farNote }}</div>
+</sc-if>
+<div style="font:12px 'Karla',sans-serif;color:{{ t.sub }}">{{ sel.mutuals }} mutual connections · {{ sel.bcount }} active bulletins</div>
+<div style="display:flex;gap:8px;margin-top:4px">
+<div onClick="{{ sel.onAct1 }}" style="flex:1;text-align:center;padding:12px;border-radius:999px;background:{{ sel.act1Bg }};color:{{ sel.act1Fg }};font:600 13px 'Karla',sans-serif;cursor:pointer;border:1px solid {{ sel.act1Bd }}">{{ sel.act1 }}</div>
+<div onClick="{{ blockSel }}" style="flex:1;text-align:center;padding:12px;border-radius:999px;border:1px solid {{ t.errBd }};color:{{ t.err }};font:600 13px 'Karla',sans-serif;cursor:pointer">Block</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasReport }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeReport }}" style="position:absolute;inset:0;background:{{ t.scrim }};z-index:44"></div>
+<div style="position:absolute;left:12px;right:12px;bottom:14px;z-index:45;background:{{ t.sheetBg }};border:1px solid {{ t.sheetBd }};border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:12px;box-shadow:{{ t.sheetShadow }};animation:sheetup .22s ease-out">
+<div style="display:flex;align-items:baseline;justify-content:space-between">
+<div style="font:italic 400 24px 'Instrument Serif',serif;color:{{ t.ink }}">Report abuse</div>
+<div onClick="{{ closeReport }}" style="font:700 11px 'Karla',sans-serif;color:{{ t.faint }};cursor:pointer;padding:6px;letter-spacing:.08em">CLOSE</div>
+</div>
+<div style="font:500 12px 'IBM Plex Mono',monospace;color:{{ t.accentText }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">“{{ reportTitle }}”</div>
+<div style="font:500 12.5px/1.55 'Karla',sans-serif;color:{{ t.sub }}">Abuse means harming or deceiving people — not a post you disagree with (dismiss those instead). Your report goes to the stewards, who review it and can remove the post or the person. The poster never learns who reported.</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="font:700 10px 'Karla',sans-serif;letter-spacing:.08em;color:{{ t.faint }}">WHAT KIND</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px">
+<sc-for list="{{ reportTypes }}" as="rt" hint-placeholder-count="5">
+<span onClick="{{ rt.onTap }}" style="padding:7px 11px;border-radius:999px;background:{{ rt.bg }};color:{{ rt.fg }};border:1px solid {{ rt.bd }};font:600 11.5px 'Karla',sans-serif;cursor:pointer">{{ rt.label }}</span>
+</sc-for>
+</div>
+</div>
+<textarea value="{{ reportMsg }}" onChange="{{ onReportMsg }}" placeholder="What happened? Stewards read every word — be specific." rows="3" style="width:100%;box-sizing:border-box;resize:none;border-radius:10px;border:1px solid {{ t.cardBd }};background:{{ t.inputBg }};color:{{ t.ink }};font:400 15px/1.45 'Instrument Serif',serif;padding:11px 12px;outline:none"></textarea>
+<div onClick="{{ sendReport }}" style="text-align:center;padding:13px;border-radius:999px;background:{{ t.fabBg }};color:{{ t.fabFg }};font:700 13.5px 'Karla',sans-serif;cursor:pointer;opacity:{{ reportOp }};letter-spacing:.03em">Send to the stewards</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasIntro }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeIntro }}" style="position:absolute;inset:0;background:{{ t.scrim }};z-index:40"></div>
+<div style="position:absolute;left:12px;right:12px;bottom:14px;z-index:41;background:{{ t.sheetBg }};border:1px solid {{ t.sheetBd }};border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:12px;box-shadow:{{ t.sheetShadow }};animation:sheetup .22s ease-out">
+<div style="display:flex;align-items:baseline;justify-content:space-between">
+<div style="font:italic 400 24px 'Instrument Serif',serif;color:{{ t.ink }}">Intro to {{ introName }}</div>
+<div onClick="{{ closeIntro }}" style="font:700 11px 'Karla',sans-serif;color:{{ t.faint }};cursor:pointer;padding:6px;letter-spacing:.08em">CLOSE</div>
+</div>
+<div style="font:500 12.5px 'Karla',sans-serif;color:{{ t.sub }};line-height:1.5">Intros travel one hop, through your direct connection. {{ introName }} only hears about it if they agree to pass it on.</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="font:700 10px 'Karla',sans-serif;letter-spacing:.08em;color:{{ t.faint }}">ASK VIA</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+<sc-for list="{{ introVias }}" as="iv" hint-placeholder-count="2">
+<span onClick="{{ iv.onTap }}" style="padding:7px 12px;border-radius:999px;background:{{ iv.bg }};color:{{ iv.fg }};border:1px solid {{ iv.bd }};font:600 11.5px 'Karla',sans-serif;cursor:pointer">{{ iv.label }}</span>
+</sc-for>
+</div>
+</div>
+<textarea value="{{ introNote }}" onChange="{{ onIntroNote }}" placeholder="Why do you want to connect? They'll see this." rows="2" style="width:100%;box-sizing:border-box;resize:none;border-radius:10px;border:1px solid {{ t.cardBd }};background:{{ t.inputBg }};color:{{ t.ink }};font:400 15px/1.45 'Instrument Serif',serif;padding:11px 12px;outline:none"></textarea>
+<div onClick="{{ sendIntro }}" style="text-align:center;padding:13px;border-radius:999px;background:{{ t.fabBg }};color:{{ t.fabFg }};font:700 13.5px 'Karla',sans-serif;cursor:pointer;opacity:{{ introOp }};letter-spacing:.03em">Ask {{ introViaName }} to introduce you</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ composeOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeCompose }}" style="position:absolute;inset:0;background:{{ t.scrim }};z-index:40"></div>
+<div style="position:absolute;left:12px;right:12px;bottom:14px;z-index:41;background:{{ t.sheetBg }};border:1px solid {{ t.sheetBd }};border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:12px;box-shadow:{{ t.sheetShadow }};animation:sheetup .22s ease-out">
+<div style="display:flex;align-items:baseline;justify-content:space-between">
+<div style="font:italic 400 24px 'Instrument Serif',serif;color:{{ t.ink }}">{{ composeTitle }}</div>
+<div onClick="{{ closeCompose }}" style="font:700 11px 'Karla',sans-serif;color:{{ t.faint }};cursor:pointer;padding:6px;letter-spacing:.08em">CLOSE</div>
+</div>
+<sc-if value="{{ isNote }}" hint-placeholder-val="{{ false }}">
+<div style="font:500 12.5px 'Karla',sans-serif;color:{{ t.sub }};line-height:1.5">Private — it lands on {{ noteToName }}’s board and no one else sees it. This is how you reach people here.</div>
+<textarea value="{{ cText }}" onChange="{{ onCText }}" placeholder="Say what you need, and how they can reach you back…" rows="3" style="width:100%;box-sizing:border-box;resize:none;border-radius:10px;border:1px solid {{ t.cardBd }};background:{{ t.inputBg }};color:{{ t.ink }};font:400 15px/1.45 'Instrument Serif',serif;padding:11px 12px;outline:none"></textarea>
+</sc-if>
+<sc-if value="{{ isBulletin }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-wrap:wrap;gap:6px">
+<sc-for list="{{ cTypes }}" as="ct" hint-placeholder-count="6">
+<span onClick="{{ ct.onTap }}" style="padding:7px 11px;border-radius:999px;background:{{ ct.bg }};color:{{ ct.fg }};border:1px solid {{ ct.bd }};font:600 11.5px 'Karla',sans-serif;cursor:pointer">{{ ct.label }}</span>
+</sc-for>
+</div>
+<input value="{{ cTitle }}" onChange="{{ onCTitle }}" placeholder="Title — short and typed beats long and lost" style="width:100%;box-sizing:border-box;border-radius:10px;border:1px solid {{ t.cardBd }};background:{{ t.inputBg }};color:{{ t.ink }};font:400 15px 'Instrument Serif',serif;padding:11px 12px;outline:none"></input>
+<input value="{{ cLoc }}" onChange="{{ onCLoc }}" placeholder="Where — e.g. 7:30 & E, Center Camp" style="width:100%;box-sizing:border-box;border-radius:10px;border:1px solid {{ t.cardBd }};background:{{ t.inputBg }};color:{{ t.ink }};font:500 13px 'Karla',sans-serif;padding:10px 12px;outline:none"></input>
+<textarea value="{{ cText }}" onChange="{{ onCText }}" placeholder="Details + how to reach you: WhatsApp, email, or “note my board”" rows="2" style="width:100%;box-sizing:border-box;resize:none;border-radius:10px;border:1px solid {{ t.cardBd }};background:{{ t.inputBg }};color:{{ t.ink }};font:400 15px/1.45 'Instrument Serif',serif;padding:11px 12px;outline:none"></textarea>
+<div style="display:flex;gap:16px">
+<div style="flex:1;display:flex;flex-direction:column;gap:6px">
+<div style="font:700 10px 'Karla',sans-serif;letter-spacing:.08em;color:{{ t.faint }}">WHO SEES IT</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+<sc-for list="{{ cAuds }}" as="ca" hint-placeholder-count="2">
+<span onClick="{{ ca.onTap }}" style="padding:7px 11px;border-radius:999px;background:{{ ca.bg }};color:{{ ca.fg }};border:1px solid {{ ca.bd }};font:600 11.5px 'Karla',sans-serif;cursor:pointer">{{ ca.label }}</span>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="font:700 10px 'Karla',sans-serif;letter-spacing:.08em;color:{{ t.faint }}">EXPIRES</div>
+<div style="display:flex;gap:6px">
+<sc-for list="{{ cExps }}" as="ce" hint-placeholder-count="3">
+<span onClick="{{ ce.onTap }}" style="padding:7px 11px;border-radius:999px;background:{{ ce.bg }};color:{{ ce.fg }};border:1px solid {{ ce.bd }};font:600 11.5px 'Karla',sans-serif;cursor:pointer">{{ ce.label }}</span>
+</sc-for>
+</div>
+</div>
+</div>
+</sc-if>
+<div onClick="{{ postNow }}" style="text-align:center;padding:13px;border-radius:999px;background:{{ t.fabBg }};color:{{ t.fabFg }};font:700 13.5px 'Karla',sans-serif;cursor:pointer;opacity:{{ postOp }};letter-spacing:.03em">{{ postLabel }}</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ onboardOpen }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Onboarding" style="position:absolute;inset:0;z-index:60;background:{{ t.bg }};display:flex;flex-direction:column;justify-content:flex-end">
+<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:40px 36px 0;text-align:center">
+<div style="font-size:44px">{{ obIcon }}</div>
+<div style="font:italic 400 32px/1.15 'Instrument Serif',serif;color:{{ t.ink }}">{{ obTitle }}</div>
+<div style="font:500 14.5px/1.6 'Karla',sans-serif;color:{{ t.sub }};max-width:290px">{{ obBody }}</div>
+<sc-if value="{{ obCode }}" hint-placeholder-val="{{ false }}">
+<div style="font:500 13px 'IBM Plex Mono',monospace;color:{{ t.accentText }};border:1px dashed {{ t.accentText }};padding:8px 14px;border-radius:8px">{{ obCode }}</div>
+</sc-if>
+</div>
+<div style="flex:none;display:flex;flex-direction:column;gap:16px;align-items:center;padding:0 36px 56px">
+<div style="display:flex;gap:8px">
+<sc-for list="{{ obDots }}" as="d" hint-placeholder-count="3">
+<span style="width:8px;height:8px;border-radius:50%;background:{{ d.c }}"></span>
+</sc-for>
+</div>
+<div onClick="{{ obNext }}" style="width:100%;box-sizing:border-box;text-align:center;padding:14px;border-radius:999px;background:{{ t.fabBg }};color:{{ t.fabFg }};font:700 14px 'Karla',sans-serif;cursor:pointer;letter-spacing:.03em">{{ obNextLabel }}</div>
+<div onClick="{{ obSkip }}" style="font:600 12px 'Karla',sans-serif;color:{{ t.faint }};cursor:pointer;padding:4px">Skip</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:24px;right:24px;bottom:104px;z-index:70;text-align:center;pointer-events:none">
+<span style="display:inline-block;background:{{ t.ink }};color:{{ t.bgSolid }};font:600 12px 'Karla',sans-serif;padding:10px 16px;border-radius:999px;box-shadow:0 8px 22px rgba(0,0,0,.3);animation:toastin .2s ease-out">{{ toast }}</span>
+</div>
+</sc-if>
+
+</div>
+</x-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: &quot;500px&quot;, &quot;height&quot;: &quot;960px&quot;}, &quot;defaultTheme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;light&quot;, &quot;dark&quot;], &quot;default&quot;: &quot;light&quot;, &quot;tsType&quot;: &quot;'light' | 'dark'&quot;, &quot;section&quot;: &quot;Appearance&quot;}}">
+class Component extends DCLogic {
+  state = { theme: null, tab: 'graph', sel: null, filter: 'all', composeOpen: false, noteTo: null,
+    cType: 'offer', cTitle: '', cLoc: '', cText: '', cAud: 'conn', cExp: '3d', offline: false,
+    posts: [], trust: {}, blocked: {}, toast: null,
+    invite: 'pending', blockedOpen: false, priv: { trust: 1, dist: 1, noteTrust: 1, noteDist: 1 },
+    query: '', helpOpen: false, openPost: null, dismissed: {},
+    intro: null, introVia: null, introNote: '', introSent: {},
+    report: null, reportTitle: '', reportType: null, reportMsg: '',
+    onboard: null, notifOpen: false, zoom: .5, panX: -99, panY: 20,
+    notifs: [
+      { id: 1, label: 'Truck space Reno → BRC', sub: 'new offer on your board', time: '2h', post: 'b1' },
+      { id: 2, label: 'Sasha wants to connect', sub: 'connection request · vouched by Moss', time: '2h', post: 'inv-sasha' },
+      { id: 3, label: 'Welding hands for the pavilion', sub: 'new request from Moss', time: '3h', post: 'b2' },
+      { id: 4, label: 'Note from Silas', sub: 'private note on your board', time: '5h', post: 'b0' },
+      { id: 5, label: 'Wren joined the network', sub: 'new connection · via Juno', time: '1d', person: 'wren' },
+      { id: 6, label: 'Ade rebuilt our shade, no questions', sub: 'new thanks from Juno', time: '1d', post: 'b6' },
+    ],
+    views: [
+      { id: 1, name: 'Rides to BRC', q: 'type:offer truck', notify: true },
+      { id: 2, name: 'Events this week', q: 'type:event', notify: false },
+      { id: 3, name: 'Trusted requests', q: 'type:request trust:>=60', notify: false },
+    ] };
+  basePeople = [
+    { id:'you', name:'Rae', init:'R', role:'This is you', deg:0, trust:100, mutuals:0, pi:0 },
+    { id:'moss', name:'Moss', init:'M', role:'Build lead', deg:1, trust:92, mutuals:12, pi:1 },
+    { id:'petra', name:'Petra', init:'P', role:'Metal artist', deg:1, trust:68, mutuals:7, pi:2 },
+    { id:'juno', name:'Juno', init:'J', role:'Medic', deg:1, trust:85, mutuals:9, pi:3 },
+    { id:'silas', name:'Silas', init:'S', role:'Sound', deg:1, trust:30, mutuals:4, pi:4 },
+    { id:'birdie', name:'Birdie', init:'B', role:'Costumer', deg:1, trust:60, mutuals:6, pi:5 },
+    { id:'ade', name:'Ade', init:'A', role:'Shade builder', deg:1, trust:40, mutuals:3, pi:1 },
+    { id:'kiki', name:'Kiki', init:'K', role:'Kitchen lead', deg:2, via:'Moss', mutuals:8, pi:2 },
+    { id:'theo', name:'Theo', init:'T', role:'Power & gennies', deg:2, via:'Moss + Petra', mutuals:4, pi:3 },
+    { id:'lena', name:'Lena', init:'L', role:'Rides coordinator', deg:2, via:'Birdie', mutuals:5, pi:4 },
+    { id:'omar', name:'Omar', init:'O', role:'Photographer', deg:2, via:'Silas', mutuals:2, pi:5 },
+    { id:'wren', name:'Wren', init:'W', role:'Greeter', deg:2, via:'Juno', mutuals:3, pi:1 },
+  ];
+  sasha = { id:'sasha', name:'Sasha', init:'S', role:'Fire spinner', deg:1, trust:0, mutuals:2, pi:4 };
+  namedPos = { you:[600,600], moss:[600,330], petra:[830,480], juno:[430,810], silas:[790,760], birdie:[370,430], ade:[620,880], kiki:[560,180], theo:[800,250], lena:[210,330], omar:[930,900], wren:[290,930], sasha:[720,970] };
+  namedEdges = [['moss','kiki',2.5],['moss','theo',2],['petra','theo',2],['birdie','lena',2],['silas','omar',2],['juno','wren',2],['moss','petra',1],['juno','birdie',1]];
+  net() {
+    if (this._net) return this._net;
+    let s = 42; const rnd = () => (s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296;
+    const first = ['Dusty','Fern','Echo','Nova','Pax','Indigo','Sol','Cricket','Ember','Wolf','Maple','Onyx','Juniper','Flint','Marlo','Sage','Piper','Rook','Clover','Zephyr','Halo','Bramble','Coyote','Lark','Mica','Nimbus','Opal','Quill','Rumor','Sparrow','Tule','Umber','Vesper','Willow','Yarrow','Zinnia','Ash','Boone','Cinder','Djuna','Elm','Fable','Gully','Hazel','Ida','Jett','Koa','Luz','Moth','Nyx','Ochre','Pluma','Quartz','Ridge','Sable','Tansy','Ursa','Vega','Wick','Xeno','Yuma','Zora','Arrow','Birch','Cosmo','Delta','Ever','Fox','Gale','Harbor','Iris','Jasper','Kestrel','Lumen','Merit','North','Otter','Prairie','Reed','Story','Thorn','Uma','Vale','Winter','Zeal'];
+    const roles = ['Welder','DJ','Ranger','Cook','Builder','Medic tent vol','Lamplighter','Sound tech','Seamster','Gate crew','Artist','Rigger','Bike mechanic','Barista','Fire safety','Photographer','Carpenter','Electrician','Greeter','Water crew'];
+    const people = this.basePeople.map(p => ({ ...p, x:this.namedPos[p.id][0], y:this.namedPos[p.id][1] }));
+    people.push({ ...this.sasha, x:this.namedPos.sasha[0], y:this.namedPos.sasha[1] });
+    const edges = this.namedEdges.map(([a, b, w]) => ({ a, b, w }));
+    let ni = 0; const nextName = () => first[ni++ % first.length];
+    const hubs = this.basePeople.filter(p => p.deg === 1);
+    let gid = 0;
+    const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+    hubs.forEach(h => {
+      const hx = this.namedPos[h.id][0], hy = this.namedPos[h.id][1];
+      const members = [];
+      const n2 = 8 + Math.floor(rnd() * 4);
+      for (let i = 0; i < n2; i++) {
+        const a = rnd() * Math.PI * 2, r = 105 + rnd() * 85;
+        const x = clamp(hx + Math.cos(a) * r, 40, 1160), y = clamp(hy + Math.sin(a) * r, 40, 1160);
+        const nm = nextName();
+        const p2 = { id:'g' + (gid++), name:nm, init:nm[0], role:roles[Math.floor(rnd() * roles.length)], deg:2, via:h.name, mutuals:1 + Math.floor(rnd() * 5), pi:Math.floor(rnd() * 6), x, y };
+        people.push(p2); edges.push({ a:h.id, b:p2.id, w:1.4 });
+        if (members.length && rnd() < .3) edges.push({ a:p2.id, b:members[Math.floor(rnd() * members.length)].id, w:1 });
+        members.push(p2);
+        if (rnd() < .5) {
+          const a3 = a + (rnd() - .5), r3 = 60 + rnd() * 45, nm3 = nextName();
+          const p3 = { id:'g' + (gid++), name:nm3, init:nm3[0], role:roles[Math.floor(rnd() * roles.length)], deg:3, via:h.name + ' → ' + nm, gate:nm, gateId:p2.id, mutuals:Math.floor(rnd() * 2), pi:Math.floor(rnd() * 6),
+            x:clamp(x + Math.cos(a3) * r3, 30, 1170), y:clamp(y + Math.sin(a3) * r3, 30, 1170) };
+          people.push(p3); edges.push({ a:p2.id, b:p3.id, w:1 });
+        }
+      }
+    });
+    for (let i = 0; i < 8; i++) {
+      const h = hubs[Math.floor(rnd() * hubs.length)];
+      const hx = this.namedPos[h.id][0], hy = this.namedPos[h.id][1];
+      const a = rnd() * Math.PI * 2, r = 130 + rnd() * 110;
+      const p = { id:'h' + i, name:'Hidden', init:'', role:'', deg: rnd() < .5 ? 2 : 3, hidden:true, mutuals:0, pi:Math.floor(rnd() * 6),
+        x:clamp(hx + Math.cos(a) * r, 40, 1160), y:clamp(hy + Math.sin(a) * r, 40, 1160) };
+      people.push(p); edges.push({ a:h.id, b:p.id, w:1 });
+    }
+    while (people.length < 101) {
+      const h = hubs[gid % hubs.length];
+      const hx = this.namedPos[h.id][0], hy = this.namedPos[h.id][1];
+      const a = rnd() * Math.PI * 2, r = 105 + rnd() * 95, nm = nextName();
+      const p2 = { id:'g' + (gid++), name:nm, init:nm[0], role:roles[Math.floor(rnd() * roles.length)], deg:2, via:h.name, mutuals:1 + Math.floor(rnd() * 5), pi:Math.floor(rnd() * 6),
+        x:clamp(hx + Math.cos(a) * r, 40, 1160), y:clamp(hy + Math.sin(a) * r, 40, 1160) };
+      people.push(p2); edges.push({ a:h.id, b:p2.id, w:1.4 });
+    }
+    const g2 = people.filter(p => p.deg === 2 && p.gate === undefined && p.id.startsWith('g'));
+    for (let k = 0; k < 7; k++) {
+      const a = g2[Math.floor(rnd() * g2.length)], b = g2[Math.floor(rnd() * g2.length)];
+      if (a && b && a.id !== b.id) edges.push({ a:a.id, b:b.id, w:1 });
+    }
+    this._net = { people, edges };
+    return this._net;
+  }
+  types = { offer:'OFFER', request:'REQUEST', event:'EVENT', collab:'COLLAB', thanks:'THANKS', intro:'INTRO', note:'NOTE', invite:'INVITE' };
+  typePl = { offer:'Offers', request:'Requests', event:'Events', collab:'Collabs', thanks:'Thanks', intro:'Intros', note:'Notes', invite:'Invites' };
+  baseBoard = [
+    { id:'b0', t:'note', to:'you', title:'Note from Silas', loc:'your private board', body:'Left your speaker cable with Juno at the medic tent. Grab it before Thursday or it becomes communal property.', by:'silas', time:'5h', aud:'Only you' },
+    { id:'b1', t:'offer', title:'Truck space Reno → BRC', loc:'departing Reno, Aug 24', body:'Two pallets max, leaving early morning. Dust-proof your stuff — tarps and straps on you.', contact:'WhatsApp +1 775 555 0132 · or pin a note to my board', by:'lena', time:'2h', aud:'2nd degree' },
+    { id:'b2', t:'request', title:'Welding hands for the pavilion', loc:'7:30 & E', body:'Frame goes up this weekend. Need two people who can weld or want to learn while holding things.', contact:'pin a note to my board · Moss on radio ch. 4', by:'moss', time:'3h', aud:'Connections' },
+    { id:'b3', t:'event', title:'Dusk tea ceremony Thursday', loc:'Center Camp plaza', body:'7:30pm, bring your own cup. Quiet hour — no sound systems, no exceptions.', contact:'just show up · questions → pin a note to my board', by:'kiki', time:'5h', aud:'2nd degree' },
+    { id:'b4', t:'offer', title:'Spare 20A generator hours', loc:'3:00 & B', body:'Mornings only, first come. Bring your own cable and don’t be greedy.', contact:'email theo@wattsup.example · or pin a note to my board', by:'theo', time:'8h', aud:'2nd degree' },
+    { id:'b5', t:'request', title:'Two greeters for Tuesday gate shift', loc:'Gate Road', body:'Training included, dust guaranteed. You get the bell and the speech.', contact:'pin a note to my board · Wren on ch. 5', by:'wren', time:'1d', aud:'2nd degree' },
+    { id:'b6', t:'thanks', title:'Ade rebuilt our shade, no questions', loc:'9:00 & C', body:'Blow-down flattened us at 3am. Ade showed up with a drill and stayed till sunrise. Legend.', by:'juno', time:'1d', aud:'Connections' },
+    { id:'b7', t:'intro', title:'Seeking a Lamplighters intro', loc:'roving', body:'Shooting a photo series on the lamp route. Need one person on the inside to vouch for me.', contact:'WhatsApp +1 415 555 0198 · or pin a note to my board', by:'omar', time:'2d', aud:'2nd degree' },
+    { id:'b8', t:'collab', title:'LED costume sewing circle', loc:'4:30 & G', body:'Seeking hands, ideas, and spare LED strips. Machines provided, thimbles optional.', contact:'pin a note to my board to join', by:'birdie', time:'3d', aud:'Connections' },
+  ];
+  tintsL = { offer:'#77743a', request:'#b45336', event:'#c58a2a', collab:'#5f7d7b', thanks:'#9c5a68', intro:'#6b6089', note:'#54718e', invite:'#8a6b4a' };
+  tintsD = { offer:'#56e0c0', request:'#ff7eb6', event:'#ffc466', collab:'#7ea8ff', thanks:'#c99aff', intro:'#66d9e8', note:'#9ecbff', invite:'#ffb08a' };
+  avL = ['#8a6b4a','#b45336','#c58a2a','#77743a','#5f7d7b','#9c5a68'];
+  neon = ['#ffe9dc','#ff6a3d','#56e0c0','#ffc466','#ff7eb6','#c99aff'];
+  obSteps = [
+    { icon:'◉', title:'Your graph is yours', body:'People join by invitation and consent. Trust is a private 0–100 dial, directional, and visible only to you. Pan and zoom — clusters form around the people you trust.', code:false },
+    { icon:'▤', title:'Short, typed bulletins', body:'Offers, requests, events, collabs, thanks, intros. They expire. To reach someone, pin a note to their board — there is no inbox.', code:false },
+    { icon:'⌕', title:'Search like a local', body:'The board speaks a tiny query language. Save any search as a view and get pinged when new bulletins match.', code:'type:offer trust:>=60 -truck' },
+  ];
+  theme(dark) {
+    if (!dark) return { desk:'#dcd6c8', bg:'#f6efe2', bgSolid:'#f6efe2',
+      wordmark:'#2e2418', wordmarkGlow:'none', ink:'#2e2418', sub:'#8a755a', faint:'#a4917a',
+      card:'#fffdf6', cardBd:'#e3d7bf', labelBg:'rgba(246,239,226,.85)', labelFg:'#5a4a34',
+      accentText:'#b45336', chipOnBg:'#2e2418', chipOnFg:'#f6efe2', chipOffFg:'#6d5c44', chipOffBd:'#cdbfa6',
+      tabBg:'#f6efe2', tabBd:'#e0d3b8', tabOn:'#2e2418', tabOff:'#a4917a',
+      fabBg:'#b45336', fabFg:'#f6efe2', fabGlow:'0 4px 10px rgba(180,83,54,.4)',
+      sheetBg:'#fffdf6', sheetBd:'#d8c9ac', sheetShadow:'0 18px 40px rgba(46,36,24,.3)', scrim:'rgba(46,36,24,.35)',
+      edge:'#a08560', edgeDash:'5 6', inputBg:'#f6efe2', track:'#e0d3b8',
+      youBg:'#2e2418', youFg:'#f6efe2', youGlow:'0 0 0 4px #f6efe2, 0 0 0 6px #2e2418', youAnim:'none',
+      warn:'#a06a10', warnBg:'rgba(197,138,42,.12)', err:'#b45336', errBd:'#d8a794',
+      ok:'#5a7a44', okBg:'rgba(119,116,58,.14)' };
+    return { desk:'#0c0712', bg:'radial-gradient(circle at 50% 18%, #251533 0%, #120a1a 72%)', bgSolid:'#171021',
+      wordmark:'#ffe9dc', wordmarkGlow:'0 0 20px rgba(255,106,61,.55)', ink:'#f4ecff', sub:'#b7a6cc', faint:'#7d6b94',
+      card:'rgba(255,255,255,.05)', cardBd:'rgba(255,255,255,.11)', labelBg:'rgba(18,10,26,.7)', labelFg:'#c9bcdd',
+      accentText:'#ff8a5f', chipOnBg:'#ffe9dc', chipOnFg:'#241533', chipOffFg:'#b7a6cc', chipOffBd:'rgba(255,255,255,.18)',
+      tabBg:'rgba(16,9,24,.94)', tabBd:'rgba(255,255,255,.08)', tabOn:'#ffe9dc', tabOff:'#5f5378',
+      fabBg:'linear-gradient(135deg,#ff6a3d,#ff7eb6)', fabFg:'#1c0f26', fabGlow:'0 0 20px rgba(255,106,61,.45)',
+      sheetBg:'#1e142e', sheetBd:'rgba(255,255,255,.15)', sheetShadow:'0 18px 50px rgba(0,0,0,.65)', scrim:'rgba(6,3,12,.6)',
+      edge:'#b48cff', edgeDash:'none', inputBg:'rgba(255,255,255,.06)', track:'rgba(255,255,255,.18)',
+      youBg:'#ffe9dc', youFg:'#241533', youGlow:'0 0 24px rgba(255,236,214,.7)', youAnim:'youpulse 2.6s ease-in-out infinite alternate',
+      warn:'#ffc466', warnBg:'rgba(255,196,102,.1)', err:'#ff7eb6', errBd:'rgba(255,126,182,.45)',
+      ok:'#56e0c0', okBg:'rgba(86,224,192,.12)' };
+  }
+  set = p => this.setState(p);
+  say(msg) {
+    clearTimeout(this._tt);
+    this.setState({ toast: msg });
+    this._tt = setTimeout(() => this.setState({ toast: null }), 2400);
+  }
+  componentDidMount() {
+    try { if (!localStorage.getItem('playapost-onboarded')) this.set({ onboard: 0 }); } catch(e) {}
+  }
+  getTheme() {
+    let th = this.state.theme;
+    if (!th) { try { th = localStorage.getItem('playapost-theme'); } catch(e) {} }
+    return th || this.props.defaultTheme || 'light';
+  }
+  people() {
+    return this.net().people.filter(p => (p.id !== 'sasha' || this.state.invite === 'accepted') && !this.state.blocked[p.id]);
+  }
+  effTrust(p) { return this.state.trust[p.id] ?? p.trust ?? 0; }
+  trustHint(n) {
+    if (n === 0) return 'I don’t trust this person at all — but I know them.';
+    if (n < 25) return 'Barely. I’d say hi across the trash fence, that’s it.';
+    if (n < 50) return 'A little. Small favors, nothing that matters.';
+    if (n < 75) return 'Solid. I’d lend gear or share a long ride.';
+    if (n < 100) return 'Deep. They could hold my keys and my cash.';
+    return 'I trust this person completely. No hesitation.';
+  }
+  trustW(n) { return n >= 75 ? 3.5 : n >= 40 ? 2 : 1; }
+  trustOpts = ['ANYONE', 'TRUST 50+', 'TRUST 75+'];
+  distOpts = ['UP TO 3RD°', 'UP TO 2ND°', '1ST° ONLY'];
+  qr() {
+    if (this._qr) return this._qr;
+    let s = 7; const rnd = () => (s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296;
+    const cells = [];
+    const inFinder = (c, r) => (c < 8 && r < 8) || (c > 12 && r < 8) || (c < 8 && r > 12);
+    const drawFinder = (cx, cy) => { for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) {
+      const ring = r === 0 || r === 6 || c === 0 || c === 6, core = r > 1 && r < 5 && c > 1 && c < 5;
+      if (ring || core) cells.push({ x: 8 + (cx + c) * 4, y: 8 + (cy + r) * 4 }); } };
+    drawFinder(0, 0); drawFinder(14, 0); drawFinder(0, 14);
+    for (let r = 0; r < 21; r++) for (let c = 0; c < 21; c++) if (!inFinder(c, r) && rnd() < .42) cells.push({ x: 8 + c * 4, y: 8 + r * 4 });
+    this._qr = cells; return cells;
+  }
+  clampZ(z) { return Math.min(2.5, Math.max(.35, z)); }
+  zoomBy(f) {
+    this.setState(st => {
+      const z = this.clampZ(st.zoom * f), k = z / st.zoom;
+      return { zoom:z, panX:201 - (201 - st.panX) * k, panY:300 - (300 - st.panY) * k };
+    });
+  }
+  authorOf(id) {
+    if (id === 'you') return { id:'you', name:'You', deg:0 };
+    return this.people().find(p => p.id === id) || (id === 'sasha' ? this.sasha : null);
+  }
+  parseQuery(q) {
+    const raw = q.toLowerCase().match(/-?\w+:(?:"[^"]*"|\S+)|-?"[^"]*"|\S+/g) || [];
+    return raw.map(tok => {
+      const neg = tok.startsWith('-'); if (neg) tok = tok.slice(1);
+      const m = tok.match(/^(type|from|deg|trust|is):(.+)$/);
+      const unq = s => s.replace(/^"|"$/g, '');
+      return m ? { neg, f: m[1], v: unq(m[2]) } : { neg, f: 'text', v: unq(tok) };
+    });
+  }
+  matchTok(tok, b, au) {
+    const v = tok.v;
+    let r;
+    if (tok.f === 'type') r = b.t === v || this.typePl[b.t].toLowerCase() === v || this.typePl[b.t].toLowerCase().startsWith(v);
+    else if (tok.f === 'from') r = au.name.toLowerCase().includes(v);
+    else if (tok.f === 'deg') r = String(au.deg ?? '') === v;
+    else if (tok.f === 'trust') {
+      const m = v.match(/^(>=|<=|>|<|=)?(\d+)$/);
+      if (!m) return true;
+      const n = au.id === 'you' ? 100 : this.effTrust(au), k = parseInt(m[2]), op = m[1] || '=';
+      r = op === '>=' ? n >= k : op === '<=' ? n <= k : op === '>' ? n > k : op === '<' ? n < k : n === k;
+    }
+    else if (tok.f === 'is') r = v === 'queued' ? b.status === 'queued' : v === 'mine' ? b.by === 'you' : true;
+    else r = [b.title, b.body, b.loc, b.contact, au.name].filter(Boolean).join(' ').toLowerCase().includes(v);
+    return tok.neg ? !r : r;
+  }
+  runQuery(posts, q) {
+    const toks = this.parseQuery(q);
+    return posts.filter(b => {
+      const au = this.authorOf(b.by);
+      return au && toks.every(tk => this.matchTok(tk, b, au));
+    });
+  }
+  renderVals() {
+    const S = this.state, dark = this.getTheme() === 'dark', t = this.theme(dark);
+    const ppl = this.people(), byId = id => ppl.find(p => p.id === id);
+    const chip = on => on ? { bg:t.chipOnBg, fg:t.chipOnFg, bd:t.chipOnBg, bstyle:'solid' } : { bg:'transparent', fg:t.chipOffFg, bd:t.chipOffBd, bstyle:'solid' };
+    const tints = dark ? this.tintsD : this.tintsL;
+    const nodes = ppl.map(p => {
+      const you = p.id === 'you';
+      let st;
+      if (!dark) st = you
+        ? { bg:t.youBg, fg:t.youFg, ring:'none', glow:t.youGlow, anim:'none' }
+        : { bg:this.avL[p.pi], fg:'#f8f2e4', ring:'none', glow:'0 2px 6px rgba(70,50,20,.28)', anim:'none' };
+      else {
+        if (you) st = { bg:t.youBg, fg:t.youFg, ring:'none', glow:'0 0 24px rgba(255,236,214,.8)', anim:t.youAnim };
+        else { const n = this.neon[p.pi]; st = { bg:'#251838', fg:n, ring:'1.5px solid ' + n, glow:'0 0 ' + (p.deg === 1 ? 16 : 8) + 'px ' + n + '66', anim:'none' }; }
+      }
+      const d = you ? 58 : p.deg === 1 ? 46 : p.deg === 2 ? 30 : 22;
+      if (p.hidden) return { ...p, ...st, init:'', d:26, fs:10, blur:'blur(2.5px)', op:.45, showLabel:false, label:'',
+        onTap: () => { if (this._sup) { this._sup = false; return; } this.say('Hidden — their privacy keeps their name inside their own circle'); } };
+      return { ...p, ...st, d, fs: d > 40 ? 15 : d > 26 ? 12 : 10, blur:'none',
+        op: you || p.deg === 1 ? 1 : p.deg === 2 ? .85 : .6,
+        showLabel: you || p.deg === 1 || !p.id.startsWith('g'),
+        label: you ? 'You' : p.name,
+        onTap: you ? undefined : (() => { if (this._sup) { this._sup = false; return; } this.set({ sel: p.id }); }) };
+    });
+    const vis = Object.fromEntries(ppl.map(p => [p.id, p]));
+    const youEdges = ppl.filter(p => p.deg === 1).map(p => ({ a:'you', b:p.id, w:this.trustW(this.effTrust(p)) }));
+    const edges = [...youEdges, ...this.net().edges].filter(e => vis[e.a] && vis[e.b]).map(e => ({
+      x1:vis[e.a].x, y1:vis[e.a].y, x2:vis[e.b].x, y2:vis[e.b].y, w:e.w,
+      o: e.w >= 3 ? (dark ? .75 : .8) : e.w >= 2 ? (dark ? .45 : .55) : (dark ? .22 : .3),
+      stroke:t.edge, dash:t.edgeDash }));
+    const inviteCards = S.invite === 'pending' ? [{ id:'inv-sasha', t:'invite', title:'Sasha wants to connect', loc:'vouched by Moss', body:'“We met at the trash fence during the whiteout.” Fire spinner, two mutual connections. They only join your graph if you accept.', by:'sasha', time:'2h', aud:'Only you' }] : [];
+    const allPosts = [...inviteCards, ...S.posts, ...this.baseBoard]
+      .filter(b => {
+        if ((b.by !== 'you' && b.by !== 'sasha' && S.blocked[b.by]) || S.dismissed[b.id]) return false;
+        if (b.by === 'you' || b.by === 'sasha') return true;
+        const au = this.authorOf(b.by);
+        return au && (au.deg === 1 || b.aud !== 'Connections');
+      });
+    const chipFiltered = allPosts.filter(b => S.filter === 'all' || b.t === S.filter);
+    const shown = S.query.trim() ? this.runQuery(chipFiltered, S.query) : chipFiltered;
+    const bulletins = shown.map(b => {
+      const au = this.authorOf(b.by);
+      const pill = b.status === 'queued' ? { pill:'QUEUED', pillC:t.warn, pillBg:t.warnBg }
+        : b.status === 'synced' ? { pill:'POSTED', pillC:t.ok, pillBg:t.okBg }
+        : (b.to || b.t === 'invite') ? { pill:'PRIVATE', pillC:t.sub, pillBg:t.inputBg } : { pill:false };
+      const noteLook = b.t === 'note'
+        ? { cardBg: dark ? 'rgba(158,203,255,.06)' : 'rgba(84,113,142,.06)', cardBd: tints.note, bdStyle:'dashed', tilt:'rotate(-.5deg)' }
+        : { cardBg: t.card, cardBd: t.cardBd, bdStyle:'solid', tilt:'none' };
+      return { ...b, ...pill, ...noteLook, tint:tints[b.t], label:this.types[b.t], author: au ? au.name : '', onOpen: () => this.set({ openPost: b.id }) };
+    });
+    const chips = ['all','offer','request','event','collab','thanks','intro','note'].map(x => ({
+      label: x === 'all' ? 'All' : this.typePl[x], ...chip(S.filter === x), onTap: () => this.set({ filter: x }) }));
+    const fullQ = [S.filter !== 'all' ? 'type:' + S.filter : '', S.query.trim()].filter(Boolean).join(' ');
+    const dpb = S.openPost ? allPosts.find(b => b.id === S.openPost) : null;
+    const dpAu = dpb ? this.authorOf(dpb.by) : null;
+    const dp = dpb ? {
+      label:this.types[dpb.t], tint:tints[dpb.t], title:dpb.title, loc:dpb.loc, body:dpb.body, time:dpb.time,
+      contact: dpb.contact || false,
+      authorLine: (dpAu ? dpAu.name : '') + (dpAu && dpAu.deg ? ' · ' + (dpAu.deg === 1 ? '1st' : dpAu.deg === 2 ? '2nd' : '3rd') + ' degree' : '') + ' · to ' + dpb.aud,
+      isInvite: dpb.t === 'invite' && S.invite === 'pending',
+      isMine: dpb.by === 'you',
+      authorName: dpAu ? dpAu.name : '',
+      canNote: !!dpAu && dpAu.deg === 1 && dpb.t !== 'invite',
+      onNote: () => this.set({ openPost:null, composeOpen:true, noteTo:dpAu.id, cText:'' }),
+      needsIntro: !!dpAu && dpAu.deg === 2,
+      introHint: dpAu && dpAu.deg === 2 ? 'Pinning a note needs a direct connection — ' + dpAu.name + ' is 2nd degree. Request an intro to reach them.' : false,
+      introLabel: dpAu && S.introSent[dpAu.id] ? 'Intro pending via ' + S.introSent[dpAu.id] : 'Request intro via ' + (dpAu && dpAu.via ? dpAu.via.split(' + ')[0] : '…'),
+      introBg: dpAu && S.introSent[dpAu.id] ? 'transparent' : t.ink,
+      introFg: dpAu && S.introSent[dpAu.id] ? t.faint : t.bgSolid,
+      introBd: dpAu && S.introSent[dpAu.id] ? t.cardBd : t.ink,
+      onIntro: dpAu && !S.introSent[dpAu.id] ? (() => this.set({ openPost:null, intro:dpAu.id, introVia:(dpAu.via || '').split(' + ')[0], introNote:'' })) : undefined,
+      canModerate: dpb.by !== 'you' && !(dpb.t === 'invite' && S.invite === 'pending'),
+      onDelete: () => { this.setState(st => ({ posts: st.posts.filter(p => p.id !== dpb.id), openPost:null })); this.say('Post deleted'); },
+      onDismiss: () => { this.setState(st => ({ dismissed: { ...st.dismissed, [dpb.id]: true }, openPost:null })); this.say('Dismissed — it won’t come back'); },
+      onReport: () => this.set({ report: dpb.id, reportTitle: dpb.title, reportType: null, reportMsg: '', openPost: null }),
+    } : null;
+    const sp = S.sel ? byId(S.sel) : null;
+    const tr = sp ? this.effTrust(sp) : 0;
+    const pendingVia = sp ? S.introSent[sp.id] : null;
+    const sel = sp ? {
+      name:sp.name, role:sp.role,
+      degLabel: sp.deg === 1 ? '1st degree · connected to you' : (sp.deg === 2 ? '2nd degree · via ' + sp.via : '3rd degree · via ' + sp.via),
+      canTrust: sp.deg === 1, noTrust: sp.deg !== 1,
+      farNote: sp.deg > 2 ? 'Too far for an intro — intros travel one hop, through a direct connection. Connect with ' + sp.gate + ' first; they can vouch for you.' : false,
+      trustVal: tr, trustHint: this.trustHint(tr),
+      trackBg: 'linear-gradient(to right,' + t.accentText + ' 0%,' + t.accentText + ' ' + tr + '%,' + t.track + ' ' + tr + '%,' + t.track + ' 100%)',
+      onTrust: e => this.setState(st => ({ trust: { ...st.trust, [sp.id]: parseInt(e.target.value) } })),
+      mutuals:sp.mutuals, bcount: allPosts.filter(x => x.by === sp.id).length,
+      act1: sp.deg === 1 ? 'Pin a note' : sp.deg === 2 ? (pendingVia ? 'Intro pending via ' + pendingVia : 'Request intro') : 'View ' + sp.gate,
+      act1Bg: (pendingVia && sp.deg === 2) ? 'transparent' : t.ink, act1Fg: (pendingVia && sp.deg === 2) ? t.faint : t.bgSolid, act1Bd: (pendingVia && sp.deg === 2) ? t.cardBd : t.ink,
+      onAct1: sp.deg === 1
+        ? () => this.set({ sel:null, composeOpen:true, noteTo:sp.id, cText:'' })
+        : sp.deg === 2
+          ? (pendingVia ? undefined : () => this.set({ sel:null, intro:sp.id, introVia:(sp.via || '').split(' + ')[0], introNote:'' }))
+          : () => this.set({ sel: sp.gateId }),
+    } : null;
+    const ip = S.intro ? byId(S.intro) : null;
+    const introVias = ip ? (ip.via || '').split(' + ').map(nm => ({ label:nm,
+      ...(S.introVia === nm ? { bg:t.chipOnBg, fg:t.chipOnFg, bd:t.chipOnBg } : { bg:'transparent', fg:t.chipOffFg, bd:t.chipOffBd }),
+      onTap: () => this.set({ introVia:nm }) })) : [];
+    const views = S.views.map(v => ({ ...v,
+      count: this.runQuery(allPosts, v.q).length,
+      bellLabel: v.notify ? '◉ NOTIFY ON' : '○ NOTIFY OFF',
+      bellBg: v.notify ? t.chipOnBg : 'transparent', bellFg: v.notify ? t.chipOnFg : t.chipOffFg, bellBd: v.notify ? t.chipOnBg : t.chipOffBd,
+      onBell: () => { this.setState(st => ({ views: st.views.map(x => x.id === v.id ? { ...x, notify: !x.notify } : x) }));
+        this.say(v.notify ? 'Notifications off for ' + v.name : 'You\u2019ll hear when new bulletins match'); },
+      onDelete: () => { this.setState(st => ({ views: st.views.filter(x => x.id !== v.id) })); this.say('View deleted'); },
+      onOpen: () => this.set({ tab:'board', filter:'all', query:v.q }) }));
+    const blockedRows = this.net().people.filter(p => S.blocked[p.id]).map(p => ({ name: p.name + ' · ' + p.role,
+      onUnblock: () => { this.setState(st => { const b = { ...st.blocked }; delete b[p.id]; return { blocked: b }; }); this.say(p.name + ' unblocked — you see each other again'); } }));
+    const syncRows = [
+      ...S.posts.map(p => ({ text:(p.to ? 'Note · ' : 'Bulletin · ') + (p.title || p.body), pill: p.status === 'queued' ? 'PENDING' : 'SYNCED', pillC: p.status === 'queued' ? t.warn : t.ok, pillBg: p.status === 'queued' ? t.warnBg : t.okBg })),
+      { text:'Trust update · Moss', pill:'SYNCED', pillC:t.ok, pillBg:t.okBg },
+    ];
+    const cchip = on => on ? { bg:t.chipOnBg, fg:t.chipOnFg, bd:t.chipOnBg } : { bg:'transparent', fg:t.chipOffFg, bd:t.chipOffBd };
+    const audLabels = { conn:'Connections', deg2:'+ 2nd degree' };
+    const queued = S.posts.filter(p => p.status === 'queued').length;
+    const trusted = this.basePeople.filter(p => p.deg === 1 && this.effTrust(p) >= 50).length;
+    const noteToP = S.noteTo ? this.net().people.find(p => p.id === S.noteTo) : null;
+    const isNote = !!noteToP;
+    const canPost = isNote ? !!S.cText.trim() : !!(S.cTitle.trim() && S.cText.trim());
+    const ob = S.onboard != null ? this.obSteps[S.onboard] : null;
+    const finishOb = () => { try { localStorage.setItem('playapost-onboarded', '1'); } catch(e) {} this.set({ onboard:null }); };
+    return { t, isDark:dark, themeIcon: dark ? '☀' : '☾',
+      toggleTheme: () => { const nt = dark ? 'light' : 'dark'; try { localStorage.setItem('playapost-theme', nt); } catch(e) {} this.set({ theme: nt }); },
+      headerSub: S.offline ? 'LAST SYNCED 14 MIN AGO' : ppl.length - 1 + ' PEOPLE · ' + trusted + ' TRUSTED · ' + allPosts.length + ' BULLETINS',
+      offline:S.offline, queuedLabel: queued + ' QUEUED',
+      onGraph: S.tab === 'graph', onBoard: S.tab === 'board', onSaved: S.tab === 'saved', onYou: S.tab === 'you',
+      goGraph: () => this.set({ tab:'graph' }), goBoard: () => this.set({ tab:'board' }),
+      goSaved: () => this.set({ tab:'saved' }), goYou: () => this.set({ tab:'you' }),
+      gC: S.tab === 'graph' ? t.tabOn : t.tabOff, bC: S.tab === 'board' ? t.tabOn : t.tabOff,
+      sC: S.tab === 'saved' ? t.tabOn : t.tabOff, yC: S.tab === 'you' ? t.tabOn : t.tabOff,
+      nodes, edges, chips, bulletins, boardEmpty: shown.length === 0,
+      gXform: 'translate(' + S.panX + 'px,' + S.panY + 'px) scale(' + S.zoom + ')',
+      gDown: e => { this._drag = { x:e.clientX, y:e.clientY, px:S.panX, py:S.panY, d:0 }; },
+      gMove: e => { const d = this._drag; if (!d) return; const dx = e.clientX - d.x, dy = e.clientY - d.y; d.d = Math.max(d.d, Math.abs(dx) + Math.abs(dy)); this.set({ panX:d.px + dx, panY:d.py + dy }); },
+      gUp: () => { if (this._drag && this._drag.d > 8) this._sup = true; this._drag = null; },
+      gWheel: e => this.zoomBy(e.deltaY < 0 ? 1.12 : 1 / 1.12),
+      zoomIn: () => this.zoomBy(1.3), zoomOut: () => this.zoomBy(1 / 1.3),
+      zoomFit: () => this.set({ zoom:.5, panX:-99, panY:20 }),
+      query:S.query, onQuery: e => this.set({ query: e.target.value }),
+      hasQuery: !!S.query.trim(), clearQuery: () => this.set({ query:'' }),
+      helpOpen:S.helpOpen, toggleHelp: () => this.set({ helpOpen: !S.helpOpen }),
+      queryActive: !!fullQ, matchCount: shown.length, matchS: shown.length === 1 ? '' : 'es',
+      saveQuery: () => {
+        const name = fullQ.length > 26 ? fullQ.slice(0, 26) + '…' : fullQ;
+        this.setState(st => ({ views:[...st.views, { id:Date.now(), name, q:fullQ, notify:false }] }));
+        this.say('View saved — find it under Saved');
+      },
+      hasNotifs: S.notifs.length > 0, notifsEmpty: S.notifs.length === 0,
+      notifCount: S.notifs.length,
+      notifOpen: S.notifOpen, openNotifs: () => this.set({ notifOpen:true }), closeNotifs: () => this.set({ notifOpen:false }),
+      clearNotifs: () => { this.set({ notifs: [] }); this.say('All clear'); },
+      notifRows: S.notifs.map(nf => ({ id:nf.id, label:nf.label, sub:nf.sub || '', hasSub: !!nf.sub, time:nf.time,
+        onGo: () => {
+          if (nf.person) { this.set({ notifOpen:false, tab:'graph', sel:nf.person }); return; }
+          if (!allPosts.find(b => b.id === nf.post)) { this.say('That item is gone — dismissed or expired'); return; }
+          this.set({ notifOpen:false, tab:'board', openPost:nf.post });
+        },
+        onDismiss: e => { e.stopPropagation(); this.setState(st => ({ notifs: st.notifs.filter(x => x.id !== nf.id) })); } })),
+      dp, hasPost: !!dp, closePost: () => this.set({ openPost:null }),
+      hasReport: !!S.report, closeReport: () => this.set({ report:null }),
+      reportTitle: S.reportTitle,
+      reportTypes: ['Harassment','Scam or fraud','Impersonation','Spam','Safety risk'].map(x => ({ label:x, ...cchip(S.reportType === x), onTap: () => this.set({ reportType:x }) })),
+      reportMsg: S.reportMsg, onReportMsg: e => this.set({ reportMsg: e.target.value }),
+      reportOp: S.reportType && S.reportMsg.trim() ? 1 : .45,
+      sendReport: () => {
+        if (!S.reportType || !S.reportMsg.trim()) return;
+        this.setState(st => ({ dismissed: { ...st.dismissed, [st.report]: true }, report:null }));
+        this.say('Reported: ' + S.reportType.toLowerCase() + ' — stewards will review');
+      },
+      sel, hasSel: !!sel, closeSheet: () => this.set({ sel:null }),
+      blockSel: () => { this.setState(st => ({ blocked: { ...st.blocked, [S.sel]: true }, sel:null })); this.say('Blocked. You won\u2019t see each other.'); },
+      hasIntro: !!ip, closeIntro: () => this.set({ intro:null }),
+      introName: ip ? ip.name : '', introVias, introViaName: S.introVia || '…',
+      introNote:S.introNote, onIntroNote: e => this.set({ introNote: e.target.value }),
+      introOp: S.introNote.trim() && S.introVia ? 1 : .45,
+      sendIntro: () => {
+        if (!S.introNote.trim() || !S.introVia || !ip) return;
+        this.setState(st => ({ introSent: { ...st.introSent, [ip.id]: S.introVia }, intro:null }));
+        this.say('Sent to ' + S.introVia + ' — they decide whether to pass it on');
+      },
+      views, connCount: ppl.filter(p => p.deg === 1).length, trustedCount: trusted,
+      blockedCount: blockedRows.length || 'None', blockedChevron: S.blockedOpen ? '▾' : '▸',
+      blockedOpen: S.blockedOpen, toggleBlocked: () => this.set({ blockedOpen: !S.blockedOpen }),
+      blockedRows, blockedEmpty: blockedRows.length === 0,
+      acceptInvite: () => { this.setState(st => ({ invite:'accepted', openPost:null })); this.say('Connected — Sasha is on your graph now'); },
+      declineInvite: () => { this.setState(st => ({ invite:'declined', openPost:null })); this.say('Declined. Consent is explicit here.'); },
+      shareInvite: () => this.say('Share sheet opened — invite link copied'),
+      qrCells: this.qr(),
+      nameRows: [
+        { label:'By trust', value:this.trustOpts[S.priv.trust], onTap: () => { const n = (S.priv.trust + 1) % 3; this.setState(st => ({ priv: { ...st.priv, trust:n } })); this.say('Name visible to: ' + this.trustOpts[n].toLowerCase()); } },
+        { label:'By distance', value:this.distOpts[S.priv.dist], onTap: () => { const n = (S.priv.dist + 1) % 3; this.setState(st => ({ priv: { ...st.priv, dist:n } })); this.say('Name visible ' + this.distOpts[n].toLowerCase()); } },
+      ],
+      noteRows: [
+        { label:'By trust', value:this.trustOpts[S.priv.noteTrust], onTap: () => { const n = (S.priv.noteTrust + 1) % 3; this.setState(st => ({ priv: { ...st.priv, noteTrust:n } })); this.say('Notes allowed from: ' + this.trustOpts[n].toLowerCase()); } },
+        { label:'By distance', value:this.distOpts[S.priv.noteDist], onTap: () => { const n = (S.priv.noteDist + 1) % 3; this.setState(st => ({ priv: { ...st.priv, noteDist:n } })); this.say('Notes allowed ' + this.distOpts[n].toLowerCase()); } },
+      ],
+      toggleOffline: () => {
+        if (!S.offline) { this.set({ offline:true }); this.say('Offline — the playa has no bars anyway'); }
+        else {
+          this.setState(st => ({ offline:false, posts: st.posts.map(p => ({ ...p, status:'synced' })) }));
+          this.say(queued ? 'Back online — ' + queued + ' item' + (queued > 1 ? 's' : '') + ' synced' : 'Back online');
+        }
+      },
+      swBg: S.offline ? t.accentText : (dark ? 'rgba(255,255,255,.18)' : '#cdbfa6'), swKnob: S.offline ? '21px' : '3px',
+      composeOpen: S.composeOpen,
+      openCompose: () => this.set({ composeOpen:true, noteTo:null }),
+      closeCompose: () => this.set({ composeOpen:false, noteTo:null }),
+      composeTitle: isNote ? 'Pin a note to ' + noteToP.name + '\u2019s board' : 'Post a bulletin',
+      isNote, isBulletin: !isNote, noteToName: isNote ? noteToP.name : '',
+      cTypes: ['offer','request','event','collab','thanks','intro'].map(x => ({ label:this.typePl[x], ...cchip(S.cType === x), onTap: () => this.set({ cType:x }) })),
+      cAuds: Object.entries(audLabels).map(([k,label]) => ({ label, ...cchip(S.cAud === k), onTap: () => this.set({ cAud:k }) })),
+      cExps: [['24h','24h'],['3d','3 days'],['1w','1 week']].map(([k,label]) => ({ label, ...cchip(S.cExp === k), onTap: () => this.set({ cExp:k }) })),
+      cTitle: S.cTitle, onCTitle: e => this.set({ cTitle: e.target.value }),
+      cLoc: S.cLoc, onCLoc: e => this.set({ cLoc: e.target.value }),
+      cText: S.cText, onCText: e => this.set({ cText: e.target.value }),
+      postOp: canPost ? 1 : .45,
+      postLabel: S.offline ? (isNote ? 'Queue note' : 'Queue bulletin') : (isNote ? 'Pin to ' + noteToP.name + '\u2019s board' : 'Post to ' + audLabels[S.cAud]),
+      postNow: () => {
+        if (!canPost) return;
+        const status = S.offline ? 'queued' : 'synced';
+        const post = isNote
+          ? { id:'p' + Date.now(), t:'note', to:S.noteTo, title:'Note to ' + noteToP.name, loc:noteToP.name + '\u2019s private board', body:S.cText.trim(), by:'you', time:'now', aud:'Only ' + noteToP.name, status }
+          : { id:'p' + Date.now(), t:S.cType, title:S.cTitle.trim(), loc:S.cLoc.trim() || 'somewhere on playa', body:S.cText.trim(), by:'you', time:'now', aud:audLabels[S.cAud], status };
+        this.setState(st => ({ posts:[post, ...st.posts], cText:'', cTitle:'', cLoc:'', composeOpen:false, noteTo:null, tab:'board', filter:'all', query:'' }));
+        this.say(S.offline ? 'Queued — will sync when you\u2019re back' : (isNote ? 'Pinned to ' + noteToP.name + '\u2019s board — only they see it' : 'Posted to ' + audLabels[S.cAud]));
+      },
+      onboardOpen: !!ob,
+      obIcon: ob ? ob.icon : '', obTitle: ob ? ob.title : '', obBody: ob ? ob.body : '', obCode: ob ? ob.code : false,
+      obDots: this.obSteps.map((_, i) => ({ c: i === S.onboard ? t.accentText : t.cardBd })),
+      obNextLabel: S.onboard === 2 ? 'Get started' : 'Next',
+      obNext: () => { if (S.onboard >= 2) finishOb(); else this.set({ onboard: S.onboard + 1 }); },
+      obSkip: finishOb,
+      replayOnboard: () => this.set({ onboard: 0, tab:'you' }),
+      toast:S.toast, hasToast: !!S.toast,
+    };
+  }
+}
+</script>
+</body>
+</html>
+
