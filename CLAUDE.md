@@ -98,6 +98,8 @@ to check reports green forever, which is worse than no rule at all.
   inside a module is a hidden, untestable dependency.
 - **Never put a secret in a schema default.** A default that works in production
   is a secret in source control (addendum §17).
+- **Secret names, paths, and retrieval steps** live in `docs/engineering/secrets.md`
+  (never values).
 - **Directories are created when a real file lands in them**, never as
   placeholders (addendum §4). `apps/server/src/modules/` does not exist yet
   because M1 has no product code. That is correct, not missing.
