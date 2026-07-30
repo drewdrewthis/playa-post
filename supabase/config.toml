@@ -1,0 +1,70 @@
+# Supabase CLI configuration for LOCAL DEVELOPMENT ONLY.
+#
+# Nothing here is a production setting and nothing here is a secret. Production
+# configuration lives in the platform's secret management (addendum §17).
+#
+# Bring the stack up with `supabase start`, apply migrations with
+# `supabase db reset`. See supabase/migrations/README.md for the workflow.
+
+project_id = "playa-post"
+
+[api]
+enabled = true
+port = 54321
+# DELIBERATE, LOAD-BEARING (ADR-0002): product tables live in schema `app`, which
+# is NOT listed here and therefore is NOT exposed through PostgREST. The API
+# reaches Postgres directly as a least-privileged role; there is no public REST
+# surface over product data. Adding "app" to this list would hand every
+# authenticated client direct table access and bypass every visibility function.
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+# Must match POSTGRES_TEST_IMAGE in packages/testing so SQL that passes an
+# integration test is SQL that passes locally and in production.
+major_version = 16
+
+[db.pooler]
+enabled = false
+
+[db.migrations]
+enabled = true
+
+[studio]
+enabled = true
+port = 54323
+
+# Local mail catcher: magic-link emails land here instead of being sent.
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+# Matches apps/web's dev server (apps/web/vite.config.ts).
+site_url = "http://127.0.0.1:5173"
+additional_redirect_urls = ["http://127.0.0.1:5173"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+# Sign-up is invitation-driven at the product level (the network is opt-in and
+# private); this flag governs the Supabase Auth surface only.
+enable_signup = true
+enable_anonymous_sign_ins = false
+
+[auth.email]
+enable_signup = true
+# Magic link is the intended flow (ADR-0008). Confirmations are off locally so a
+# developer is not blocked on the mail catcher.
+enable_confirmations = false
+double_confirm_changes = true
+
+[analytics]
+enabled = false
