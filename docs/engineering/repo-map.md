@@ -75,6 +75,13 @@ Allowed: `Transport → Application → Domain ← Infrastructure`.
 Deliberately-violating fixtures live in `tests/fitness/__fixtures__/`; a test asserts each is caught.
 If you find yourself wanting to add an exception, that is the signal to change the design, not the rule.
 
+**Live as of M1:** the first five — the addendum §19 minimums. The last two land in M2 with the code
+they bind to (`no-container-outside-composition` with the DI container, `no-sql-outside-persistence`
+with the first repository); a rule with nothing to check is the empty abstraction §4 forbids.
+Likewise, the `db:*`, `test:security`, and `test:e2e` commands below arrive with Supabase (M2),
+the ADR-0002 bypass suite (M3), and Playwright (M4). `pnpm install/dev/build/typecheck/lint/
+lint:boundaries/test/test:unit/test:integration` work today.
+
 Cross-module interaction goes through: a small public application interface, a published event, a shared
 contract with clear ownership, or a coordinating application service. Never a direct reach-in.
 
