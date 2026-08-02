@@ -10,8 +10,8 @@ import { HEALTH_PATH, readHealth, type HealthResponse } from './health';
  * Its single responsibility is *runtime binding*: turn configuration into a
  * listening-capable server and mount transports on it. It holds no product
  * behavior, and per addendum §22 it is the only layer allowed to know that the
- * runtime is Node + Fastify at all — the same modules must mount unchanged on a
- * Cloudflare Worker entrypoint.
+ * runtime is Node + Fastify at all — moving off Render, or off Fastify, must be
+ * a change to this file and its `main.ts`, never to a module (ADR-0009).
  *
  * Returned rather than started, so tests can drive it through `inject()` without
  * binding a port.
@@ -23,8 +23,9 @@ export function createHttpServer(configuration: Configuration): FastifyInstance 
   // not a wrapper around one. `logLevel: 'silent'` is how tests stay quiet.
   const server = Fastify({ logger: { level: configuration.logLevel } });
 
-  // Liveness only, and shared with the Cloudflare entrypoint so the two runtimes
-  // cannot drift (ADR-0001 rule 2).
+  // Liveness only, and delegated rather than inlined: the payload Render's health
+  // check reads is `readHealth()`'s, so this route contributes routing and
+  // nothing else.
   server.get(HEALTH_PATH, (): HealthResponse => readHealth());
 
   return server;

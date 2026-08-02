@@ -57,15 +57,13 @@ jobs:
       - name: build:web
         run: pnpm build:web
 
-      # ADR-0001 rule 2: BOTH server entrypoints build from day one, even after a
-      # "go" verdict. A target that is never built is a target that rots, and a
-      # rotted target turns a reversible decision into a one-way door. These two
-      # steps are that fitness function — do not collapse them into one.
+      # One server build, because there is one deployment target: the Node bundle
+      # Render runs (ADR-0009). The `workerd` build this step used to be paired
+      # with is deleted — with the runtime decided, a second bundle nobody deploys
+      # proves nothing. Portability is enforced by the Boundaries step above, not
+      # by compiling for a host we will not use.
       - name: build:server:node
         run: pnpm build:server:node
-
-      - name: build:server:cloudflare
-        run: pnpm build:server:cloudflare
 
       - name: Unit tests
         run: pnpm test:unit
