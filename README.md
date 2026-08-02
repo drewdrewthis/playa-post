@@ -24,9 +24,8 @@ curl localhost:3000/healthz  # {"status":"ok"}
 pnpm typecheck
 pnpm lint
 pnpm boundaries              # architecture fitness function — see below
-pnpm build                   # web + BOTH server bundles
-pnpm build:server:node       # Node/tsup target
-pnpm build:server:cloudflare # workerd target — ADR-0001 keeps the choice reversible
+pnpm build                   # web + the server bundle
+pnpm build:server:node       # the server alone — the bundle Render runs (ADR-0009)
 pnpm test:unit               # no infrastructure
 pnpm test:integration        # Testcontainers Postgres 17; needs docker running
 pnpm test:security           # ADR-0002 bypass suite; needs docker running

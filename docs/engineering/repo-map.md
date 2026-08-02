@@ -39,7 +39,7 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  state,tests}. Shell/router/providers in src/app/. Shared UI in src/shared/.
 apps/server/     The modular monolith.
   composition/   The ONLY place that knows about the object graph (ADR-0003).
-  entrypoints/   http/ · queue/ · cron/. The ONLY place that knows about the runtime (ADR-0001).
+  entrypoints/   http/ · queue/ · cron/. The ONLY place that knows about the runtime (ADR-0009).
   modules/       identity · connections · graph · bulletins · views · notifications · moderation ·
                  sync · storage · audit. Each: transport/ application/ domain/ persistence/ tests/
                  plus a <name>.module.ts. (Addendum §4 — a module only grows the directories it needs.)
@@ -69,7 +69,7 @@ Allowed: `Transport → Application → Domain ← Infrastructure`.
 
 | Rule | Meaning |
 |---|---|
-| `no-domain-to-infrastructure` | domain must not import tRPC, React, Kysely, Supabase, Cloudflare/Railway APIs, HTTP types, DB row types, or logging implementations |
+| `no-domain-to-infrastructure` | domain must not import tRPC, React, Kysely, Supabase, hosting-provider APIs, HTTP types, DB row types, or logging implementations |
 | `no-application-to-transport` | application services must not touch request/response objects |
 | `no-transport-to-persistence` | routers never call repositories or the database |
 | `no-web-to-server-internals` | `apps/web` may import `packages/contracts`, nothing else from the server |
@@ -87,9 +87,9 @@ PR that introduces the code they bind to — `no-container-outside-composition` 
 abstraction §4 forbids, and it reports green forever.
 
 Likewise the `db:*`, `test:security`, and `test:e2e` commands below: they arrive with M1b.1, M1b.3, and
-M4 respectively. Working today: `pnpm install/dev/build/build:web/build:server:node/
-build:server:cloudflare/typecheck/lint/boundaries/test/test:unit/test:integration`. The script is
-`pnpm boundaries` — one name, no alias; the CI *job* that runs it is named `lint:boundaries`.
+M4 respectively. Working today: `pnpm install/dev/build/build:web/build:server:node/typecheck/lint/
+boundaries/test/test:unit/test:integration`. The script is `pnpm boundaries` — one name, no alias; the
+CI *job* that runs it is named `lint:boundaries`.
 
 Cross-module interaction goes through: a small public application interface, a published event, a shared
 contract with clear ownership, or a coordinating application service. Never a direct reach-in.
@@ -143,12 +143,16 @@ assertions**, and unit tests instantiate classes directly rather than resolving 
 
 ## Deployment
 
-Portable by construction (addendum §22): Cloudflare static frontend, plus either a Cloudflare Worker API
-with Queues and Cron, or a conventional Node server and worker — both against Supabase. The choice is
-ADR-0001, decided by the M3 spike. **Both server entrypoints build in CI regardless of the verdict** —
-that is the fitness function keeping the choice reversible. Runtime-specific code belongs only in
-`entrypoints/` and infrastructure adapters. The outbox table, not the queue, is the delivery record
-(ADR-0006), so the queue technology is an entrypoint detail.
+The backend is the **Node server bundle on Render's free plan** — ADR-0009, an owner decision that
+supersedes ADR-0001 and its M3 spike. `render.yaml` at the repo root is the service definition: free
+plan, `frankfurt` (nearest the Supabase project), Node 22, health check on `/healthz`, `autoDeploy`
+off because M4.5 gates rollout on B18. Static frontend hosting is unchanged and not decided by ADR-0009.
+
+Portability (addendum §22) is still real, but it is carried by the boundary rules rather than by
+building a second bundle: runtime-specific code belongs only in `entrypoints/` and infrastructure
+adapters, so changing host or server library is a diff to `main.ts`, `http-server.ts`, and `render.yaml`.
+The outbox table, not the queue, is the delivery record (ADR-0006), so delivery scheduling stays an
+entrypoint detail too — in M2 that is an in-process Node poller.
 
 ## Before you call something done
 

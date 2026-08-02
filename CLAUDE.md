@@ -19,11 +19,9 @@ Node **22** (`.nvmrc`), pnpm from `packageManager` in `package.json`.
 ```bash
 pnpm install            # workspace install
 pnpm dev                # web (:5173) + server (:3000) in parallel
-pnpm build              # web + BOTH server bundles
+pnpm build              # web + the server bundle
 pnpm build:web          # vite + PWA service worker
 pnpm build:server:node  # tsup, platform=node   -> apps/server/dist/node/main.js
-pnpm build:server:cloudflare  # tsup, platform=neutral (workerd conditions)
-                        #        -> apps/server/dist/cloudflare/worker.js
 pnpm typecheck          # root tsconfig + every workspace package
 pnpm lint               # eslint flat config
 pnpm boundaries         # dependency-cruiser — the architecture fitness function
@@ -34,18 +32,26 @@ pnpm test:integration   # Testcontainers Postgres; needs a running docker daemon
 
 There is **one** boundary script, `pnpm boundaries` — no `lint:boundaries` alias,
 because two names for one command is two things to keep in sync. The CI *job*
-that runs it is named `lint:boundaries` per the implementation plan's ten-job
+that runs it is named `lint:boundaries` per the implementation plan's named-job
 list; job name and script name are allowed to differ, and that mapping is
 recorded in the plan.
 
-**Both server entrypoints build, always** (ADR-0001 rule 2). Do not "simplify"
-CI by dropping the Cloudflare build: a target that is never built is a target
-that rots, and a rotted target turns a reversible deployment choice into a
-one-way door. `apps/server/src/entrypoints/http/health.ts` is shared by both so
-the two runtimes cannot drift; a unit test asserts they return identical output.
+**One server target: the Node bundle, deployed to Render** ([ADR-0009](docs/adr/ADR-0009-deploy-node-server-to-render.md),
+which supersedes ADR-0001). Do not add a second entrypoint or a second bundle to
+"keep options open" — that was ADR-0001 rule 2, and it was right only while two
+targets were genuinely live. What keeps the deployment reversible now is
+`pnpm boundaries`: runtime code exists only under `entrypoints/**` and
+infrastructure adapters, so moving hosts is a change to `main.ts`, `http-server.ts`,
+and `render.yaml`, never to a module. A new hosting target is a new ADR, not a new
+build script.
+
+`render.yaml` at the repo root is the service definition. Its `healthCheckPath`
+must equal `HEALTH_PATH` in `apps/server/src/entrypoints/http/health.ts`;
+`health.unit.test.ts` fails if they drift, because a mismatch breaks a deploy
+rather than a build.
 
 CI (`.github/workflows/ci.yml`) runs install → typecheck → lint → boundaries →
-build:web → build:server:node → build:server:cloudflare → unit → integration.
+build:web → build:server:node → unit → integration.
 **Run the same commands locally before you push.** A red PR is a broken promise,
 not a work-in-progress signal — that is what draft status is for.
 

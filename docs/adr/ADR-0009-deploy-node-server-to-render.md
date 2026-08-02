@@ -137,10 +137,18 @@ free plan, defined by `render.yaml` at the repository root. It is the only serve
   record the answers. Resurrecting the deleted file is the cheap part; that ADR is the expensive part,
   and it should be written rather than skipped.
 
-**Follow-on, not done here.** ADR-0006 §"Cloudflare target" describes a delivery path that is now
-unreachable, and addendum §22's two-shape framing now has one live shape. Neither is edited in this PR:
-ADR-0006's decision (the outbox table is the authoritative ledger) is unaffected by which shape ships,
-and the addendum is normative — narrowing it is an owner-level edit, not a consequence of this one.
+**Follow-on, not done here.** Four documents keep `workerd`-era reasoning that is now stale, and none is
+edited in this PR — each records a decision that stands on its own, and rewriting other people's
+rationale is a wider blast radius than the owner ratified:
+
+| Document | Stale passage | Why it can wait |
+|---|---|---|
+| ADR-0006 | the "Cloudflare target" delivery path and the `workerd` arguments against `pg-boss`/`LISTEN NOTIFY` | Its decision — the outbox table is the authoritative ledger — holds under either shape. The Node-poller branch is simply the one that ships. |
+| ADR-0003 | "the runtime target (ADR-0001) may be `workerd`" as a driver for explicit factory DI | Explicit factories remain the right call on their own merits (no decorators, no metadata shim); only one of several reasons evaporated. |
+| ADR-0007 | "faster in `workerd`" as one argument against a parser generator | Same shape: a supporting clause, not the decision. |
+| addendum §22 | the two-deployment-shape framing, and "Cloudflare compatibility should be proven through a focused spike" | **Normative.** Narrowing it is an owner-level edit, not a consequence of this one. This ADR selects between the shapes §22 permits; it does not amend §22. |
+
+Fix each opportunistically the next time its file is touched for a real reason.
 
 ## Verification
 
@@ -151,8 +159,10 @@ deploy, not the choice. Tier 1 is what this PR carries; tier 2 is M3.
 
 **Tier 1 — satisfied by the PR that introduces this ADR:**
 
-1. `git grep -ril cloudflare -- apps packages .github/workflows package.json` returns no match: no
-   Worker entrypoint, no `build:server:cloudflare` script, no tsup target, no CI step.
+1. `git grep -n build:server:cloudflare -- package.json apps .github/workflows` returns no match, and
+   `git ls-files 'apps/server/src/entrypoints/**'` lists exactly `health.ts`, `health.unit.test.ts`,
+   `http-server.ts`, `http-server.unit.test.ts`, `main.ts` — no Worker entrypoint, no second tsup
+   target, no second CI step.
 2. `pnpm typecheck && pnpm lint && pnpm boundaries && pnpm build && pnpm test:unit` exits 0, with
    `pnpm build` producing `apps/web/dist` and `apps/server/dist/node/main.js` and nothing else.
 3. `render.yaml` exists at the repository root, declares `plan: free`, `runtime: node`,

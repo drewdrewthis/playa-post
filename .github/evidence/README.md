@@ -23,3 +23,12 @@ script -q -e -c 'pnpm boundaries' /tmp/out.txt
 An earlier revision of this PR carried a hand-rendered PNG "terminal screenshot".
 It was removed: it was an **authored mockup** of output, not a capture of it, and
 evidence that was typed rather than recorded is not evidence.
+
+## Dated context
+
+These captures are from **M1a (2026-07-30)** and are left byte-for-byte as recorded.
+`runtime-both-entrypoints.txt` and the "all three builds" in `m1-verification.txt`
+describe a repository that still had a `workerd` entrypoint; [ADR-0009](../../docs/adr/ADR-0009-deploy-node-server-to-render.md)
+deleted it on 2026-08-02. That does not make the captures wrong — they record what
+ran on the day — and editing them to match today's tree would turn a recording back
+into an authored artifact, which is the exact failure the paragraph above describes.
