@@ -18,12 +18,20 @@ const blueprint = readFileSync(
   'utf8',
 );
 
+/**
+ * The value `render.yaml` declares, or `undefined` if the key is absent.
+ * Extracted rather than substring-matched: `toContain('healthCheckPath: /health')`
+ * is satisfied by `healthCheckPath: /healthz`, so a rename to a prefix of the
+ * current path would slip through the assertion this test exists to make.
+ */
+const declaredHealthCheckPath = /^\s*healthCheckPath:\s*(\S+)\s*$/m.exec(blueprint)?.[1];
+
 describe('health', () => {
   it('answers with the liveness payload and nothing else', () => {
     expect(readHealth()).toEqual({ status: 'ok' });
   });
 
   it('is the path Render polls', () => {
-    expect(blueprint).toContain(`healthCheckPath: ${HEALTH_PATH}`);
+    expect(declaredHealthCheckPath).toBe(HEALTH_PATH);
   });
 });
