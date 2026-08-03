@@ -19,6 +19,7 @@ apps/web/dev-dist/
 supabase/.branches/
 supabase/.temp/
 *.log
+.githooks/.cache/
 
 # Nested git worktrees
 .worktrees/

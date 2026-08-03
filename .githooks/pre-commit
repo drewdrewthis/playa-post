@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Pre-commit secret scan — mirrors the `secret-scan` CI job (.github/workflows/ci.yml),
+# M1-AC12. Wired via `git config core.hooksPath .githooks`, set automatically by the
+# root `prepare` script on `pnpm install`. Bypass with `git commit --no-verify`; the CI
+# job is the backstop either way. Bump GITLEAKS_VERSION and every checksum below
+# together with ci.yml's secret-scan job — they must always match.
+#
+# Known gap: pnpm 11 skips lifecycle scripts, `prepare` included, whenever
+# `pnpm install` finds nothing to change ("Already up to date") — fixed in pnpm 12
+# (pnpm/pnpm#13312). An existing clone may not get (re-)wired by `pnpm install` alone.
+# If `git config core.hooksPath` prints nothing, run `pnpm run prepare` once. CI's
+# secret-scan job never runs `pnpm install`, so it stays the unconditional backstop
+# regardless of whether this wiring ran.
+set -euo pipefail
+
+GITLEAKS_VERSION="8.30.1"
+
+verify_sha256() {
+  local expected="$1" file="$2"
+  if command -v sha256sum >/dev/null 2>&1; then
+    echo "${expected}  ${file}" | sha256sum -c - >/dev/null
+  elif command -v shasum >/dev/null 2>&1; then
+    echo "${expected}  ${file}" | shasum -a 256 -c - >/dev/null
+  else
+    echo "pre-commit secret-scan: neither sha256sum nor shasum found — cannot verify the gitleaks download." >&2
+    return 1
+  fi
+}
+
+repo_root="$(git rev-parse --show-toplevel)"
+cache_dir="${repo_root}/.githooks/.cache"
+binary="${cache_dir}/gitleaks-${GITLEAKS_VERSION}"
+
+if [ ! -x "${binary}" ]; then
+  # Same release gitleaks publishes per dev OS/arch — unlike CI, which always runs on
+  # a linux_x64 runner, a dev machine may be linux_arm64 or darwin (either arch).
+  os="$(uname -s)"
+  arch="$(uname -m)"
+  case "${os}" in
+    Linux) gitleaks_os="linux" ;;
+    Darwin) gitleaks_os="darwin" ;;
+    *)
+      echo "pre-commit secret-scan: unsupported OS '${os}' for the pinned gitleaks release." >&2
+      echo "Install gitleaks ${GITLEAKS_VERSION} yourself and re-run, or commit with --no-verify — CI's secret-scan job still checks this commit." >&2
+      exit 1
+      ;;
+  esac
+  case "${arch}" in
+    x86_64|amd64) gitleaks_arch="x64" ;;
+    arm64|aarch64) gitleaks_arch="arm64" ;;
+    *)
+      echo "pre-commit secret-scan: unsupported architecture '${arch}' for the pinned gitleaks release." >&2
+      echo "Install gitleaks ${GITLEAKS_VERSION} yourself and re-run, or commit with --no-verify — CI's secret-scan job still checks this commit." >&2
+      exit 1
+      ;;
+  esac
+
+  asset="gitleaks_${GITLEAKS_VERSION}_${gitleaks_os}_${gitleaks_arch}.tar.gz"
+
+  # https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_checksums.txt
+  case "${asset}" in
+    gitleaks_8.30.1_linux_x64.tar.gz)    sha256="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb" ;;
+    gitleaks_8.30.1_linux_arm64.tar.gz)  sha256="e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080" ;;
+    gitleaks_8.30.1_darwin_x64.tar.gz)   sha256="dfe101a4db2255fc85120ac7f3d25e4342c3c20cf749f2c20a18081af1952709" ;;
+    gitleaks_8.30.1_darwin_arm64.tar.gz) sha256="b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5" ;;
+    *)
+      echo "pre-commit secret-scan: no pinned checksum for ${asset}. See .githooks/pre-commit." >&2
+      exit 1
+      ;;
+  esac
+
+  mkdir -p "${cache_dir}"
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "${tmp}"' EXIT
+  curl -sSfL -o "${tmp}/gitleaks.tar.gz" \
+    "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${asset}"
+  verify_sha256 "${sha256}" "${tmp}/gitleaks.tar.gz"
+  tar -xzf "${tmp}/gitleaks.tar.gz" -C "${tmp}" gitleaks
+  mv "${tmp}/gitleaks" "${binary}"
+  chmod +x "${binary}"
+fi
+
+# --staged: what is about to be committed, not full history (the secret-scan CI job
+# already covers full history). --redact: never print the secret itself to a terminal a
+# bystander might see. .gitleaksignore, if present, is honored automatically.
+"${binary}" protect --staged --redact --no-banner -v
