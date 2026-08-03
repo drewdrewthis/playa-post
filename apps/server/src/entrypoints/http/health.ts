@@ -4,13 +4,10 @@ export interface HealthResponse {
 }
 
 /**
- * Path the HTTP entrypoint mounts the liveness check on.
+ * Path the HTTP entrypoint mounts the liveness check on, and what Render polls.
  *
- * Also what Render polls: `render.yaml`'s `healthCheckPath` must equal this
- * string, and `health.unit.test.ts` asserts it does. A rename here that misses
- * the blueprint leaves the service permanently "unhealthy" and unrouted — a
- * failure that only shows up in a deploy, which is why it is asserted in a test
- * that runs on every commit.
+ * Renaming it means editing `render.yaml` too —
+ * `tests/fitness/render-blueprint.fitness.test.ts` enforces that and explains why.
  */
 export const HEALTH_PATH = '/healthz';
 

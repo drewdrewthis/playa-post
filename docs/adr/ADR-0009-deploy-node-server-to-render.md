@@ -190,6 +190,14 @@ rationale is a wider blast radius than the owner ratified:
 
 Fix each opportunistically the next time its file is touched for a real reason.
 
+Two further items were raised in review, judged real, and **deliberately deferred** — recorded here
+because a deferral that lives only in a review thread is a deferral nobody finds again:
+
+| Deferred | Why not in this PR | When |
+|---|---|---|
+| **Rename `build:server:node` → `build:server`, `dist/node/` → `dist/`.** The `:node` qualifier implies a sibling target exists — exactly the false optionality this ADR removes. | The rename sweeps `.github/workflows/ci.yml`, and the CI **job name** `build:server:node` is one of the nine that branch protection will require (M1b.5). Renaming a required check while that protection is being set up (issue [#10](https://github.com/drewdrewthis/playa-post/issues/10) already tracks a workflow conflict with PR #9) risks a check that can never go green. | With M1b.5, when the job list is edited deliberately and branch protection updated in the same change. |
+| **A CI smoke step executing the built bundle** — start it, `curl /healthz`, assert the payload. Nothing currently *runs* `dist/node/main.js`; the deploy is its first execution with externals resolved, and this is the honest replacement for the deleted dual-runtime assertion. | Same file freeze: it is a `.github/workflows/ci.yml` edit. | With M1b.5. Until then the smoke was run **by hand** on this branch — the bundle serves `/healthz` → `200 {"status":"ok"}`, 404s a POST, and exits 0 on `SIGTERM`; transcript in the PR. |
+
 **Addendum §22 is amended in this PR, not deferred.** An earlier draft listed it above as a follow-on.
 That was wrong and would have been actively harmful: the addendum **outranks every ADR** (`docs/adr/README.md`
 precedence order; CLAUDE.md "wins every argument"), so leaving §22 saying the Node shape is conditional on

@@ -21,16 +21,33 @@ services:
     # Rollout is gated by the B18 post-deploy catalog smoke and must run
     # migrations before the API rolls (plan M4.5, M4-AC4). Render's own
     # push-to-deploy would bypass that gate, so the CD job triggers deploys.
+    #
+    # INTERIM, M3 → M4.5: that CD job does not exist yet, so M3 deploys are
+    # triggered by hand from the Render dashboard. M3-AC1 still requires the
+    # deployed commit to match a CI-built SHA — with autoDeploy off, nothing
+    # ENFORCES that until M4.5, so check the deploy log's SHA against the green CI
+    # run before calling M3-AC1 met. Turning autoDeploy on to close the gap would
+    # trade a checked-by-hand gate for a bypassed one.
     autoDeploy: false
 
     # pnpm's version comes from `packageManager` in package.json; corepack is how
     # the Render image gets that exact version instead of whatever it ships with.
+    #
+    # Known risks, recorded so a failure here is diagnosed rather than rediscovered:
+    #   - corepack signature verification can reject a pnpm release on older
+    #     corepack builds. Symptom: "Cannot find matching keyid". Fix: pin corepack
+    #     or set COREPACK_INTEGRITY_KEYS=0 — do NOT drop the version pin.
+    #   - this installs the FULL workspace, web toolchain included, on free-tier
+    #     CPU. It is the honest cost of one lockfile; revisit with a filtered
+    #     install only if build minutes actually hurt.
+    #   - `build:server:node` does not build packages/* first, and that is CORRECT:
+    #     tsup inlines them from TypeScript source via noExternal. Do not "fix" it
+    #     by adding a recursive build.
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build:server:node
     startCommand: node apps/server/dist/node/main.js
 
-    # Must equal HEALTH_PATH in apps/server/src/entrypoints/http/health.ts —
-    # health.unit.test.ts fails if the two drift. A wrong path here does not fail
-    # a build; it fails a deploy, silently, by never routing traffic.
+    # Coupled to code that no compiler checks against this file. Asserted by
+    # tests/fitness/render-blueprint.fitness.test.ts — see there for what breaks.
     healthCheckPath: /healthz
 
     envVars:

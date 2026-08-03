@@ -52,10 +52,10 @@ Declare the port in `domain/` and let an adapter import `node:crypto` — the
 boundary rule fails the build otherwise, and that rule is now the only thing
 checking it.
 
-`render.yaml` at the repo root is the service definition. Its `healthCheckPath`
-must equal `HEALTH_PATH` in `apps/server/src/entrypoints/http/health.ts`;
-`health.unit.test.ts` fails if they drift, because a mismatch breaks a deploy
-rather than a build.
+`render.yaml` at the repo root is the service definition. It restates several
+values the code also declares (health path, bundle location, Node version);
+`tests/fitness/render-blueprint.fitness.test.ts` holds those couplings and
+explains each. Edit the blueprint and that test together.
 
 CI (`.github/workflows/ci.yml`) runs install → typecheck → lint → boundaries →
 build:web → build:server:node → unit → integration.
