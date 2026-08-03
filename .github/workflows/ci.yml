@@ -17,73 +17,151 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # Keeps CI honest about Node 22 (see .nvmrc and package.json engines).
-  NODE_VERSION: '22'
-
+# Nine jobs, named exactly as the implementation plan requires (M1.7 / M1b.5):
+# typecheck, lint, lint:boundaries, test:unit, test:integration, test:security,
+# build:web, build:server:node, secret-scan.
+#
+# The job *id* cannot contain a colon, so the required-check name lives in each
+# job's `name:`. Those nine strings are what branch protection requires and what
+# the checks API reports — renaming one silently un-requires a check, so treat
+# them as an interface, not a label.
+#
+# One failure per signal is the whole point of the split: `verify` used to fail
+# as a single red X that said "something broke", and a control like
+# `test:security` disappeared into it. Nothing here `needs:` anything else, so
+# all nine start at once and a broken boundary rule is visible without waiting
+# for Testcontainers to boot Postgres.
 jobs:
-  verify:
-    name: lint · boundaries · build · test
+  typecheck:
+    name: typecheck
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm typecheck
 
-      # Version comes from the `packageManager` field in package.json, so the
-      # workflow cannot drift from what developers run locally.
-      - uses: pnpm/action-setup@v6
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm lint
 
-      - uses: actions/setup-node@v7
+  # Architecture fitness function, addendum §19. The job is `lint:boundaries` and
+  # the script is `pnpm boundaries`; there is deliberately only one script name,
+  # and that mapping is recorded in CLAUDE.md and the plan.
+  boundaries:
+    name: lint:boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm boundaries
+
+  build-web:
+    name: build:web
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm build:web
+
+  # One server build, because there is one deployment target: the Node bundle
+  # Render runs (ADR-0009). The `workerd` build this job used to be paired with is
+  # deleted — with the runtime decided, a second bundle nobody deploys proves
+  # nothing. Portability is enforced by lint:boundaries, not by compiling for a
+  # host we will not use.
+  build-server-node:
+    name: build:server:node
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm build:server:node
+
+  test-unit:
+    name: test:unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm test:unit
+
+  # Testcontainers drives the docker daemon that ubuntu-latest ships with; no
+  # service container or extra setup is required. DEBUG makes the container
+  # lifecycle visible in the log, so "a real Postgres booted" is something a
+  # reader can verify rather than take on trust.
+  test-integration:
+    name: test:integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm test:integration
+        env:
+          DEBUG: testcontainers*
+
+  # ADR-0002's bypass suite. Its own job, not a step beside the integration
+  # tests: this is the compensating control for a database that will never catch
+  # a missing `WHERE viewer_id`, so it must own its red/green signal and never
+  # disappear into "the slow tests". It also gates the B-row manifest — all
+  # eighteen rows are reported with their state, and a row that vanishes fails.
+  test-security:
+    name: test:security
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm test:security
+        env:
+          DEBUG: testcontainers*
+
+  # Addendum §17: no secrets in source control. That is a property of the
+  # *history*, not of the tip — a key committed and then deleted is still
+  # published — so this scans commits (`gitleaks git`) with a full-depth
+  # checkout, not the working tree.
+  #
+  # No `node_modules` and no setup-workspace here: the scan is a static binary,
+  # and installing a few thousand packages into the directory about to be
+  # scanned is how a secret-scan job turns into a false-positive generator.
+  #
+  # Pinned by version *and* checksum. An unpinned scanner is a supply-chain hole
+  # in the one job whose job is supply-chain hygiene, and a required check that
+  # silently starts running someone else's binary is worse than no check.
+  # M1b.6's pre-commit hook mirrors this job — bump both together.
+  secret-scan:
+    name: secret-scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@v7
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          fetch-depth: 0
 
-      - name: Install
-        run: pnpm install --frozen-lockfile
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          curl -sSfL -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Lint
-        run: pnpm lint
-
-      # Architecture fitness function, addendum §19. Runs before the build on
-      # purpose: a boundary break is a design defect, and finding it should not
-      # depend on the code also compiling.
-      - name: Boundaries
-        run: pnpm boundaries
-
-      - name: build:web
-        run: pnpm build:web
-
-      # One server build, because there is one deployment target: the Node bundle
-      # Render runs (ADR-0009). The `workerd` build this step used to be paired
-      # with is deleted — with the runtime decided, a second bundle nobody deploys
-      # proves nothing. Portability is enforced by the Boundaries step above, not
-      # by compiling for a host we will not use.
-      - name: build:server:node
-        run: pnpm build:server:node
-
-      - name: Unit tests
-        run: pnpm test:unit
-
-      # Testcontainers drives the docker daemon that ubuntu-latest ships with; no
-      # service container or extra setup is required. DEBUG makes the container
-      # lifecycle visible in the log, so "a real Postgres booted" is something a
-      # reader can verify rather than take on trust.
-      - name: Integration tests
-        run: pnpm test:integration
-        env:
-          DEBUG: testcontainers*
-
-      # ADR-0002's bypass suite. A separate step from the integration tests on
-      # purpose: this one is the compensating control for a database that will
-      # never catch a missing `WHERE viewer_id`, so it must be visible as its own
-      # red/green signal and never disappear into "the slow tests". It also gates
-      # the B-row manifest — all eighteen rows are reported with their state, and
-      # a row that vanishes fails the job.
-      - name: Security tests
-        run: pnpm test:security
-        env:
-          DEBUG: testcontainers*
+      # --redact because a scanner that prints the secret it found into a CI log
+      # has widened the leak, not closed it. -v prints the file, line, and
+      # fingerprint, which is what a developer needs to fix it (or to add to
+      # `.gitleaksignore`, deliberately, when it is genuinely a false positive).
+      - name: Scan history for secrets
+        run: gitleaks git -v --redact --no-banner --platform github --exit-code 1 .
