@@ -1,0 +1,71 @@
+# Render blueprint — the backend service as code (ADR-0009).
+#
+# `render blueprint launch` creates the service from this file. Everything about
+# the deployment that can be reviewed in a pull request lives here rather than in
+# dashboard state nobody can diff.
+#
+# NEVER put a secret value in this file. A secret is declared as a `key` with
+# `sync: false`; Render then prompts for the value once and keeps it in its own
+# secret store (addendum §17; names and retrieval in docs/engineering/secrets.md).
+
+services:
+  - type: web
+    name: playa-post-server
+    runtime: node
+    plan: free
+    # Closest free-plan region to the Supabase project (eu-west-3, Paris). Every
+    # API request pays this round trip; the frontend's static assets do not.
+    region: frankfurt
+    branch: main
+
+    # Rollout is gated by the B18 post-deploy catalog smoke and must run
+    # migrations before the API rolls (plan M4.5, M4-AC4). Render's own
+    # push-to-deploy would bypass that gate, so the CD job triggers deploys.
+    #
+    # INTERIM, M3 → M4.5: that CD job does not exist yet, so M3 deploys are
+    # triggered by hand from the Render dashboard. M3-AC1 still requires the
+    # deployed commit to match a CI-built SHA — with autoDeploy off, nothing
+    # ENFORCES that until M4.5, so check the deploy log's SHA against the green CI
+    # run before calling M3-AC1 met. Turning autoDeploy on to close the gap would
+    # trade a checked-by-hand gate for a bypassed one.
+    autoDeploy: false
+
+    # pnpm's version comes from `packageManager` in package.json; corepack is how
+    # the Render image gets that exact version instead of whatever it ships with.
+    #
+    # Known risks, recorded so a failure here is diagnosed rather than rediscovered:
+    #   - corepack signature verification can reject a pnpm release on older
+    #     corepack builds. Symptom: "Cannot find matching keyid". Fix: pin corepack
+    #     or set COREPACK_INTEGRITY_KEYS=0 — do NOT drop the version pin.
+    #   - this installs the FULL workspace, web toolchain included, on free-tier
+    #     CPU. It is the honest cost of one lockfile; revisit with a filtered
+    #     install only if build minutes actually hurt.
+    #   - `build:server:node` does not build packages/* first, and that is CORRECT:
+    #     tsup inlines them from TypeScript source via noExternal. Do not "fix" it
+    #     by adding a recursive build.
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build:server:node
+    startCommand: node apps/server/dist/node/main.js
+
+    # Coupled to code that no compiler checks against this file. Asserted by
+    # tests/fitness/render-blueprint.fitness.test.ts — see there for what breaks.
+    healthCheckPath: /healthz
+
+    envVars:
+      # Node 22, matching .nvmrc and package.json engines.
+      - key: NODE_VERSION
+        value: '22'
+      - key: NODE_ENV
+        value: production
+      # The configuration default is 127.0.0.1, which is unreachable from outside
+      # the container: Render's router and its health check would both time out.
+      - key: HOST
+        value: 0.0.0.0
+      - key: LOG_LEVEL
+        value: info
+      # PORT is deliberately absent — Render injects it and the configuration
+      # schema coerces it. Declaring it here would fight the platform.
+      #
+      # No secret is read by the server yet, so no key below carries `sync: false`
+      # today. M2's DATABASE_URL is the first; it is added as a bare `key` plus
+      # `sync: false`, with the value set in the Render dashboard. Keys the runtime
+      # does not read are not listed here (addendum §4).

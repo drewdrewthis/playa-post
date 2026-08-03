@@ -1,8 +1,26 @@
 # ADR-0001 — Runtime and deployment target
 
-- **Status:** proposed (decided by the M3 spike; see Verification)
+- **Status:** superseded by [ADR-0009](ADR-0009-deploy-node-server-to-render.md), 2026-08-02
 - **Date:** 2026-07-30
 - **Drivers:** addendum §22 (deployment boundary), §18 (hardened libraries), §24 (simplest proven); PDF §8 "Deployment posture"
+
+> **Superseded, 2026-08-02.** The product owner decided the backend deploys as the Node server build to
+> Render's free plan. Everything below is preserved verbatim as the record of the choice that was open;
+> **nothing below is current guidance.** In particular the preference for target A, the "both entrypoints
+> build in CI" rule 2, and the entire M3 spike (S1–S10, S3a) are retired — the Cloudflare entrypoint,
+> its bundle, and its CI step were deleted with ADR-0009.
+>
+> What survives:
+>
+> 1. **Structural rule 1** — runtime code lives only in `entrypoints/**` and infrastructure adapters,
+>    enforced by `no-domain-to-infrastructure` (widened by ADR-0009 to cover `application/` and Node
+>    builtins, since the neutral-platform bundle that used to catch those is gone).
+> 2. **S3a**, the deployed-connection-identity check, carried into ADR-0002's B18 and the plan's M3/M4
+>    acceptance criteria.
+> 3. **The frontend hosting decision** (Context, above): the React/Vite PWA deploys as static assets to
+>    Cloudflare, and that is unchanged — ADR-0009 decides the *backend* only. Called out explicitly
+>    because the banner's "nothing below is current guidance" would otherwise orphan it, leaving no
+>    document at all deciding where the frontend is served from.
 
 ## Context
 

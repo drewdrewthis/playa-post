@@ -7,8 +7,6 @@
   "scripts": {
     "dev": "tsx watch src/entrypoints/http/main.ts",
     "build": "tsup",
-    "build:node": "TSUP_TARGET=node tsup",
-    "build:cloudflare": "TSUP_TARGET=cloudflare tsup",
     "start": "node dist/node/main.js",
     "typecheck": "tsc --noEmit"
   },

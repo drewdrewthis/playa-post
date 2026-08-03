@@ -6,9 +6,14 @@ Format: MADR-ish short form — Context / Decision / Alternatives / Consequences
 but it is not yet proven by running code. It becomes `accepted` when the Verification section's
 evidence exists in the repo or in CI. `superseded by ADR-NNNN` when replaced.
 
+One exception, named rather than left implicit: an ADR recording a **product-owner decision** is
+`accepted` on that authority, because the choice was never the team's to prove — only its execution is.
+Such an ADR still carries a Verification section, split into what the introducing PR shows and what a
+later milestone must. ADR-0009 is the only one so far.
+
 | ADR | Title | Status |
 |-----|-------|--------|
-| [0001](ADR-0001-runtime-and-deployment-target.md) | Runtime and deployment target (Cloudflare Worker vs Node on Railway) | proposed |
+| [0001](ADR-0001-runtime-and-deployment-target.md) | Runtime and deployment target (Cloudflare Worker vs Node on Railway) | superseded by [0009](ADR-0009-deploy-node-server-to-render.md) |
 | [0002](ADR-0002-authorization-and-visibility-enforcement.md) | Authorization and visibility enforcement strategy | proposed (revised — core decision endorsed by stress test; bar is now B1–B18) |
 | [0003](ADR-0003-dependency-injection.md) | Dependency injection via explicit factory composition | proposed |
 | [0004](ADR-0004-graph-traversal-and-visibility-queries.md) | Graph traversal and visibility queries | proposed |
@@ -16,6 +21,7 @@ evidence exists in the repo or in CI. `superseded by ADR-NNNN` when replaced.
 | [0006](ADR-0006-outbox-and-queue-delivery.md) | Transactional outbox and asynchronous delivery | proposed |
 | [0007](ADR-0007-board-query-dsl.md) | Board query DSL — restricted validated grammar | proposed |
 | [0008](ADR-0008-identity-model.md) | Identity model — auth user ↔ internal ID | proposed |
+| [0009](ADR-0009-deploy-node-server-to-render.md) | Deploy the Node server to Render (supersedes 0001) | accepted — owner decision 2026-08-02 |
 
 Normative inputs, in precedence order:
 

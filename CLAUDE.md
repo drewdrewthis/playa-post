@@ -19,33 +19,47 @@ Node **22** (`.nvmrc`), pnpm from `packageManager` in `package.json`.
 ```bash
 pnpm install            # workspace install
 pnpm dev                # web (:5173) + server (:3000) in parallel
-pnpm build              # web + BOTH server bundles
+pnpm build              # web + the server bundle
 pnpm build:web          # vite + PWA service worker
 pnpm build:server:node  # tsup, platform=node   -> apps/server/dist/node/main.js
-pnpm build:server:cloudflare  # tsup, platform=neutral (workerd conditions)
-                        #        -> apps/server/dist/cloudflare/worker.js
 pnpm typecheck          # root tsconfig + every workspace package
 pnpm lint               # eslint flat config
 pnpm boundaries         # dependency-cruiser — the architecture fitness function
 pnpm test               # every vitest project
 pnpm test:unit          # no infrastructure; fast enough to run on save
 pnpm test:integration   # Testcontainers Postgres; needs a running docker daemon
+pnpm test:security      # ADR-0002 bypass suite; needs a running docker daemon
 ```
 
 There is **one** boundary script, `pnpm boundaries` — no `lint:boundaries` alias,
 because two names for one command is two things to keep in sync. The CI *job*
-that runs it is named `lint:boundaries` per the implementation plan's ten-job
+that runs it is named `lint:boundaries` per the implementation plan's named-job
 list; job name and script name are allowed to differ, and that mapping is
 recorded in the plan.
 
-**Both server entrypoints build, always** (ADR-0001 rule 2). Do not "simplify"
-CI by dropping the Cloudflare build: a target that is never built is a target
-that rots, and a rotted target turns a reversible deployment choice into a
-one-way door. `apps/server/src/entrypoints/http/health.ts` is shared by both so
-the two runtimes cannot drift; a unit test asserts they return identical output.
+**One server target: the Node bundle, deployed to Render** ([ADR-0009](docs/adr/ADR-0009-deploy-node-server-to-render.md),
+which supersedes ADR-0001). Do not add a second entrypoint or a second bundle to
+"keep options open" — that was ADR-0001 rule 2, and it was right only while two
+targets were genuinely live. What keeps the deployment reversible now is
+`pnpm boundaries`: runtime code exists only under `entrypoints/**` and
+infrastructure adapters, so moving hosts is a change to `main.ts`, `http-server.ts`,
+and `render.yaml`, never to a module. A new hosting target is a new ADR, not a new
+build script.
+
+That guarantee is **Node-host** portability (Render → Railway → Fly → a container),
+not edge-runtime portability. Nothing proves this tree would run under `workerd`
+any more. Need a domain service to make randomness, read a file, or open a socket?
+Declare the port in `domain/` and let an adapter import `node:crypto` — the
+boundary rule fails the build otherwise, and that rule is now the only thing
+checking it.
+
+`render.yaml` at the repo root is the service definition. It restates several
+values the code also declares (health path, bundle location, Node version);
+`tests/fitness/render-blueprint.fitness.test.ts` holds those couplings and
+explains each. Edit the blueprint and that test together.
 
 CI (`.github/workflows/ci.yml`) runs install → typecheck → lint → boundaries →
-build:web → build:server:node → build:server:cloudflare → unit → integration.
+build:web → build:server:node → unit → integration → security.
 **Run the same commands locally before you push.** A red PR is a broken promise,
 not a work-in-progress signal — that is what draft status is for.
 
@@ -57,7 +71,7 @@ architecture-addendum §19.
 
 | Rule | What it stops |
 |---|---|
-| `no-domain-to-infrastructure` | `modules/*/domain/` importing persistence, entrypoints, composition, or tRPC/Supabase/Kysely/pg/Fastify/pino/React |
+| `no-domain-to-infrastructure` | `modules/*/domain/` **and** `modules/*/application/` importing its own module's persistence, entrypoints, composition, a **Node builtin** (`node:crypto`, `fs`, …), or tRPC/Supabase/Kysely/pg/Fastify/pino/React |
 | `no-application-to-transport` | `modules/*/application/` importing `transport/` or an entrypoint |
 | `no-transport-to-persistence` | `modules/*/transport/` importing a repository or a database client |
 | `no-web-to-server-internals` | `apps/web` importing anything under `apps/server` |
