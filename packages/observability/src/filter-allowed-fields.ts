@@ -57,10 +57,11 @@ export function filterAllowedFields(
   fields: Readonly<Record<string, FieldValue>>,
   allowedKeys: ReadonlySet<string>,
 ): Record<string, FieldValue> {
-  const result: Record<string, FieldValue> = {};
-  for (const [key, value] of Object.entries(fields)) {
-    if (!allowedKeys.has(key)) continue;
-    result[key] = filterValue(value, allowedKeys);
-  }
-  return result;
+  // Object.fromEntries defines each key as an own data property, so a literal
+  // "__proto__" key stays data instead of silently rewriting the prototype.
+  return Object.fromEntries(
+    Object.entries(fields)
+      .filter(([key]) => allowedKeys.has(key))
+      .map(([key, value]) => [key, filterValue(value, allowedKeys)]),
+  );
 }

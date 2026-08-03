@@ -1,4 +1,4 @@
-import type { Context } from '@opentelemetry/api';
+import type { Attributes, Context } from '@opentelemetry/api';
 import type { ReadableSpan, Span, SpanProcessor } from '@opentelemetry/sdk-trace-base';
 
 import { filterAllowedFields } from './filter-allowed-fields';
@@ -28,6 +28,12 @@ export interface CreateRedactingSpanProcessorOptions {
  * will read when it exports, so redaction has to happen first and on that
  * object, not on a copy.
  *
+ * The same allowlist is applied to every attribute surface a span exports:
+ * `span.attributes`, each `span.events[*].attributes` (including the
+ * `exception` event that `recordException` records — its
+ * `exception.message`/`exception.stacktrace` carry whatever an error
+ * message interpolated), and each `span.links[*].attributes`.
+ *
  * @example
  * ```ts
  * const provider = new BasicTracerProvider({
@@ -45,16 +51,27 @@ export function createRedactingSpanProcessor(
 ): SpanProcessor {
   const allowedKeys = new Set(options.allowedAttributeKeys);
 
+  const redactInPlace = (attributes: Attributes | undefined): void => {
+    if (attributes === undefined) return;
+    const filtered = filterAllowedFields(attributes, allowedKeys);
+    for (const key of Object.keys(attributes)) {
+      if (!Object.hasOwn(filtered, key)) {
+        delete attributes[key];
+      }
+    }
+  };
+
   return {
     onStart(span: Span, parentContext: Context): void {
       options.delegate.onStart(span, parentContext);
     },
     onEnd(span: ReadableSpan): void {
-      const filtered = filterAllowedFields(span.attributes, allowedKeys);
-      for (const key of Object.keys(span.attributes)) {
-        if (!(key in filtered)) {
-          delete span.attributes[key];
-        }
+      redactInPlace(span.attributes);
+      for (const event of span.events) {
+        redactInPlace(event.attributes);
+      }
+      for (const link of span.links) {
+        redactInPlace(link.attributes);
       }
       options.delegate.onEnd(span);
     },

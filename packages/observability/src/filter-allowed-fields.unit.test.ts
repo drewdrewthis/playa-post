@@ -80,4 +80,20 @@ describe('filterAllowedFields', () => {
 
     expect(result).toEqual({ context: { userId: 'nested-u2' }, userId: 'top-level-u1' });
   });
+
+  it('treats a literal "__proto__" key as data, not as the prototype', () => {
+    // JSON.parse defines "__proto__" as an ordinary own property, which is how
+    // a hostile payload would arrive at a log call site.
+    const input = JSON.parse('{"__proto__": {"polluted": true}, "userId": "u1"}') as Record<
+      string,
+      unknown
+    >;
+
+    const result = filterAllowedFields(input, new Set(['__proto__', 'userId']));
+
+    expect(Object.getOwnPropertyNames(result)).toContain('__proto__');
+    expect(Object.getPrototypeOf(result)).not.toHaveProperty('polluted');
+    expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
+    expect(result['userId']).toBe('u1');
+  });
 });
