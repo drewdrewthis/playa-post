@@ -70,7 +70,7 @@ describe('ADR-0002 B-row manifest', () => {
     // The live list is pinned; the pending count is *derived*, so promoting a row is a
     // one-line diff here rather than two edits that can disagree. Pinning both would
     // let a promotion land with the count still reading 15 and nothing complaining.
-    expect(live).toEqual(['B1', 'B3', 'B4']);
+    expect(live).toEqual(['B1', 'B2', 'B3', 'B4']);
     expect(pending).toHaveLength(B_ROW_IDS.length - live.length);
   });
 });
