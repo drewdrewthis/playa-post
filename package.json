@@ -16,18 +16,24 @@
     "typecheck": "tsc --noEmit && pnpm --recursive typecheck",
     "lint": "eslint .",
     "boundaries": "depcruise --config .dependency-cruiser.cjs apps packages",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
-    "test:integration": "vitest run --project integration"
+    "test:integration": "vitest run --project integration",
+    "test:security": "vitest run --project security"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playa-post/testing": "workspace:*",
     "@types/node": "26.1.2",
     "dependency-cruiser": "18.1.0",
     "eslint": "10.8.0",
     "eslint-import-resolver-typescript": "4.4.5",
     "eslint-plugin-import-x": "4.17.1",
     "globals": "17.8.0",
+    "supabase": "2.110.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.65.0",
     "vitest": "4.1.10"

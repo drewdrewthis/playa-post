@@ -9,9 +9,11 @@ import { Client } from 'pg';
  * The Postgres image integration tests run against.
  *
  * Pinned to the major version Supabase runs locally and in production so SQL that
- * passes here is SQL that passes there (see `supabase/config.toml`).
+ * passes here is SQL that passes there (see `supabase/config.toml`, `db.major_version`).
+ * The two move together: Supabase publishes no Postgres 16 image, so the previous
+ * pair (16 here, 16 there) was a match on a version neither side could actually run.
  */
-export const POSTGRES_TEST_IMAGE = 'postgres:16';
+export const POSTGRES_TEST_IMAGE = 'postgres:17';
 
 /**
  * The repository's own `supabase/migrations`, applied unless a caller opts out.
@@ -62,7 +64,7 @@ export interface PostgresTestDatabase {
 }
 
 /**
- * Start a disposable Postgres 16 container, apply the repository's migrations, and
+ * Start a disposable Postgres 17 container, apply the repository's migrations, and
  * hand back a live connection.
  *
  * This is a **test fixture loader, not a migration system** (addendum §18 forbids

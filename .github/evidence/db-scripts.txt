@@ -1,0 +1,97 @@
+Script started on 2026-08-03 08:14:13+00:00 [COMMAND="/tmp/claude-1000/-home-ubuntu-Projects-playa-post/a722686e-4c9a-487a-b0eb-7a79fe12a7d9/scratchpad/m1b/db-scripts.sh" <not executed on terminal>]
+==============================================================
+supabase CLI version (devDependency, pinned exact)
+==============================================================
+2.110.0
+
+==============================================================
+pnpm db:stop  - from whatever state the box was in
+==============================================================
+[2m$ supabase stop[22m
+{"project_id_filter":"playa-post","backup":true,"message":"Stopped supabase local development setup."}
+-- exit code: 0
+
+==============================================================
+pnpm db:start - cold start
+==============================================================
+$ supabase start
+{"DB_URL":"postgresql://postgres:<redacted>@127.0.0.1:54322/postgres","API_URL":"http://127.0.0.1:54321","REST_URL":"http://127.0.0.1:54321/rest/v1","GRAPHQL_URL":"http://127.0.0.1:54321/graphql/v1","FUNCTIONS_URL":"http://127.0.0.1:54321/functions/v1","MCP_URL":"http://127.0.0.1:54321/mcp","STUDIO_URL":"http://127.0.0.1:54323","PUBLISHABLE_KEY":"<redacted by the capture script - CLI local demo value>","SECRET_KEY":"<redacted by the capture script - CLI local demo value>","JWT_SECRET":"<redacted by the capture script - CLI local demo value>","ANON_KEY":"<redacted by the capture script - CLI local demo value>","SERVICE_ROLE_KEY":"<redacted by the capture script - CLI local demo value>","MAILPIT_URL":"http://127.0.0.1:54324","INBUCKET_URL":"http://127.0.0.1:54324","STORAGE_S3_URL":"http://127.0.0.1:54321/storage/v1/s3","S3_PROTOCOL_ACCESS_KEY_ID":"<redacted by the capture script - CLI local demo value>","S3_PROTOCOL_ACCESS_KEY_SECRET":"<redacted by the capture script - CLI local demo value>","S3_PROTOCOL_REGION":"local","message":""}
+-- exit code: 0
+
+==============================================================
+pnpm db:reset - drop, replay every migration
+==============================================================
+$ supabase db reset
+Resetting local database...
+Recreating database...
+Initialising schema...
+Seeding globals from roles.sql...
+Skipping migration README.md... (file name must match pattern "<timestamp>_name.sql")
+Applying migration 20260730195954_create_security_baseline.sql...
+WARN: no files matched pattern: supabase/seed.sql
+Restarting containers...
+A new version of Supabase CLI is available: v2.111.0 (currently installed v2.110.0)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
+A new version of Supabase CLI is available: v2.111.0 (currently installed v2.110.0)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
+Finished [36msupabase db reset[39m on branch [36mm1b-security-baseline[39m.
+{"target":"local","version":"","message":"Reset local database."}
+-- exit code: 0
+
+==============================================================
+The runner is NOT a superuser - which is why the SET ROLE guard matters
+==============================================================
+ current_user | is_superuser | has_createrole 
+--------------+--------------+----------------
+ postgres     | f            | t
+(1 row)
+
+  member  | admin_option | inherit_option | set_option 
+----------+--------------+----------------+------------
+ postgres | t            | f              | f
+ postgres | f            | t              | t
+(2 rows)
+
+==============================================================
+Did the baseline actually land? (ADR-0002 sections 1-4 in the catalog)
+==============================================================
+   rolname    | rolsuper | rolbypassrls | rolcanlogin | rolinherit 
+--------------+----------+--------------+-------------+------------
+ app_migrator | f        | f            | t           | f
+ app_rw       | f        | f            | t           | f
+(2 rows)
+
+          table_name          | rls | forced |    owner     
+------------------------------+-----+--------+--------------
+ app.security_baseline_canary | t   | t      | app_migrator
+(1 row)
+
+        tablename         |     policyname     | permissive |  roles   | cmd | qual | with_check 
+--------------------------+--------------------+------------+----------+-----+------+------------
+ security_baseline_canary | app_rw_full_access | PERMISSIVE | {app_rw} | ALL | true | true
+(1 row)
+
+-- app must be unreachable from PostgREST: present in the catalog, absent from config
+ schema app exists: 1
+
+19:schemas = ["public", "graphql_public"]
+-- forward guarantee on the LIVE stack: an object created by app_migrator now
+BEGIN
+SET
+CREATE FUNCTION
+CREATE TABLE
+ public_execute | anon_select | authenticated_usage 
+----------------+-------------+---------------------
+ f              | f           | f
+(1 row)
+
+ROLLBACK
+
+==============================================================
+pnpm db:stop
+==============================================================
+[2m$ supabase stop[22m
+{"project_id_filter":"playa-post","backup":true,"message":"Stopped supabase local development setup."}
+-- exit code: 0
+
+Script done on 2026-08-03 08:15:22+00:00 [COMMAND_EXIT_CODE="0"]

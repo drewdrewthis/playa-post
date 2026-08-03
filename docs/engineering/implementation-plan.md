@@ -120,7 +120,7 @@ how a "we'll add the security suite later" milestone becomes permanent.
 |---|---|---|
 | M1.1 | pnpm workspace, strict `tsconfig.base.json` including `exactOptionalPropertyTypes` | — |
 | M1.2 | Five boundary rules + one violating fixture each + fitness test | Two literal-content rules — see M1-AC2 |
-| M1.3 | Vitest `unit`/`integration` projects; Testcontainers Postgres 16 harness applying `supabase/migrations` by default and exposing `truncateAllTables()` | — |
+| M1.3 | Vitest `unit`/`integration` projects; Testcontainers Postgres 17 harness applying `supabase/migrations` by default and exposing `truncateAllTables()` | — |
 | M1.4 | `supabase/config.toml` (with `app` deliberately unexposed), `migrations/` + workflow README | `seed/`, `sql/`, the `db:*` scripts, checked-in Kysely types |
 | M1.7 | GitHub Actions: install, typecheck, lint, boundaries, `build:web`, `build:server:node`, `build:server:cloudflare`, unit, integration | `test:security`, `secret-scan`, the ten *named* jobs, branch protection |
 | M1.8 | `packages/configuration` (Zod, fails fast naming the key, never echoing values) | `packages/observability` |
@@ -130,7 +130,7 @@ how a "we'll add the security suite later" milestone becomes permanent.
 
 | # | Item | Gate — must land before |
 |---|---|---|
-| M1b.1 | M1.4 remainder: `db:start\|db:reset\|db:migrate\|db:types`, `seed/`, `sql/`, checked-in Kysely types | any M2 repository or migration |
+| M1b.1 | M1.4 remainder: `db:start\|db:reset\|db:migrate\|db:types`, `seed/`, `sql/`, checked-in Kysely types. **Partially delivered in the M1b.2 PR:** `db:start`, `db:stop` (added — the row named no stop script, and `db:start` without it is a one-way door on a dev box) and `db:reset`, verified against the CLI. **Still owed:** `db:migrate`, `db:types`, `seed/`, `sql/`, checked-in Kysely types. | any M2 repository or migration |
 | M1b.2 | M1.5 security-baseline migration: schema `app`, `app_rw`/`app_migrator`, the full ADR-0002 §3 revoke set and §4 policy shape, canary table | M2's **first product table** |
 | M1b.3 | M1.6 `tests/security/` B1–B4 + B12 secondary + `b-rows.manifest.json` | M2's **first viewer-scoped query** |
 | M1b.4 | M1.8 remainder: `packages/observability` — redaction allowlist, correlation IDs, span-attribute redaction | M2 logging anything request-shaped |
@@ -161,7 +161,7 @@ support; when they do, the guard stays.
 
 - **M1-AC1** `pnpm install && pnpm typecheck && pnpm lint && pnpm test:unit` exits 0 on a clean clone
   with no network beyond the npm registry. Separately, with **a running Docker daemon and no other
-  setup**, `pnpm test:integration` exits 0 — the harness starts its own `postgres:16` container via
+  setup**, `pnpm test:integration` exits 0 — the harness starts its own `postgres:17` container via
   Testcontainers and applies `supabase/migrations` itself, so there is no `db:start` prerequisite and no
   long-lived local database. *Evidence: two terminal transcripts, exit codes shown.*
   *(Amended in M1a: the original wording assumed a `pnpm db:start` step that the Testcontainers design
@@ -278,7 +278,7 @@ sheet with trust slider, report/dismiss, offline pending badge. Light theme only
 
 ### Work items (one PR each)
 
-M2.1 migrations for the thirteen slice tables (each with the §4 policy shape) · M2.2 `packages/contracts`
+M2.1 migrations for the thirteen slice tables (each calling `app.apply_rls_backstop`, which applies the §4 policy shape; the first of these migrations also **drops `app.security_baseline_canary` and `app.security_baseline_canary_seq`**, whose only job was to stop B1/B3/B4 quantifying over an empty set before real tables existed) · M2.2 `packages/contracts`
 + tRPC skeleton + auth context → `Actor` → branded `ViewerId` · M2.3 composition root (ADR-0003) ·
 M2.4 identity: onboarding + handle rules · M2.5 connections: invite create/open/accept ·
 M2.6 connections: `SetConnectionTrust` · M2.7 graph: `visible-people.sql` + read model + §6a projection ·

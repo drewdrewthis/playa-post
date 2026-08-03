@@ -1,0 +1,160 @@
+{
+  "$comment": [
+    "The ADR-0002 bypass suite, declared. Every row in the ADR's B1-B18 table appears here exactly",
+    "once, and `status` says whether it is asserted today or owed to a later milestone.",
+    "",
+    "`live`    — a test in `provenBy` executes this row's assertion against a real database.",
+    "`pending` — not yet assertable; `pendingUntil` names the milestone that unblocks it and",
+    "            `reason` says what is missing. A row is never deferred silently (plan line 71).",
+    "",
+    "Wording note: implementation-plan M1-AC8 words the two states `implemented` and",
+    "`pending: <milestone>`. Same two states, split into two fields so the milestone is data",
+    "rather than a substring to parse.",
+    "",
+    "This file is the source of truth for `pnpm test:security`, which reports all eighteen row",
+    "IDs with their state. Deleting a row fails the run — see b-row-manifest.security.test.ts."
+  ],
+  "rows": [
+    {
+      "id": "B1",
+      "title": "anon/authenticated cannot read schema app",
+      "assertion": "Connecting as `anon` and as `authenticated` and selecting from every table in `app` raises SQLSTATE 42501. Fails if the enumerated table count is 0.",
+      "status": "live",
+      "provenBy": "tests/security/baseline-catalog.security.test.ts"
+    },
+    {
+      "id": "B2",
+      "title": "PostgREST cannot reach schema app",
+      "assertion": "A request to the Supabase REST endpoint for every table in `app` with a valid user JWT returns 404 / PGRST106. Catalog-driven, so exposing `app` fails.",
+      "status": "pending",
+      "pendingUntil": "M1b.3",
+      "reason": "Needs a running PostgREST and a signed user JWT. The Testcontainers harness boots Postgres alone — there is no REST layer to call, and asserting the config file instead would prove the setting, not the behaviour."
+    },
+    {
+      "id": "B3",
+      "title": "Full policy-shape and privilege assertion",
+      "assertion": "For every table in `app`: relrowsecurity, relforcerowsecurity, relowner = app_migrator, and exactly one pg_policies row `app_rw_full_access` / PERMISSIVE / {app_rw} / ALL / qual true / with_check true. Plus app_rw is not super, cannot bypass RLS, and holds no pg_auth_members row; plus the ADR-0002 §3 revoke set is in force.",
+      "status": "live",
+      "provenBy": "tests/security/baseline-catalog.security.test.ts"
+    },
+    {
+      "id": "B4",
+      "title": "No unallowlisted SECURITY DEFINER function in app",
+      "assertion": "No SECURITY DEFINER function exists in `app` unless listed in `security-definer-allowlist.json`, keyed by full `regprocedure` signature so an allowlisted name does not pre-authorize its future overloads; a stale entry naming no live function fails too. The `SET search_path` requirement is asserted over every function in `app` by the ADR-0002 section 5 test in the same file, which is a superset.",
+      "status": "live",
+      "provenBy": "tests/security/baseline-catalog.security.test.ts"
+    },
+    {
+      "id": "B5",
+      "title": "Visibility matrix, including the §6a person-projection sub-case",
+      "assertion": "For each viewer-scoped query a viewer with no relationship to the data gets 0 rows; an authorized bulletin whose author is below `full` disclosure renders a Private author everywhere.",
+      "status": "pending",
+      "pendingUntil": "M2",
+      "reason": "No viewer-scoped query and no product table exist yet. M2.19 implements this row against the first slice entities."
+    },
+    {
+      "id": "B6",
+      "title": "Directional trust never leaves the holder",
+      "assertion": "A trust value and its field name appear nowhere in any payload returned to the other party or a third party, at any nesting depth, across success, error, and conflict envelopes.",
+      "status": "pending",
+      "pendingUntil": "M2",
+      "reason": "Trust is an M2 entity. There is no payload to serialize and no conflict envelope to inspect (M2-AC3)."
+    },
+    {
+      "id": "B7",
+      "title": "Blocking is total, including the flush and offline boundaries",
+      "assertion": "After A blocks B neither sees the other, no graph path routes through the blocked edge, no notification is deliverable, and a push computed before the block is not flushed after it.",
+      "status": "pending",
+      "pendingUntil": "M2",
+      "reason": "Precursors land with the M2 slice (M2.19); the flush and offline boundaries need the ADR-0006 queue and ADR-0005 sync, so the row completes at M5 (M5-AC2)."
+    },
+    {
+      "id": "B8",
+      "title": "Hidden people leak nothing but topology",
+      "assertion": "A ghost payload contains no name, handle, avatar, role, mutual count, or real internal ID; surrogates differ across viewers; a re-identification fixture holds against ADR-0004's adjacency rule.",
+      "status": "pending",
+      "pendingUntil": "M2",
+      "reason": "Payload shape asserted from M2.19; the structural re-identification fixture needs the full graph model and completes at M5 (M5-AC3)."
+    },
+    {
+      "id": "B9",
+      "title": "Report privacy",
+      "assertion": "The reported author's every read path — bulletin, notifications, audit, API, operator-mediated surfaces — contains no reporter identity.",
+      "status": "pending",
+      "pendingUntil": "M2",
+      "reason": "Reports are an M2 entity (M2-AC10)."
+    },
+    {
+      "id": "B10",
+      "title": "A filter can narrow but never widen",
+      "assertion": "A saved view or Notify Me query crafted to reference a non-authorized author, tag, or bulletin returns 0 rows rather than an error-free leak.",
+      "status": "pending",
+      "pendingUntil": "M2",
+      "reason": "Needs the board query grammar and the authorized-set builder (M2-AC14)."
+    },
+    {
+      "id": "B11",
+      "title": "Erased users leave no reachable personal data",
+      "assertion": "After erasure no query path returns their personal data, and stale offline mutations referencing them fail closed.",
+      "status": "pending",
+      "pendingUntil": "M5",
+      "reason": "Erasure is an M5 capability (M5-AC4); nothing implements ADR-0008's erasure path yet."
+    },
+    {
+      "id": "B12",
+      "title": "Composition assertion, plus the SQL-location secondary rule",
+      "assertion": "Every query implementation taking a `ViewerId` references `app.visible_people` / `app.visible_bulletins` or the shared authorized-set builder; secondary: no SQL outside `persistence/` and `supabase/`.",
+      "status": "pending",
+      "pendingUntil": "M2",
+      "reason": "Both halves are vacuous today: there is no `ViewerId`, no query implementation, and no SQL outside `supabase/`. A rule configured against nothing reports green forever (M1-AC2's own reasoning). The secondary rule ships as the `no-sql-outside-persistence` boundary rule in M1b.9."
+    },
+    {
+      "id": "B13",
+      "title": "Write-path IDOR matrix",
+      "assertion": "For every mutation type in ADR-0005's conflict matrix, an unrelated actor gets a structured failure with zero state change and zero outbox rows.",
+      "status": "pending",
+      "pendingUntil": "M2",
+      "reason": "M2.19 covers the seven M2 mutations (M2-AC19); the full ADR-0005 matrix completes at M5 (M5-AC6)."
+    },
+    {
+      "id": "B14",
+      "title": "viewerId provenance fitness",
+      "assertion": "No tRPC input schema on any procedure carries a viewerId/userId/actorId/ownerId field, asserted by walking the router type tree; and `ViewerId` has exactly one constructor, taking an `Actor`.",
+      "status": "pending",
+      "pendingUntil": "M2",
+      "reason": "There is no tRPC router and no `ViewerId` type to walk (M2-AC20)."
+    },
+    {
+      "id": "B15",
+      "title": "Operator scope",
+      "assertion": "The operator path cannot read trust values or reporter identity reachable by a reported user, cannot write outside the four enumerated actions, and emits an audit entry per read.",
+      "status": "pending",
+      "pendingUntil": "M5",
+      "reason": "The operator entrypoint and `app_operator_ro` role are M5 (M5-AC27). ADR-0002 §8 deliberately defers building them."
+    },
+    {
+      "id": "B16",
+      "title": "Storage objects",
+      "assertion": "Direct bucket access as anon/authenticated is denied; a signed URL is minted only for an object the viewer may see under the §6a disclosure rule; TTL <= 5 minutes.",
+      "status": "pending",
+      "pendingUntil": "M5",
+      "reason": "Nothing uploads a file before M5 — the M2 slice explicitly does not build storage (plan line 274, M5-AC33)."
+    },
+    {
+      "id": "B17",
+      "title": "Unauthorized is indistinguishable from non-existent",
+      "assertion": "Unauthorized and non-existent produce identical status, error code, and byte-identical bodies across single-entity fetch, `from:` resolution, intro-connector resolution, and report/dismiss of an invisible bulletin.",
+      "status": "pending",
+      "pendingUntil": "M2",
+      "reason": "Needs entrypoints returning response bodies to diff (M2-AC14)."
+    },
+    {
+      "id": "B18",
+      "title": "Post-deploy catalog smoke against the LIVE database",
+      "assertion": "B1, B3 and B4's assertions plus `current_user = session_user = 'app_rw'`, run against the deployed environment through the production connection path. Gates the M4.5 rollout.",
+      "status": "pending",
+      "pendingUntil": "M4",
+      "reason": "There is no deployed environment. This row is the one that catches an API deployed as `postgres` (risk R13) and cannot be simulated against Testcontainers — that is precisely why the ADR separates it from B1/B3/B4."
+    }
+  ]
+}

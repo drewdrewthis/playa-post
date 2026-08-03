@@ -123,7 +123,7 @@ to check reports green forever, which is worse than no rule at all.
   `{ foo: undefined }`. Write `undefined`-valued optionals as omissions, or type
   them `foo?: string | undefined` when "explicitly absent" is a real state.
 - **Integration tests need no `db:start`.** `startPostgresTestDatabase()` boots
-  its own `postgres:16` and applies `supabase/migrations` by default; call
+  its own `postgres:17` and applies `supabase/migrations` by default; call
   `truncateAllTables()` in `beforeEach` rather than restarting the container.
 
 ## How work ships
