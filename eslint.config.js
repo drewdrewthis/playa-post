@@ -20,6 +20,12 @@ export default tseslint.config(
       '**/dist/**',
       '**/dev-dist/**',
       '**/coverage/**',
+      // Scratch state the Supabase CLI writes while the local stack is up —
+      // including a bundled edge-runtime `index.ts`. Gitignored, so it is
+      // invisible until someone runs `pnpm db:start`, at which point `pnpm lint`
+      // reports ~190 errors in a file nobody wrote. ESLint does not read
+      // `.gitignore`, so the ignore has to be restated here.
+      'supabase/.temp/**',
       // Deliberately-violating architecture fixtures. Linting them would either
       // fail the build or, worse, tempt someone to "fix" them and silently
       // disarm a boundary rule. See tests/fitness/__fixtures__/README.md.
