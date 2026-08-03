@@ -731,6 +731,22 @@ Prefer observable behavior and state.
 
 ## 22. Deployment Boundary
 
+> **Amended 2026-08-02 — ratified by owner decision (ADR-0009).** The second shape below is **adopted**:
+> the backend deploys as the Node server build to Render. The Cloudflare Worker shape and its focused
+> spike are **retired** — do not run the spike, and do not treat the two shapes as an open choice.
+>
+> What is unchanged, and is the whole point of this section: **the deployment runtime must not determine
+> module boundaries.** Domain and application code must stay free of host knowledge, so that adopting a
+> shape is not the same as welding to it. That property is now enforced by
+> `no-domain-to-infrastructure` (`.dependency-cruiser.cjs`), which covers `domain/` and `application/`
+> and forbids Node builtins in both.
+>
+> Scope of the guarantee, stated honestly: portability is now between **Node hosts** (Render → Railway →
+> Fly → a container). Nothing proves this tree would run on an edge runtime, and re-establishing that
+> would be a new ADR, not a revert. See ADR-0009 for the full consequence list.
+>
+> The original text is preserved below as the record of the choice that was open.
+
 The architecture must remain deployable in either of these forms without changing domain or application code:
 
 ```text

@@ -113,27 +113,51 @@ free plan, defined by `render.yaml` at the repository root. It is the only serve
   configured once.
 
 **Negative — free-plan caveats, accepted knowingly.** Verified against Render's plan documentation on
-2026-08-02; re-check before relying on any number.
+2026-08-02; re-check before relying on any number. The same discipline applies to `render.yaml`'s
+schema keys, which no test in this repo can validate: confirm `runtime: node` is current (it replaced
+the legacy `env:` key) and that `region: frankfurt` is free-plan-eligible **before** the first
+`render blueprint launch`. A blueprint that fails schema validation fails at launch time, not in CI.
 
 - **Spin-down on idle → cold starts.** A free web service is spun down after roughly 15 minutes with no
   inbound traffic, and the next request pays the spin-up — tens of seconds, not milliseconds.
   *Acceptable because:* the launch bar (`docs/product/launch-definition-of-done.md`) is live, working,
   real-data, visually correct and QA-signed-off. It sets no latency SLO. The audience is an invited
   private network, not the open internet, and a first-request delay after an idle period is a nuisance
-  rather than a failure. *Mitigations if it bites:* the health-check endpoint can be pinged on a
-  schedule, or the instance upgraded to a paid plan — a `plan:` line, no code change.
+  rather than a failure. M3-AC5 measures it rather than assuming it.
+- **Spin-down stops the outbox drainer, which is the consequence that actually bites.** This ADR makes
+  the in-process Node poller the shipping delivery path (ADR-0006; plan M2.14, "no cron variant"). A
+  spun-down instance is a *process that is not running*, so nothing drains: a bulletin posted at 02:10
+  produces its grouped push whenever the next unrelated visitor happens to wake the service — minutes or
+  hours later, with no upper bound. Cold-start latency is a nuisance; this is a **feature that silently
+  does not work**, and launch-DoD clause 2 ("working, not mocked" — real push, real worker in the
+  deployed app) is the clause it fails.
+  *Not waved away:* **M3-AC6 measures outbox latency across an idle window** and is the gate on whether
+  this stays acceptable. If it fails, the resolutions in preference order are (a) a paid instance, which
+  never spins down, or (b) an external scheduler poking the drain endpoint — **not** a longer poll
+  interval, which does not address a process that is not running.
 - **750 free instance-hours per month, pooled across the workspace.** A 31-day month is 744 hours, so
-  the budget covers exactly **one** always-on free service and no more. A second — a staging copy, or
-  the outbox drainer as its own service — draws from the same pool and pushes past it.
+  the budget covers exactly **one** always-on free service and no more. A second — a staging copy, or a
+  separately-hosted drainer — draws from the same pool and pushes past it.
   *Acceptable because:* spin-down means a low-traffic invite-only service bills well under its
   wall-clock hours, so one service is not close to the ceiling; and M4's staging environment is the
   first thing that would genuinely need a second one. That is a known, priced moment to upgrade rather
   than a surprise.
+  ⚠ **Keep-alive and this budget are mutually exclusive, and saying so is the point.** Pinging the
+  health check to defeat spin-down means the instance runs ~744 h/month against a 750 h pool — it
+  consumes essentially the entire free allowance, foreclosing the M4 staging service. So "just keep it
+  warm" is not a free mitigation for the two bullets above: **choosing keep-alive means the paid `plan:`
+  line arrives at M4, not later.** Budget for that rather than discovering it when staging cannot start.
 - **No zero-downtime deploys on the free plan.** A deploy stops the running instance and starts the new
   one; requests in that window fail. *Acceptable because:* pre-launch there are no users to drop, and
-  post-launch the deploy window is seconds on an app with no availability commitment. M4-AC5's rollback
-  procedure is unaffected — rollback is a redeploy of the previous image, and `/health` carrying the
-  deployed SHA still proves which version is serving.
+  post-launch the deploy window is seconds on an app with no availability commitment. That argument
+  stands on its own; nothing about rollback verification is claimed here.
+  **What ships today does not identify the running version.** `/healthz` returns `{"status":"ok"}` and
+  Decision 5 keeps it that way deliberately. The SHA-carrying endpoint is **`/health`, a separate
+  endpoint arriving in M4.3**, added alongside `/healthz` and never replacing it — so M4-AC5's
+  "rollback returns the previous SHA within 10 minutes" is **not verifiable until M4.3 lands**. Stating
+  that rather than implying today's liveness probe covers it: an earlier draft of this bullet justified
+  an accepted consequence with a mechanism this same ADR forbids, one character off the path the PR
+  built a drift guard for.
 - **No persistent disk and a single instance.** Neither is used: all state is in Supabase, and the
   outbox drainer's `FOR UPDATE SKIP LOCKED` claiming (ADR-0006) is what makes horizontal scale possible
   later, independent of the host.
@@ -163,9 +187,17 @@ rationale is a wider blast radius than the owner ratified:
 | ADR-0006 | the "Cloudflare target" delivery path and the `workerd` arguments against `pg-boss`/`LISTEN NOTIFY` | Its decision — the outbox table is the authoritative ledger — holds under either shape. The Node-poller branch is simply the one that ships. |
 | ADR-0003 | "the runtime target (ADR-0001) may be `workerd`" as a driver for explicit factory DI | Explicit factories remain the right call on their own merits (no decorators, no metadata shim); only one of several reasons evaporated. |
 | ADR-0007 | "faster in `workerd`" as one argument against a parser generator | Same shape: a supporting clause, not the decision. |
-| addendum §22 | the two-deployment-shape framing, and "Cloudflare compatibility should be proven through a focused spike" | **Normative.** Narrowing it is an owner-level edit, not a consequence of this one. This ADR selects between the shapes §22 permits; it does not amend §22. |
 
 Fix each opportunistically the next time its file is touched for a real reason.
+
+**Addendum §22 is amended in this PR, not deferred.** An earlier draft listed it above as a follow-on.
+That was wrong and would have been actively harmful: the addendum **outranks every ADR** (`docs/adr/README.md`
+precedence order; CLAUDE.md "wins every argument"), so leaving §22 saying the Node shape is conditional on
+a spike would leave the top-precedence document contradicting this one — and a future agent applying
+precedence *correctly* would resolve **against** ADR-0009. The owner ratified the target change, so
+writing it into §22 is execution of that decision, not a new one. The amendment is marked
+ratified-by-owner, states that only the shape choice closed (module-boundary independence is unchanged),
+and preserves the original text below it.
 
 ## Verification
 
@@ -176,10 +208,11 @@ deploy, not the choice. Tier 1 is what this PR carries; tier 2 is M3.
 
 **Tier 1 — satisfied by the PR that introduces this ADR:**
 
-1. `git grep -n build:server:cloudflare -- package.json apps .github/workflows` returns no match, and
-   `git ls-files 'apps/server/src/entrypoints/**'` lists exactly `health.ts`, `health.unit.test.ts`,
-   `http-server.ts`, `http-server.unit.test.ts`, `main.ts` — no Worker entrypoint, no second tsup
-   target, no second CI step.
+1. The second target is absent, asserted as a **property** rather than as a file inventory that M2.14's
+   drainer entrypoint would immediately make stale: `git ls-files | grep -i cloudflare` returns nothing
+   (no Worker entrypoint or fixture survives under any name), `git grep -n build:server:cloudflare --
+   package.json apps .github/workflows` returns no match (no script, no CI step), and
+   `apps/server/tsup.config.ts` exports exactly one build target.
 2. `pnpm typecheck && pnpm lint && pnpm boundaries && pnpm build && pnpm test:unit` exits 0, with
    `pnpm build` producing `apps/web/dist` and `apps/server/dist/node/main.js` and nothing else.
 3. `render.yaml` exists at the repository root, declares `plan: free`, `runtime: node`,

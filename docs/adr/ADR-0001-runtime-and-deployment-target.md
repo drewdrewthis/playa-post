@@ -10,10 +10,17 @@
 > build in CI" rule 2, and the entire M3 spike (S1–S10, S3a) are retired — the Cloudflare entrypoint,
 > its bundle, and its CI step were deleted with ADR-0009.
 >
-> What survives, and is now the whole of the addendum §22 guarantee: **structural rule 1** — runtime
-> code lives only in `entrypoints/**` and infrastructure adapters, enforced by `no-domain-to-infrastructure`.
-> S3a also survives as the deployed-connection-identity check, carried forward into ADR-0002's B18 and
-> the plan's M3/M4 acceptance criteria.
+> What survives:
+>
+> 1. **Structural rule 1** — runtime code lives only in `entrypoints/**` and infrastructure adapters,
+>    enforced by `no-domain-to-infrastructure` (widened by ADR-0009 to cover `application/` and Node
+>    builtins, since the neutral-platform bundle that used to catch those is gone).
+> 2. **S3a**, the deployed-connection-identity check, carried into ADR-0002's B18 and the plan's M3/M4
+>    acceptance criteria.
+> 3. **The frontend hosting decision** (Context, above): the React/Vite PWA deploys as static assets to
+>    Cloudflare, and that is unchanged — ADR-0009 decides the *backend* only. Called out explicitly
+>    because the banner's "nothing below is current guidance" would otherwise orphan it, leaving no
+>    document at all deciding where the frontend is served from.
 
 ## Context
 
