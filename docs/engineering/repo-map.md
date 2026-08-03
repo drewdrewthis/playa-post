@@ -21,7 +21,7 @@ no messaging. It works offline.
 | 4 | `design/Playa Post.dc.html` | The settled UX prototype. **Product evidence, not architecture.** Never copy its structure — but the deployed UI *must* match it visually (launch DoD clause 5). |
 | — | `docs/product/launch-definition-of-done.md` | **Owner-stated and normative.** What "v1 is done" means: live, not mocked, real seed data, user-perspective E2E on the deployed app, visually correct vs the prototype, feature complete — with an independent QA sign-off gate. |
 | — | `docs/engineering/implementation-plan.md` | Milestones M1–M6 with acceptance criteria, risks, and the open owner escalations E1–E6. Where the work is going. |
-| — | `docs/engineering/m2-lane-briefs.md` | M2 broken into six sequenced implementation lanes: scope, migrations owned, module layout, what each lane must not touch, and its gate. Subordinate to the plan. |
+| — | `docs/engineering/m2-lane-briefs.md` | M2 broken into seven sequenced implementation lanes: scope, migrations owned, module layout, what each lane must not touch, and its gate. Subordinate to the plan. |
 | — | `docs/adr/` | Architecture Decision Records. Read the index in `docs/adr/README.md`. |
 | — | `docs/engineering/reviews/` | Review findings that shaped the plan and ADR-0002 (AC review; ADR-0002 stress test). |
 | — | `docs/engineering/ac-index.md` | Generated: every AC → the CI job or manual procedure that proves it. |
