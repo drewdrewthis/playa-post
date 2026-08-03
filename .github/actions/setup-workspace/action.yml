@@ -1,0 +1,24 @@
+name: Setup workspace
+description: Node + pnpm + a frozen workspace install — identical in every CI job.
+
+# Every job that needs `node_modules` composes this instead of repeating four
+# steps nine times. It is a composite action rather than a `setup` job the others
+# `needs:` on purpose: a setup job would serialise the whole graph behind its own
+# cold install, where this keeps all jobs starting at once and lets the pnpm store
+# cache do the deduplication.
+runs:
+  using: composite
+  steps:
+    # Version comes from the `packageManager` field in package.json, so the
+    # workflow cannot drift from what developers run locally. Must precede
+    # setup-node: the pnpm cache resolves its path by running `pnpm store path`.
+    - uses: pnpm/action-setup@v6
+
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .nvmrc
+        cache: pnpm
+
+    - name: Install
+      run: pnpm install --frozen-lockfile
+      shell: bash

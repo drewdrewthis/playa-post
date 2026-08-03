@@ -58,10 +58,21 @@ values the code also declares (health path, bundle location, Node version);
 `tests/fitness/render-blueprint.fitness.test.ts` holds those couplings and
 explains each. Edit the blueprint and that test together.
 
-CI (`.github/workflows/ci.yml`) runs install → typecheck → lint → boundaries →
-build:web → build:server:node → unit → integration → security.
+CI (`.github/workflows/ci.yml`) runs **nine parallel jobs**, named exactly:
+`typecheck`, `lint`, `lint:boundaries`, `test:unit`, `test:integration`,
+`test:security`, `build:web`, `build:server:node`, `secret-scan`. Nothing
+`needs:` anything else, so each failure names itself. Those nine strings are the
+checks branch protection requires — **renaming a job silently un-requires its
+check**, so change one only deliberately and update the protection rule with it.
+Shared Node/pnpm/install lives in one composite action,
+[`.github/actions/setup-workspace`](.github/actions/setup-workspace/action.yml).
 **Run the same commands locally before you push.** A red PR is a broken promise,
 not a work-in-progress signal — that is what draft status is for.
+
+`secret-scan` runs [gitleaks](https://github.com/gitleaks/gitleaks) over the full
+commit history, pinned by version *and* SHA-256. A genuine false positive is
+retired by adding its fingerprint to `.gitleaksignore` — never by loosening the
+job.
 
 ## Boundary rules — executable, not advisory
 
