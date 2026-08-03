@@ -1,0 +1,149 @@
+Script started on 2026-08-03 08:11:33+00:00 [COMMAND="/tmp/claude-1000/-home-ubuntu-Projects-playa-post/a722686e-4c9a-487a-b0eb-7a79fe12a7d9/scratchpad/gate.sh" <not executed on terminal>]
+
+==============================================================
+$ pnpm typecheck
+==============================================================
+[2m$ tsc --noEmit && pnpm --recursive typecheck[22m
+Scope: 5 of 6 workspace projects
+[K[0Japps/web [96mtypecheck[39m$ 
+[95m└─[39m [95mRunning...[39m
+[K[0Jpackages/configuration [96mtypecheck[39m$ 
+[95m└─[39m [95mRunning...[39m
+[K[0Jpackages/contracts [96mtypecheck[39m$ 
+[95m└─[39m [95mRunning...[39m
+[K[0Jpackages/testing [96mtypecheck[39m$ 
+[95m└─[39m [95mRunning...[39m
+[K[0J[3A[95m└─[39m [95mDone in 360ms[39m
+[2B[K[0J[5A[95m└─[39m [95mDone in 1.2s[39m
+[4B[K[0J[1A[95m└─[39m [95mDone in 1.2s[39m
+[K[0J[7A[95m└─[39m [95mDone in 1.6s[39m
+[6B[K[0Japps/server [96mtypecheck[39m$ 
+[95m└─[39m [95mRunning...[39m
+[K[0J[1A[95m└─[39m [95mDone in 1.5s[39m
+[K[0J-- typecheck exit code: 0
+
+==============================================================
+$ pnpm lint
+==============================================================
+[2m$ eslint .[22m
+-- lint exit code: 0
+
+==============================================================
+$ pnpm boundaries
+==============================================================
+[2m$ depcruise --config .dependency-cruiser.cjs apps packages[22m
+
+[32m✔[39m no dependency violations found (30 modules, 35 dependencies cruised)
+
+-- boundaries exit code: 0
+
+==============================================================
+$ pnpm build:web
+==============================================================
+[2m$ pnpm --filter @playa-post/web build[22m
+[2m$ vite build[22m
+[36mvite v8.1.5 [32mbuilding client environment for production...[36m[39m
+[2K[32m✓[0m 15 modules transformed.
+[2Krendering chunks (1)...[2Kcomputing gzip size...
+[2K[2mdist/[0m[32mregisterSW.js              [0m[1;2m  0.13 kB[0m
+[2mdist/[0m[32mmanifest.webmanifest       [0m[1;2m  0.23 kB[0m
+[2mdist/[0m[32mindex.html                 [0m[1;2m  0.70 kB[0m[2m │ gzip:  0.40 kB[0m
+[2mdist/[0m[2massets/[0m[35mindex-CZKGtVXc.css  [0m[1;2m  0.83 kB[0m[2m │ gzip:  0.45 kB[0m
+[2mdist/[0m[2massets/[0m[36mindex-DOPQMNg3.js   [0m[1;2m141.31 kB[0m[2m │ gzip: 46.03 kB[0m[2m │ map: 327.50 kB[0m
+
+[32m✓ built in 97ms[39m
+
+[36mPWA v1.3.0[39m
+mode      [35mgenerateSW[39m
+precache  [32m5 entries[39m [2m(139.62 KiB)[22m
+files generated
+  [2mdist/sw.js.map[22m
+  [2mdist/sw.js[22m
+  [2mdist/workbox-9c191d2f.js.map[22m
+  [2mdist/workbox-9c191d2f.js[22m
+-- build:web exit code: 0
+
+==============================================================
+$ pnpm build:server:node
+==============================================================
+[2m$ pnpm --filter @playa-post/server build:node[22m
+[2m$ TSUP_TARGET=node tsup[22m
+[2m[[22mNODE[2m][22m [34mCLI[39m Building entry: {"main":"src/entrypoints/http/main.ts"}
+[2m[[22mNODE[2m][22m [34mCLI[39m Using tsconfig: tsconfig.json
+[2m[[22mNODE[2m][22m [34mCLI[39m tsup v8.5.1
+[2m[[22mNODE[2m][22m [34mCLI[39m Using tsup config: /home/ubuntu/Projects/playa-post/apps/server/tsup.config.ts
+[2m[[22mNODE[2m][22m [34mCLI[39m Target: node22
+[2m[[22mNODE[2m][22m [34mCLI[39m Cleaning output folder
+[2m[[22mNODE[2m][22m [34mESM[39m Build start
+[2m[[22mNODE[2m][22m [32mESM[39m [1mdist/node/main.js     [22m[32m533.82 KB[39m
+[2m[[22mNODE[2m][22m [32mESM[39m [1mdist/node/main.js.map [22m[32m886.57 KB[39m
+[2m[[22mNODE[2m][22m [32mESM[39m ⚡️ Build success in 90ms
+-- build:server:node exit code: 0
+
+==============================================================
+$ pnpm build:server:cloudflare
+==============================================================
+[2m$ pnpm --filter @playa-post/server build:cloudflare[22m
+[2m$ TSUP_TARGET=cloudflare tsup[22m
+[2m[[22mCLOUDFLARE[2m][22m [34mCLI[39m Building entry: {"worker":"src/entrypoints/http/cloudflare-worker.ts"}
+[2m[[22mCLOUDFLARE[2m][22m [34mCLI[39m Using tsconfig: tsconfig.json
+[2m[[22mCLOUDFLARE[2m][22m [34mCLI[39m tsup v8.5.1
+[2m[[22mCLOUDFLARE[2m][22m [34mCLI[39m Using tsup config: /home/ubuntu/Projects/playa-post/apps/server/tsup.config.ts
+[2m[[22mCLOUDFLARE[2m][22m [34mCLI[39m Target: es2022
+[2m[[22mCLOUDFLARE[2m][22m [34mCLI[39m Cleaning output folder
+[2m[[22mCLOUDFLARE[2m][22m [34mESM[39m Build start
+[2m[[22mCLOUDFLARE[2m][22m [32mESM[39m [1mdist/cloudflare/worker.js     [22m[32m543.00 B[39m
+[2m[[22mCLOUDFLARE[2m][22m [32mESM[39m [1mdist/cloudflare/worker.js.map [22m[32m2.61 KB[39m
+[2m[[22mCLOUDFLARE[2m][22m [32mESM[39m ⚡️ Build success in 8ms
+-- build:server:cf exit code: 0
+
+==============================================================
+$ pnpm test:unit
+==============================================================
+[2m$ vitest run --project unit[22m
+[?25l
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post
+
+
+ Test Files  4 passed (4)
+      Tests  29 passed (29)
+   Start at  08:11:49
+   Duration  4.02s (transform 173ms, setup 0ms, import 549ms, tests 4.05s, environment 0ms)
+
+[?25h-- test:unit exit code: 0
+
+==============================================================
+$ pnpm test:integration
+==============================================================
+[2m$ vitest run --project integration[22m
+[?25l
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post
+
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  08:11:54
+   Duration  4.53s (transform 41ms, setup 0ms, import 405ms, tests 3.98s, environment 0ms)
+
+[?25h-- test:integration exit code: 0
+
+==============================================================
+$ pnpm test:security
+==============================================================
+[2m$ vitest run --project security[22m
+[?25l
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post
+
+
+ Test Files  2 passed (2)
+      Tests  54 passed (54)
+   Start at  08:12:00
+   Duration  2.61s (transform 93ms, setup 0ms, import 469ms, tests 1.85s, environment 0ms)
+
+[?25h-- test:security exit code: 0
+
+==============================================================
+GATE GREEN — every step above exited 0
+==============================================================
+
+Script done on 2026-08-03 08:12:02+00:00 [COMMAND_EXIT_CODE="0"]

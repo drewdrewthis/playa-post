@@ -78,3 +78,14 @@ jobs:
         run: pnpm test:integration
         env:
           DEBUG: testcontainers*
+
+      # ADR-0002's bypass suite. A separate step from the integration tests on
+      # purpose: this one is the compensating control for a database that will
+      # never catch a missing `WHERE viewer_id`, so it must be visible as its own
+      # red/green signal and never disappear into "the slow tests". It also gates
+      # the B-row manifest — all eighteen rows are reported with their state, and
+      # a row that vanishes fails the job.
+      - name: Security tests
+        run: pnpm test:security
+        env:
+          DEBUG: testcontainers*

@@ -1,0 +1,17 @@
+{
+  "$comment": [
+    "ADR-0002 B4 / Q2. Every SECURITY DEFINER function in schema `app` must be listed here, or the",
+    "security suite fails. A definer function bypasses the caller's privileges, so one bug in one of",
+    "these is total — the allowlist exists to make adding one a visible, reviewed act rather than a",
+    "line in a migration nobody read.",
+    "",
+    "Adding an entry requires (ADR-0002 Q2): a CODEOWNERS review, `SET search_path` on the function,",
+    "a justification below, and an explicit test. The suite enforces the `SET search_path` half and",
+    "rejects entries naming a function that does not exist, so a stale allowlist cannot accumulate",
+    "quietly and pre-authorize a future name.",
+    "",
+    "Empty is the correct state. ADR-0002 §8 gives the operator console its own role and entrypoint",
+    "precisely so that 'I need a cross-viewer read' never becomes the reason for the first entry."
+  ],
+  "functions": []
+}
