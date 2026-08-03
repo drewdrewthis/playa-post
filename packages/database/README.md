@@ -36,8 +36,13 @@ git diff --exit-code packages/database/src/schema.ts
 
 `pnpm db:types` asks the Supabase CLI where the local database is rather than
 restating its port or its credentials — `supabase status -o env` is the source of
-truth for both. To generate against some other database, run the package's own
-script with your own URL:
+truth for both. The cost of that is a poor error when the stack is down: the CLI
+prints `failed to inspect container health`, and the generator then dies with
+`ReferenceError: Environment variable 'DATABASE_URL' could not be found`. Both
+mean **run `pnpm db:start` first**.
+
+To generate against some other database, run the package's own script with your
+own URL:
 
 ```bash
 DATABASE_URL=postgres://… pnpm --filter @playa-post/database db:types
