@@ -129,6 +129,18 @@ to check reports green forever, which is worse than no rule at all.
   is a secret in source control (addendum §17).
 - **Secret names, paths, and retrieval steps** live in `docs/engineering/secrets.md`
   (never values).
+- **`.env.example` lists the non-secret keys `@playa-post/configuration` reads**
+  — `NODE_ENV`, `HOST`, `PORT`, `LOG_LEVEL`; see
+  `packages/configuration/src/environment-schema.ts`. The two files must stay
+  in sync, and neither ever carries a secret
+  (`docs/engineering/secrets.md`).
+- **A pre-commit hook scans staged changes for secrets**, mirroring the
+  `secret-scan` CI job. It lives at `.githooks/pre-commit`; `pnpm install`'s
+  `prepare` script wires it in via `git config core.hooksPath .githooks`.
+  Bypass with `git commit --no-verify` if you must — CI's `secret-scan` job
+  is the backstop either way. Its pinned gitleaks version and checksum must
+  be bumped together with `ci.yml`'s `secret-scan` job (see the comment
+  there).
 - **Directories are created when a real file lands in them**, never as
   placeholders (addendum §4). `apps/server/src/modules/` does not exist yet
   because M1 has no product code. That is correct, not missing.
@@ -163,7 +175,8 @@ to check reports green forever, which is worse than no rule at all.
 
 1. **Branch off latest `main`.** Never commit to `main`.
 2. **Commit incrementally**, with messages that say why.
-3. **Open a DRAFT PR.** Every PR starts as a draft.
+3. **Open a DRAFT PR.** Every PR starts as a draft
+   (`.github/PULL_REQUEST_TEMPLATE.md` pre-fills the required sections).
 4. **Prove it.** The PR body must show the actual command output for lint,
    boundaries, build, and tests — not a claim that they pass.
 5. **Mark ready only when CI is green** and the review gates pass.
