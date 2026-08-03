@@ -1,4 +1,4 @@
-Script started on 2026-08-03 08:11:33+00:00 [COMMAND="/tmp/claude-1000/-home-ubuntu-Projects-playa-post/a722686e-4c9a-487a-b0eb-7a79fe12a7d9/scratchpad/gate.sh" <not executed on terminal>]
+Script started on 2026-08-03 18:30:40+00:00 [COMMAND="/tmp/claude-1000/-home-ubuntu-Projects-playa-post/a722686e-4c9a-487a-b0eb-7a79fe12a7d9/scratchpad/m1b/gate.sh" <not executed on terminal>]
 
 ==============================================================
 $ pnpm typecheck
@@ -13,13 +13,13 @@ $ pnpm typecheck
 [95m└─[39m [95mRunning...[39m
 [K[0Jpackages/testing [96mtypecheck[39m$ 
 [95m└─[39m [95mRunning...[39m
-[K[0J[3A[95m└─[39m [95mDone in 360ms[39m
-[2B[K[0J[5A[95m└─[39m [95mDone in 1.2s[39m
-[4B[K[0J[1A[95m└─[39m [95mDone in 1.2s[39m
-[K[0J[7A[95m└─[39m [95mDone in 1.6s[39m
+[K[0J[3A[95m└─[39m [95mDone in 283ms[39m
+[2B[K[0J[1A[95m└─[39m [95mDone in 1.1s[39m
+[K[0J[5A[95m└─[39m [95mDone in 1.2s[39m
+[4B[K[0J[7A[95m└─[39m [95mDone in 1.4s[39m
 [6B[K[0Japps/server [96mtypecheck[39m$ 
 [95m└─[39m [95mRunning...[39m
-[K[0J[1A[95m└─[39m [95mDone in 1.5s[39m
+[K[0J[1A[95m└─[39m [95mDone in 1.3s[39m
 [K[0J-- typecheck exit code: 0
 
 ==============================================================
@@ -33,7 +33,7 @@ $ pnpm boundaries
 ==============================================================
 [2m$ depcruise --config .dependency-cruiser.cjs apps packages[22m
 
-[32m✔[39m no dependency violations found (30 modules, 35 dependencies cruised)
+[32m✔[39m no dependency violations found (32 modules, 38 dependencies cruised)
 
 -- boundaries exit code: 0
 
@@ -51,7 +51,7 @@ $ pnpm build:web
 [2mdist/[0m[2massets/[0m[35mindex-CZKGtVXc.css  [0m[1;2m  0.83 kB[0m[2m │ gzip:  0.45 kB[0m
 [2mdist/[0m[2massets/[0m[36mindex-DOPQMNg3.js   [0m[1;2m141.31 kB[0m[2m │ gzip: 46.03 kB[0m[2m │ map: 327.50 kB[0m
 
-[32m✓ built in 97ms[39m
+[32m✓ built in 113ms[39m
 
 [36mPWA v1.3.0[39m
 mode      [35mgenerateSW[39m
@@ -94,7 +94,7 @@ $ pnpm build:server:cloudflare
 [2m[[22mCLOUDFLARE[2m][22m [34mESM[39m Build start
 [2m[[22mCLOUDFLARE[2m][22m [32mESM[39m [1mdist/cloudflare/worker.js     [22m[32m543.00 B[39m
 [2m[[22mCLOUDFLARE[2m][22m [32mESM[39m [1mdist/cloudflare/worker.js.map [22m[32m2.61 KB[39m
-[2m[[22mCLOUDFLARE[2m][22m [32mESM[39m ⚡️ Build success in 8ms
+[2m[[22mCLOUDFLARE[2m][22m [32mESM[39m ⚡️ Build success in 9ms
 -- build:server:cf exit code: 0
 
 ==============================================================
@@ -105,10 +105,10 @@ $ pnpm test:unit
  RUN  v4.1.10 /home/ubuntu/Projects/playa-post
 
 
- Test Files  4 passed (4)
-      Tests  29 passed (29)
-   Start at  08:11:49
-   Duration  4.02s (transform 173ms, setup 0ms, import 549ms, tests 4.05s, environment 0ms)
+ Test Files  5 passed (5)
+      Tests  30 passed (30)
+   Start at  18:30:57
+   Duration  3.70s (transform 309ms, setup 0ms, import 1.25s, tests 3.71s, environment 0ms)
 
 [?25h-- test:unit exit code: 0
 
@@ -122,8 +122,8 @@ $ pnpm test:integration
 
  Test Files  1 passed (1)
       Tests  7 passed (7)
-   Start at  08:11:54
-   Duration  4.53s (transform 41ms, setup 0ms, import 405ms, tests 3.98s, environment 0ms)
+   Start at  18:31:02
+   Duration  4.55s (transform 35ms, setup 0ms, import 370ms, tests 4.04s, environment 0ms)
 
 [?25h-- test:integration exit code: 0
 
@@ -136,14 +136,73 @@ $ pnpm test:security
 
 
  Test Files  2 passed (2)
-      Tests  54 passed (54)
-   Start at  08:12:00
-   Duration  2.61s (transform 93ms, setup 0ms, import 469ms, tests 1.85s, environment 0ms)
+      Tests  56 passed (56)
+   Start at  18:31:07
+   Duration  2.62s (transform 64ms, setup 0ms, import 426ms, tests 1.92s, environment 0ms)
 
 [?25h-- test:security exit code: 0
+
+==============================================================
+$ npx vitest run --project security --reporter=verbose tests/security/b-row-manifest.security.test.ts
+==============================================================
+[?25l
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post
+
+[?2026h
+ ❯ |security| tests/security/b-row-manifest.security.test.ts [queued]
+
+ Test Files 0 passed (1)
+      Tests 0 passed (0)
+   Start at 18:31:11
+   Duration 100ms
+[?2026l[K ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > declares exactly B1-B18, once each 2ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B1 > is declared, with a state 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B1 > carries what its state requires 1ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B2 > is declared, with a state 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B2 > carries what its state requires 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B3 > is declared, with a state 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B3 > carries what its state requires 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B4 > is declared, with a state 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B4 > carries what its state requires 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B5 > is declared, with a state 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B5 > carries what its state requires 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B6 > is declared, with a state 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B6 > carries what its state requires 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B7 > is declared, with a state 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B7 > carries what its state requires 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B8 > is declared, with a state 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B8 > carries what its state requires 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B9 > is declared, with a state 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B9 > carries what its state requires 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B10 > is declared, with a state 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B10 > carries what its state requires 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B11 > is declared, with a state 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B11 > carries what its state requires 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B12 > is declared, with a state 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B12 > carries what its state requires 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B13 > is declared, with a state 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B13 > carries what its state requires 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B14 > is declared, with a state 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B14 > carries what its state requires 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B15 > is declared, with a state 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B15 > carries what its state requires 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B16 > is declared, with a state 1ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B16 > carries what its state requires 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B17 > is declared, with a state 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B17 > carries what its state requires 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B18 > is declared, with a state 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B18 > carries what its state requires 0ms
+ ✓ |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > reports the live/pending split so a shrinking suite is visible in the log 1ms
+
+ Test Files  1 passed (1)
+      Tests  38 passed (38)
+   Start at  18:31:11
+   Duration  210ms (transform 37ms, setup 0ms, import 58ms, tests 12ms, environment 0ms)
+
+[?25h⠙[1G[0K-- b-row-listing exit code: 0
 
 ==============================================================
 GATE GREEN — every step above exited 0
 ==============================================================
 
-Script done on 2026-08-03 08:12:02+00:00 [COMMAND_EXIT_CODE="0"]
+Script done on 2026-08-03 18:31:11+00:00 [COMMAND_EXIT_CODE="0"]

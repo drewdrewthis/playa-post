@@ -1,41 +1,41 @@
-Script started on 2026-08-02 21:42:16+00:00 [COMMAND="/tmp/claude-1000/-home-ubuntu-Projects-playa-post/a722686e-4c9a-487a-b0eb-7a79fe12a7d9/scratchpad/falsify.sh" <not executed on terminal>]
+Script started on 2026-08-03 18:29:20+00:00 [COMMAND="/tmp/claude-1000/-home-ubuntu-Projects-playa-post/a722686e-4c9a-487a-b0eb-7a79fe12a7d9/scratchpad/m1b/falsify.sh" <not executed on terminal>]
 
 ################################################################
 # CASE: (a) B1 — SELECT granted to authenticated
 ################################################################
-       × denies authenticated with SQLSTATE 42501 on every table 12ms
-       × grants no privilege on app to anon, authenticated, or PUBLIC 4ms
+       × denies authenticated with SQLSTATE 42501 on every table 10ms
+       × grants no privilege on app to anon, authenticated, or PUBLIC 3ms
  FAIL  |security| tests/security/baseline-catalog.security.test.ts > ADR-0002 security baseline > B1 — anon and authenticated cannot read schema app > denies authenticated with SQLSTATE 42501 on every table
 AssertionError: expected [ { …(2) } ] to deeply equal [ { …(2) } ]
  FAIL  |security| tests/security/baseline-catalog.security.test.ts > ADR-0002 security baseline > B3 — policy shape, ownership, and role attributes > grants no privilege on app to anon, authenticated, or PUBLIC
 AssertionError: expected [ …(2) ] to deeply equal []
  Test Files  1 failed | 1 passed (2)
-      Tests  2 failed | 52 passed (54)
+      Tests  2 failed | 54 passed (56)
 -- exit code: 1
 OK: suite went red, as it must.
 
 ################################################################
 # CASE: (b) B3 — FORCE ROW LEVEL SECURITY dropped
 ################################################################
-       × has RLS enabled, FORCEd, and owned by app_migrator on every table 9ms
+       × has RLS enabled, FORCEd, and owned by app_migrator on every table 10ms
  FAIL  |security| tests/security/baseline-catalog.security.test.ts > ADR-0002 security baseline > B3 — policy shape, ownership, and role attributes > has RLS enabled, FORCEd, and owned by app_migrator on every table
 AssertionError: expected [ { …(4) } ] to deeply equal [ { …(4) } ]
  Test Files  1 failed | 1 passed (2)
-      Tests  1 failed | 53 passed (54)
+      Tests  1 failed | 55 passed (56)
 -- exit code: 1
 OK: suite went red, as it must.
 
 ################################################################
 # CASE: (c) B3 — TO app_rw omitted (policy defaults to TO PUBLIC)
 ################################################################
-       × has exactly the verbatim app_rw_full_access policy on every table 13ms
-       × documents every policy, so USING (true) reads as deliberate 3ms
+       × has exactly the verbatim app_rw_full_access policy on every table 10ms
+       × documents every policy, so USING (true) reads as deliberate 2ms
  FAIL  |security| tests/security/baseline-catalog.security.test.ts > ADR-0002 security baseline > B3 — policy shape, ownership, and role attributes > has exactly the verbatim app_rw_full_access policy on every table
 AssertionError: expected [ { …(7) } ] to deeply equal [ { …(7) } ]
  FAIL  |security| tests/security/baseline-catalog.security.test.ts > ADR-0002 security baseline > B3 — policy shape, ownership, and role attributes > documents every policy, so USING (true) reads as deliberate
 AssertionError: app.security_baseline_canary has an undocumented policy: expected '' to contain 'Viewer-scoped authorization lives in …'
  Test Files  1 failed | 1 passed (2)
-      Tests  2 failed | 52 passed (54)
+      Tests  2 failed | 54 passed (56)
 -- exit code: 1
 OK: suite went red, as it must.
 
@@ -43,7 +43,7 @@ OK: suite went red, as it must.
 # CASE: (d) B3 — FOR SELECT instead of FOR ALL
 ################################################################
        × has exactly the verbatim app_rw_full_access policy on every table 10ms
-       × documents every policy, so USING (true) reads as deliberate 2ms
+       × documents every policy, so USING (true) reads as deliberate 8ms
        × still lets app_rw read and write — the backstop permits, it does not block 2ms
  FAIL  |security| tests/security/baseline-catalog.security.test.ts > ADR-0002 security baseline > B3 — policy shape, ownership, and role attributes > has exactly the verbatim app_rw_full_access policy on every table
 AssertionError: expected [ { …(7) } ] to deeply equal [ { …(7) } ]
@@ -51,7 +51,7 @@ AssertionError: expected [ { …(7) } ] to deeply equal [ { …(7) } ]
 AssertionError: app.security_baseline_canary has an undocumented policy: expected '' to contain 'Viewer-scoped authorization lives in …'
  FAIL  |security| tests/security/baseline-catalog.security.test.ts > ADR-0002 security baseline > B3 — policy shape, ownership, and role attributes > still lets app_rw read and write — the backstop permits, it does not block
  Test Files  1 failed | 1 passed (2)
-      Tests  3 failed | 51 passed (54)
+      Tests  3 failed | 53 passed (56)
 -- exit code: 1
 OK: suite went red, as it must.
 
@@ -62,15 +62,15 @@ OK: suite went red, as it must.
  FAIL  |security| tests/security/baseline-catalog.security.test.ts > ADR-0002 security baseline > B3 — policy shape, ownership, and role attributes > has RLS enabled, FORCEd, and owned by app_migrator on every table
 AssertionError: expected [ { …(4) } ] to deeply equal [ { …(4) } ]
  Test Files  1 failed | 1 passed (2)
-      Tests  1 failed | 53 passed (54)
+      Tests  1 failed | 55 passed (56)
 -- exit code: 1
 OK: suite went red, as it must.
 
 ################################################################
 # CASE: (f) B3 — RLS enabled with no policy at all (the silent-zero-rows shape)
 ################################################################
-       × has exactly the verbatim app_rw_full_access policy on every table 23ms
-       × documents every policy, so USING (true) reads as deliberate 4ms
+       × has exactly the verbatim app_rw_full_access policy on every table 9ms
+       × documents every policy, so USING (true) reads as deliberate 3ms
        × still lets app_rw read and write — the backstop permits, it does not block 2ms
  FAIL  |security| tests/security/baseline-catalog.security.test.ts > ADR-0002 security baseline > B3 — policy shape, ownership, and role attributes > has exactly the verbatim app_rw_full_access policy on every table
 AssertionError: expected [] to deeply equal [ { …(7) } ]
@@ -78,78 +78,133 @@ AssertionError: expected [] to deeply equal [ { …(7) } ]
 AssertionError: expected [] to have a length of 1 but got +0
  FAIL  |security| tests/security/baseline-catalog.security.test.ts > ADR-0002 security baseline > B3 — policy shape, ownership, and role attributes > still lets app_rw read and write — the backstop permits, it does not block
  Test Files  1 failed | 1 passed (2)
-      Tests  3 failed | 51 passed (54)
+      Tests  3 failed | 53 passed (56)
 -- exit code: 1
 OK: suite went red, as it must.
 
 ################################################################
 # CASE: (g) B4 — an unallowlisted SECURITY DEFINER function appears
 ################################################################
-       × has no SECURITY DEFINER function outside the checked-in allowlist 8ms
+       × has no SECURITY DEFINER function outside the checked-in allowlist 9ms
  FAIL  |security| tests/security/baseline-catalog.security.test.ts > ADR-0002 security baseline > B4 — no unallowlisted SECURITY DEFINER function in app > has no SECURITY DEFINER function outside the checked-in allowlist
-AssertionError: expected [ 'app.sneaky_definer' ] to deeply equal []
+AssertionError: expected [ 'app.sneaky_definer()' ] to deeply equal []
  Test Files  1 failed | 1 passed (2)
-      Tests  1 failed | 53 passed (54)
+      Tests  1 failed | 55 passed (56)
 -- exit code: 1
 OK: suite went red, as it must.
 -- baseline mutated to the IN SCHEMA form; changed lines:
-138:alter default privileges for role app_migrator in schema app
-140:alter default privileges for role app_migrator in schema app
-142:alter default privileges for role app_migrator in schema app
-147:alter default privileges for role app_migrator in schema app
-149:alter default privileges for role app_migrator in schema app
+168:alter default privileges for role app_migrator in schema app
+170:alter default privileges for role app_migrator in schema app
+172:alter default privileges for role app_migrator in schema app
+177:alter default privileges for role app_migrator in schema app
+179:alter default privileges for role app_migrator in schema app
 
 ################################################################
 # CASE: (h) B3 forward guarantee — ALTER DEFAULT PRIVILEGES reverted to the IN SCHEMA form
 ################################################################
-       × leaves objects created later just as locked down 14ms
+       × leaves objects created later just as locked down 12ms
  FAIL  |security| tests/security/baseline-catalog.security.test.ts > ADR-0002 security baseline > B3 — policy shape, ownership, and role attributes > leaves objects created later just as locked down
 AssertionError: expected [ { grantee: 'anon', …(1) }, …(5) ] to deeply equal []
  Test Files  1 failed | 1 passed (2)
-      Tests  1 failed | 53 passed (54)
+      Tests  1 failed | 55 passed (56)
 -- exit code: 1
 OK: suite went red, as it must.
 
 ################################################################
 # CASE: (i) B-row gate — row B13 deleted from the manifest
 ################################################################
-     × declares exactly B1-B18, once each 10ms
-       × is declared, with a state 3ms
-     × reports the live/pending split so a shrinking suite is visible in the log 3ms
+     × declares exactly B1-B18, once each 8ms
+       × is declared, with a state 2ms
+     × reports the live/pending split so a shrinking suite is visible in the log 2ms
  FAIL  |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > declares exactly B1-B18, once each
 AssertionError: expected [ 'B1', 'B2', 'B3', 'B4', 'B5', …(12) ] to deeply equal [ 'B1', 'B2', 'B3', 'B4', 'B5', …(13) ]
  FAIL  |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B13 > is declared, with a state
 AssertionError: B13 is missing from b-rows.manifest.json: expected undefined to be defined
  FAIL  |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > reports the live/pending split so a shrinking suite is visible in the log
-AssertionError: expected { live: [ 'B1', 'B3', 'B4' ], …(1) } to deeply equal { live: [ 'B1', 'B3', 'B4' ], …(1) }
+AssertionError: expected [ { id: 'B2', …(5) }, …(13) ] to have a length of 15 but got 14
  Test Files  1 failed | 1 passed (2)
-      Tests  3 failed | 51 passed (54)
+      Tests  3 failed | 53 passed (56)
 -- exit code: 1
 OK: suite went red, as it must.
 
 ################################################################
 # CASE: (j) B-row gate — B5 promoted to live without an assertion that names it
 ################################################################
-       × carries what its state requires 27ms
-     × reports the live/pending split so a shrinking suite is visible in the log 4ms
+       × carries what its state requires 5ms
+     × reports the live/pending split so a shrinking suite is visible in the log 3ms
  FAIL  |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B5 > carries what its state requires
-AssertionError: B5 claims proof in tests/security/baseline-catalog.security.test.ts, which never mentions B5: expected 'import { startPostgresTestDatabase, t…' to contain 'B5'
+AssertionError: B5 claims proof in tests/security/baseline-catalog.security.test.ts, which never mentions B5: expected 'import { afterAll, beforeAll, describ…' to match /\bB5\b/
  FAIL  |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > reports the live/pending split so a shrinking suite is visible in the log
-AssertionError: expected { …(2) } to deeply equal { live: [ 'B1', 'B3', 'B4' ], …(1) }
+AssertionError: expected [ 'B1', 'B3', 'B4', 'B5' ] to deeply equal [ 'B1', 'B3', 'B4' ]
  Test Files  1 failed | 1 passed (2)
-      Tests  2 failed | 52 passed (54)
+      Tests  2 failed | 54 passed (56)
 -- exit code: 1
 OK: suite went red, as it must.
 
 ################################################################
-# CONTROL: baseline and manifest restored
+# CASE: (k) B3 — app_rw granted BYPASSRLS (the role attribute assertion)
+################################################################
+       × keeps app_rw least-privileged and a member of nothing 10ms
+ FAIL  |security| tests/security/baseline-catalog.security.test.ts > ADR-0002 security baseline > B3 — policy shape, ownership, and role attributes > keeps app_rw least-privileged and a member of nothing
+AssertionError: expected [ { rolname: 'app_rw', …(4) } ] to deeply equal [ { rolname: 'app_rw', …(4) } ]
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 55 passed (56)
+-- exit code: 1
+OK: suite went red, as it must.
+
+################################################################
+# CASE: (l) B3 — app_migrator granted BYPASSRLS (FORCE becomes worthless)
+################################################################
+       × keeps app_migrator unable to bypass RLS 8ms
+ FAIL  |security| tests/security/baseline-catalog.security.test.ts > ADR-0002 security baseline > B3 — policy shape, ownership, and role attributes > keeps app_migrator unable to bypass RLS
+AssertionError: expected [ { rolname: 'app_migrator', …(2) } ] to deeply equal [ { rolname: 'app_migrator', …(2) } ]
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 55 passed (56)
+-- exit code: 1
+OK: suite went red, as it must.
+
+################################################################
+# CASE: (m) B3 — app_rw made a member of app_migrator (a SET ROLE path out)
+################################################################
+       × keeps app_rw least-privileged and a member of nothing 9ms
+ FAIL  |security| tests/security/baseline-catalog.security.test.ts > ADR-0002 security baseline > B3 — policy shape, ownership, and role attributes > keeps app_rw least-privileged and a member of nothing
+AssertionError: expected [ { rolname: 'app_rw', …(4) } ] to deeply equal [ { rolname: 'app_rw', …(4) } ]
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 55 passed (56)
+-- exit code: 1
+OK: suite went red, as it must.
+
+################################################################
+# CASE: (n) ADR-0002 §5 — an ALLOWLISTED definer with no SET search_path
+################################################################
+       × leaves no function whose meaning a caller can change 9ms
+ FAIL  |security| tests/security/baseline-catalog.security.test.ts > ADR-0002 security baseline > ADR-0002 §5 — every function in app pins its search_path > leaves no function whose meaning a caller can change
+AssertionError: expected [ { …(2) } ] to deeply equal []
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 55 passed (56)
+-- exit code: 1
+OK: suite went red, as it must.
+
+################################################################
+# CASE: (o) B3 — canary sequence dropped, so the sequence branch quantifies over nothing
+################################################################
+       × quantifies over a non-empty set of each object kind it claims to check 9ms
+ FAIL  |security| tests/security/baseline-catalog.security.test.ts > ADR-0002 security baseline > B3 — policy shape, ownership, and role attributes > quantifies over a non-empty set of each object kind it claims to check
+AssertionError: expected [ { kind: 'sequence', count: '0' } ] to deeply equal []
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 55 passed (56)
+-- exit code: 1
+OK: suite went red, as it must.
+
+################################################################
+# CONTROL: baseline, manifest and allowlist restored
 ################################################################
 
  Test Files  2 passed (2)
-      Tests  54 passed (54)
-   Start at  21:42:55
-   Duration  2.97s (transform 104ms, setup 0ms, import 525ms, tests 2.11s, environment 0ms)
+      Tests  56 passed (56)
+   Start at  18:30:15
+   Duration  2.59s (transform 75ms, setup 0ms, import 449ms, tests 1.83s, environment 0ms)
 
 -- exit code: 0
 
-Script done on 2026-08-02 21:42:58+00:00 [COMMAND_EXIT_CODE="0"]
+Script done on 2026-08-03 18:30:18+00:00 [COMMAND_EXIT_CODE="0"]
