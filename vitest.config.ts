@@ -10,10 +10,11 @@ import { defineConfig } from 'vitest/config';
  *                   only place SQL correctness can actually be proven.
  * - `security`    — the ADR-0002 bypass suite. Same Testcontainers cost as
  *                   `integration`, kept separate because it is a **control**, not a
- *                   test suite: it has its own script and CI step, and its own
- *                   manifest gate. Its own *job* lands with M1b.5 (ten named jobs +
- *                   branch protection) — today it is a step inside `verify`, so it
- *                   shares that job's failure domain.
+ *                   test suite: it has its own script, its own manifest gate, and
+ *                   its own CI job (`test:security`, one of the nine named jobs
+ *                   M1b.5 split `verify` into). Owning a red/green signal is the
+ *                   point — folded into another job, a failed control reads as a
+ *                   slow test suite.
  *
  * `unit` and `integration` select on the suffix alone, so a test's cost is visible in
  * its filename and a new module needs no config change. `security` is scoped to
