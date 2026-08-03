@@ -1,9 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { Client } from 'pg';
+import type { StartedNetwork } from 'testcontainers';
 
 /**
  * The Postgres image integration tests run against.
@@ -39,11 +41,32 @@ export interface StartPostgresTestDatabaseOptions {
   readonly migrationsDirectory?: string | null;
   /** Override the image. Defaults to {@link POSTGRES_TEST_IMAGE}. */
   readonly image?: string;
+  /**
+   * Attach the container to this Testcontainers network, so a *sibling* container
+   * can reach the database.
+   *
+   * Omitted, the database is reachable only from the host on a mapped port, which is
+   * all an ordinary integration test needs. A harness that runs a second container
+   * against this database — PostgREST, for ADR-0002 B2 — needs container-to-container
+   * routing, and that is what a shared network provides. The alternative, pointing the
+   * sibling at a `host-gateway` extra host, silently fails on rootless Docker and
+   * Podman, which is a worse trade than one explicit object.
+   */
+  readonly network?: StartedNetwork;
 }
 
 export interface PostgresTestDatabase {
-  /** `postgres://…` URI for the throwaway database. */
+  /** `postgres://…` URI for the throwaway database, reachable from the host. */
   readonly connectionString: string;
+  /**
+   * `postgres://…` URI a sibling container on the same network uses, or `null` when
+   * no `network` was passed.
+   *
+   * Distinct from {@link connectionString} in both host and port: from inside the
+   * network the database answers on its alias and on 5432, not on the ephemeral port
+   * Docker mapped onto the host.
+   */
+  readonly containerConnectionString: string | null;
   /** An already-connected client. The test owns it; {@link stop} closes it. */
   readonly client: Client;
   /** The directory migrations were read from, or `null` if the caller opted out. */
@@ -87,11 +110,25 @@ export async function startPostgresTestDatabase(
       ? REPOSITORY_MIGRATIONS_DIRECTORY
       : options.migrationsDirectory;
 
-  const container: StartedPostgreSqlContainer = await new PostgreSqlContainer(
-    options.image ?? POSTGRES_TEST_IMAGE,
-  ).start();
+  // A per-database alias rather than a fixed one: two databases on one network is a
+  // legitimate shape (a migration-drift check beside a REST harness), and a fixed
+  // alias would make the second one unreachable in a way that reads as a network bug.
+  const networkAlias = `postgres-test-database-${randomUUID().slice(0, 8)}`;
+
+  let builder = new PostgreSqlContainer(options.image ?? POSTGRES_TEST_IMAGE);
+  if (options.network !== undefined) {
+    builder = builder.withNetwork(options.network).withNetworkAliases(networkAlias);
+  }
+
+  const container: StartedPostgreSqlContainer = await builder.start();
 
   const connectionString = container.getConnectionUri();
+  const containerConnectionString =
+    options.network === undefined
+      ? null
+      : `postgresql://${encodeURIComponent(container.getUsername())}:${encodeURIComponent(
+          container.getPassword(),
+        )}@${networkAlias}:5432/${encodeURIComponent(container.getDatabase())}`;
   const client = new Client({ connectionString });
   await client.connect();
 
@@ -108,6 +145,7 @@ export async function startPostgresTestDatabase(
 
   return {
     connectionString,
+    containerConnectionString,
     client,
     migrationsDirectory,
     appliedMigrations,

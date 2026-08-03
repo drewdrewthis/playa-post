@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { POSTGRES_TEST_IMAGE, REPOSITORY_MIGRATIONS_DIRECTORY } from './postgres-test-database';
+import { POSTGRES_TEST_IMAGE } from './postgres-test-database';
+import { SUPABASE_CONFIGURATION_PATH } from './supabase-api-configuration';
 
 /**
  * The Postgres major version is asserted in two places that cannot import each other:
@@ -16,7 +16,9 @@ import { POSTGRES_TEST_IMAGE, REPOSITORY_MIGRATIONS_DIRECTORY } from './postgres
  * save and in the `unit` CI job, and it fails the moment one side is bumped alone.
  */
 describe('Postgres version is single-sourced', () => {
-  const configurationPath = join(REPOSITORY_MIGRATIONS_DIRECTORY, '..', 'config.toml');
+  // Boy-scout: the path was derived here from the migrations directory. There is now one
+  // exported constant for it, so the two readers of `supabase/config.toml` cannot drift.
+  const configurationPath = SUPABASE_CONFIGURATION_PATH;
 
   it('pins the same major in POSTGRES_TEST_IMAGE and supabase/config.toml', () => {
     const configuration = readFileSync(configurationPath, 'utf8');
