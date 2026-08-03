@@ -138,7 +138,7 @@ how a "we'll add the security suite later" milestone becomes permanent.
 
 | # | Item | Gate — must land before |
 |---|---|---|
-| M1b.1 | M1.4 remainder: `db:start\|db:reset\|db:migrate\|db:types`, `seed/`, `sql/`, checked-in Kysely types. **Partially delivered in the M1b.2 PR:** `db:start`, `db:stop` (added — the row named no stop script, and `db:start` without it is a one-way door on a dev box) and `db:reset`, verified against the CLI. **Still owed:** `db:migrate`, `db:types`, `seed/`, `sql/`, checked-in Kysely types. | any M2 repository or migration |
+| M1b.1 | M1.4 remainder: `db:start\|db:reset\|db:migrate\|db:types`, `seed/`, `sql/`, checked-in Kysely types. **Delivered in the M1b.2 PR:** `db:start`, `db:stop` (added — the row named no stop script, and `db:start` without it is a one-way door on a dev box) and `db:reset`, verified against the CLI. **Delivered in the `packages/database` PR:** `db:migrate`, `db:types`, `packages/database` itself, and checked-in Kysely types at `packages/database/src/schema.ts` with the M1-AC3 drift check running in `test:integration`. **Still owed:** `seed/` and `sql/` — deferred deliberately, because addendum §4 creates a directory when a real file lands in it, and the first seed row and first checked-in query are L1's. | any M2 repository or migration |
 | M1b.2 | M1.5 security-baseline migration: schema `app`, `app_rw`/`app_migrator`, the full ADR-0002 §3 revoke set and §4 policy shape, canary table | M2's **first product table** |
 | M1b.3 | M1.6 `tests/security/` B1–B4 + B12 secondary + `b-rows.manifest.json` | M2's **first viewer-scoped query** |
 | M1b.4 | M1.8 remainder: `packages/observability` — redaction allowlist, correlation IDs, span-attribute redaction | M2 logging anything request-shaped |

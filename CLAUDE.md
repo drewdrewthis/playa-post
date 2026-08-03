@@ -25,6 +25,10 @@ pnpm build:server:node  # tsup, platform=node   -> apps/server/dist/node/main.js
 pnpm typecheck          # root tsconfig + every workspace package
 pnpm lint               # eslint flat config
 pnpm boundaries         # dependency-cruiser — the architecture fitness function
+pnpm db:start           # local Supabase stack (db:stop to tear it down)
+pnpm db:reset           # replay every migration from scratch
+pnpm db:migrate         # apply only the migrations not yet applied
+pnpm db:types           # rewrite packages/database/src/schema.ts from the live database
 pnpm test               # every vitest project
 pnpm test:unit          # no infrastructure; fast enough to run on save
 pnpm test:integration   # Testcontainers Postgres; needs a running docker daemon
@@ -139,6 +143,10 @@ to check reports green forever, which is worse than no rule at all.
 - **Integration tests need no `db:start`.** `startPostgresTestDatabase()` boots
   its own `postgres:17` and applies `supabase/migrations` by default; call
   `truncateAllTables()` in `beforeEach` rather than restarting the container.
+- **`packages/database/src/schema.ts` is generated and checked in.** Write a
+  migration and you owe a `pnpm db:types` in the same commit; an integration test
+  regenerates the file against Testcontainers and fails CI on any difference.
+  Never hand-edit it — see [`packages/database/README.md`](packages/database/README.md).
 
 ## How work ships
 
