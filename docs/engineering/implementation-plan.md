@@ -426,10 +426,20 @@ throwaway code.
 M3.1 launch the blueprint (`render blueprint launch`) and record the service ID and public URL ·
 M3.2 set the service's secret env vars in the Render dashboard (`sync: false` keys only; names in
 `docs/engineering/secrets.md`) · M3.3 point the service at the Supabase project through the `app_rw`
-role and prove the connection identity (S3a) · M3.4 `/health` carrying the deploy's SHA (this is
-M4.3's endpoint; M3 stands up `/healthz` liveness only if the SHA plumbing slips) · M3.5 measure the
-free-plan cold start after an idle spin-down and record it · M3.6 the M2 e2e suite run once against the
-deployed URL.
+role and prove the connection identity (S3a) · **M3.4 `/healthz` liveness is what M3 deploys and what
+Render polls — unconditionally.** It is already implemented and `render.yaml` hardcodes it; the
+SHA-carrying `/health` is **M4.3's separate endpoint**, added *alongside* `/healthz` and never
+replacing it · M3.5 measure the free-plan cold start after an idle spin-down and record it ·
+M3.6 measure outbox delivery latency across an idle window (the drainer is in-process, so a spun-down
+instance drains nothing — ADR-0009) · M3.7 cross-origin wiring: the API is a different origin from the
+static frontend, so CORS allow-list, cookie `SameSite`/`Secure` posture for the Supabase session, and
+the custom-domain decision all land here — the first thing M3-AC4 hits otherwise ·
+M3.8 the M2 e2e suite run once against the deployed URL.
+
+> ⚠ **Do not "simplify" M3.4 by serving the SHA from `/healthz`.** `render.yaml:34` hardcodes
+> `healthCheckPath: /healthz`, `tests/fitness/render-blueprint.fitness.test.ts` fails the build on
+> drift, and M3-AC1 curls that exact path. A rename breaks the deploy in precisely the way that guard
+> exists to prevent — and it breaks it at deploy time, not build time.
 
 ### Acceptance criteria
 
@@ -453,10 +463,21 @@ deployed URL.
   request's. *Evidence: two quoted `curl -w '%{time_total}'` transcripts with timestamps.* This is the
   number that decides whether ADR-0009's "acceptable at the launch bar" judgement holds; recording it
   costs one command and converts an assumption into a fact.
-- **M3-AC6 (no secret in the repo or the log)** No secret value appears in `render.yaml`, in the deploy
+- **M3-AC6 (outbox latency across an idle window — the caveat that actually bites)** With the service
+  idle past spin-down (≥ 20 min, no inbound traffic), a bulletin is created that should produce a
+  grouped push, and **nothing else touches the service**. Record the wall-clock delay until the
+  `consumer_receipts` row appears. The drainer is in-process (ADR-0006, M2.14), so a spun-down instance
+  is a process that is not running and the event waits for unrelated traffic to wake it.
+  *Evidence: quoted `outbox_events.created_at` and `consumer_receipts.created_at` with the idle window's
+  start timestamp, plus the delta.*
+  **This gates the ADR-0009 judgement, and a bad number is not a "known issue":** launch-DoD clause 2
+  requires real push and a real worker in the deployed app. Resolutions, in order — (a) paid instance,
+  which never spins down, or (b) an external scheduler hitting a drain endpoint. **Not** a shorter poll
+  interval: it does nothing for a process that is not running.
+- **M3-AC7 (no secret in the repo or the log)** No secret value appears in `render.yaml`, in the deploy
   log, or in the built bundle. *Evidence: quoted grep over `render.yaml` and the downloaded deploy log,
   plus the `secret-scan` job status.*
-- **M3-AC7 (boundaries survived)** `git diff --stat main...m3 -- 'apps/server/src/modules/*/domain'
+- **M3-AC8 (boundaries survived)** `git diff --stat main...m3 -- 'apps/server/src/modules/*/domain'
   'apps/server/src/modules/*/application'` is empty — deploying changed no domain or application code,
   which is the addendum §22 property the whole ADR rests on. *Evidence: quoted command output.*
 
@@ -471,8 +492,10 @@ deployed URL.
 M4.1 Supabase staging project (migrations by `app_migrator`, roles/grants/RLS per ADR-0002) ·
 M4.2 frontend deploy (static hosting — unchanged by ADR-0009, which decides the backend only) ·
 M4.3 API deploy with `/health` carrying the deployed SHA ·
-M4.4 outbox drainer deploy — in-process with the API, or its own Render service if the free
-instance-hour budget allows (ADR-0006, ADR-0009) · M4.5 CD: `main` → staging, **gated by B18**,
+M4.4 outbox drainer deploy — **in-process with the API** (ADR-0006, ADR-0009). Not a second free
+service: the free plan has no background-worker type, and a second always-on service would exceed the
+750 h pool on its own. If M3-AC6's idle-window latency is unacceptable, the fix is a paid instance or
+an external scheduler, decided here · M4.5 CD: `main` → staging, **gated by B18**,
 migrations before rollout,
 documented rollback · M4.6 observability: correlation IDs, RED metrics per tRPC procedure, outbox
 depth/dead gauge, push failure rate · M4.7 alerts (four rules) · M4.8 staging smoke = the M2 e2e suite ·
