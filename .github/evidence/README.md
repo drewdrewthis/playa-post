@@ -26,9 +26,13 @@ evidence that was typed rather than recorded is not evidence.
 
 ## Dated context
 
-These captures are from **M1a (2026-07-30)** and are left byte-for-byte as recorded.
-`runtime-both-entrypoints.txt` and the "all three builds" in `m1-verification.txt`
-describe a repository that still had a `workerd` entrypoint; [ADR-0009](../../docs/adr/ADR-0009-deploy-node-server-to-render.md)
-deleted it on 2026-08-02. That does not make the captures wrong — they record what
-ran on the day — and editing them to match today's tree would turn a recording back
-into an authored artifact, which is the exact failure the paragraph above describes.
+The three **M1a (2026-07-30)** captures — `m1-verification.txt`,
+`runtime-both-entrypoints.txt`, `typescript-7-zero-modules.txt` — are left
+byte-for-byte as recorded. `runtime-both-entrypoints.txt` and the "all three builds"
+in `m1-verification.txt` describe a repository that still had a `workerd` entrypoint;
+[ADR-0009](../../docs/adr/ADR-0009-deploy-node-server-to-render.md) deleted it on
+2026-08-02. That does not make the captures wrong — they record what ran on the day —
+and editing them to match today's tree would turn a recording back into an authored
+artifact, which is the exact failure the paragraph above describes.
+
+The M1b captures below them are current.

@@ -28,6 +28,7 @@ pnpm boundaries         # dependency-cruiser — the architecture fitness functi
 pnpm test               # every vitest project
 pnpm test:unit          # no infrastructure; fast enough to run on save
 pnpm test:integration   # Testcontainers Postgres; needs a running docker daemon
+pnpm test:security      # ADR-0002 bypass suite; needs a running docker daemon
 ```
 
 There is **one** boundary script, `pnpm boundaries` — no `lint:boundaries` alias,
@@ -58,7 +59,7 @@ values the code also declares (health path, bundle location, Node version);
 explains each. Edit the blueprint and that test together.
 
 CI (`.github/workflows/ci.yml`) runs install → typecheck → lint → boundaries →
-build:web → build:server:node → unit → integration.
+build:web → build:server:node → unit → integration → security.
 **Run the same commands locally before you push.** A red PR is a broken promise,
 not a work-in-progress signal — that is what draft status is for.
 
