@@ -30,12 +30,12 @@ describe('startPostgresTestDatabase', () => {
       await database?.stop();
     });
 
-    it('boots Postgres 16 and yields a connection that answers queries', async () => {
+    it('boots Postgres 17 and yields a connection that answers queries', async () => {
       const { rows } = await database.client.query<{ version: string }>(
         'select version() as version',
       );
 
-      expect(rows[0]?.version).toContain('PostgreSQL 16');
+      expect(rows[0]?.version).toContain('PostgreSQL 17');
       expect(database.connectionString).toMatch(/^postgres(ql)?:\/\//);
     });
 

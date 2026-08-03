@@ -25,7 +25,15 @@ port = 54322
 shadow_port = 54320
 # Must match POSTGRES_TEST_IMAGE in packages/testing so SQL that passes an
 # integration test is SQL that passes locally and in production.
-major_version = 16
+#
+# 17, not 16: Supabase has never shipped a Postgres 16 image — the CLI's ladder is
+# 14 (legacy), 15, 17 — so `supabase start` rejected `major_version = 16` outright
+# ("Failed reading config: Invalid db.major_version: 16"). The pin was aspirational
+# rather than verified, and it made the comment above false in the one direction
+# that matters: nothing could run locally at all. 17 is the CLI default and the
+# platform default for new projects. Raising it means raising POSTGRES_TEST_IMAGE
+# in the same commit.
+major_version = 17
 
 [db.pooler]
 enabled = false
@@ -38,7 +46,8 @@ enabled = true
 port = 54323
 
 # Local mail catcher: magic-link emails land here instead of being sent.
-[inbucket]
+# `[inbucket]` was the old name for this block and the CLI now warns on it.
+[local_smtp]
 enabled = true
 port = 54324
 

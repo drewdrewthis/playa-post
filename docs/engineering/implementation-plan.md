@@ -120,7 +120,7 @@ how a "we'll add the security suite later" milestone becomes permanent.
 |---|---|---|
 | M1.1 | pnpm workspace, strict `tsconfig.base.json` including `exactOptionalPropertyTypes` | — |
 | M1.2 | Five boundary rules + one violating fixture each + fitness test | Two literal-content rules — see M1-AC2 |
-| M1.3 | Vitest `unit`/`integration` projects; Testcontainers Postgres 16 harness applying `supabase/migrations` by default and exposing `truncateAllTables()` | — |
+| M1.3 | Vitest `unit`/`integration` projects; Testcontainers Postgres 17 harness applying `supabase/migrations` by default and exposing `truncateAllTables()` | — |
 | M1.4 | `supabase/config.toml` (with `app` deliberately unexposed), `migrations/` + workflow README | `seed/`, `sql/`, the `db:*` scripts, checked-in Kysely types |
 | M1.7 | GitHub Actions: install, typecheck, lint, boundaries, `build:web`, `build:server:node`, `build:server:cloudflare`, unit, integration | `test:security`, `secret-scan`, the ten *named* jobs, branch protection |
 | M1.8 | `packages/configuration` (Zod, fails fast naming the key, never echoing values) | `packages/observability` |
@@ -161,7 +161,7 @@ support; when they do, the guard stays.
 
 - **M1-AC1** `pnpm install && pnpm typecheck && pnpm lint && pnpm test:unit` exits 0 on a clean clone
   with no network beyond the npm registry. Separately, with **a running Docker daemon and no other
-  setup**, `pnpm test:integration` exits 0 — the harness starts its own `postgres:16` container via
+  setup**, `pnpm test:integration` exits 0 — the harness starts its own `postgres:17` container via
   Testcontainers and applies `supabase/migrations` itself, so there is no `db:start` prerequisite and no
   long-lived local database. *Evidence: two terminal transcripts, exit codes shown.*
   *(Amended in M1a: the original wording assumed a `pnpm db:start` step that the Testcontainers design

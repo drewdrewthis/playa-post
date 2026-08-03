@@ -28,8 +28,9 @@ pnpm build                   # web + BOTH server bundles
 pnpm build:server:node       # Node/tsup target
 pnpm build:server:cloudflare # workerd target — ADR-0001 keeps the choice reversible
 pnpm test:unit               # no infrastructure
-pnpm test:integration        # Testcontainers Postgres 16; needs docker running
-pnpm test                    # both projects
+pnpm test:integration        # Testcontainers Postgres 17; needs docker running
+pnpm test:security           # ADR-0002 bypass suite; needs docker running
+pnpm test                    # all three projects
 ```
 
 CI runs exactly these, in this order, on every PR.
@@ -42,7 +43,7 @@ supabase db reset  # replay every migration from scratch
 ```
 
 Integration tests do **not** need this. `startPostgresTestDatabase()` from
-`@playa-post/testing` boots its own throwaway `postgres:16`, applies
+`@playa-post/testing` boots its own throwaway `postgres:17`, applies
 `supabase/migrations` by default, and exposes `truncateAllTables()` for between-test
 reset — so `pnpm test:integration` runs from a cold clone with only Docker.
 
