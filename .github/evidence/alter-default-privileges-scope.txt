@@ -1,0 +1,65 @@
+Script started on 2026-08-02 21:24:55+00:00 [COMMAND="/tmp/claude-1000/-home-ubuntu-Projects-playa-post/a722686e-4c9a-487a-b0eb-7a79fe12a7d9/scratchpad/adp-repro.sh" <not executed on terminal>]
+postgres:17 ready
+PostgreSQL 17.10 (Debian 17.10-1.pgdg13+1) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+
+==============================================================
+SETUP: owner role + two schemas
+==============================================================
+CREATE ROLE
+CREATE SCHEMA
+CREATE SCHEMA
+
+==============================================================
+A. SCHEMA-SCOPED form (ADR-0002 §3 as originally written)
+==============================================================
+ALTER DEFAULT PRIVILEGES
+-- pg_default_acl after the schema-scoped revoke:
+ scope | defaclobjtype | defaclacl 
+-------+---------------+-----------
+(0 rows)
+
+
+==============================================================
+B. GLOBAL form (no IN SCHEMA) — what the migration ships
+==============================================================
+ALTER DEFAULT PRIVILEGES
+-- pg_default_acl after the global revoke:
+ scope | defaclobjtype |           defaclacl           
+-------+---------------+-------------------------------
+ -     | f             | {app_migrator=X/app_migrator}
+(1 row)
+
+
+==============================================================
+OBSERVED EFFECT on functions created afterwards, by app_migrator
+==============================================================
+SET
+CREATE FUNCTION
+CREATE FUNCTION
+RESET
+                  fn                   | public_can_execute 
+---------------------------------------+--------------------
+ scoped.f  (schema-scoped revoke only) | f
+ global_.f (global revoke in force)    | f
+(2 rows)
+
+
+==============================================================
+CONTROL: drop the global row, recreate under the scoped rule only
+==============================================================
+ALTER DEFAULT PRIVILEGES
+SET
+DROP FUNCTION
+CREATE FUNCTION
+RESET
+                           fn                            | public_can_execute 
+---------------------------------------------------------+--------------------
+ scoped.f recreated, schema-scoped revoke still declared | t
+(1 row)
+
+
+CONCLUSION: the IN SCHEMA form parses, reports ALTER DEFAULT PRIVILEGES,
+stores no catalog row, and leaves PUBLIC able to execute. Only the global
+form removes the hard-wired PUBLIC EXECUTE default.
+
+Script done on 2026-08-02 21:24:57+00:00 [COMMAND_EXIT_CODE="0"]

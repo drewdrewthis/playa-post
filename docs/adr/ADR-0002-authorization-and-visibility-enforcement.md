@@ -2,7 +2,9 @@
 
 - **Status:** proposed
 - **Date:** 2026-07-30 (revised 2026-07-30 after devil's-advocate stress test —
-  `docs/engineering/reviews/2026-07-30-adr-0002-stress-test.md`, verdict *sound-with-changes*)
+  `docs/engineering/reviews/2026-07-30-adr-0002-stress-test.md`, verdict *sound-with-changes*;
+  §3's `ALTER DEFAULT PRIVILEGES` statement corrected 2026-08-02 when M1b.2 implemented it and
+  measured it doing nothing — decision unchanged, see the note in §3)
 - **Drivers:** addendum §15 (explicitly requires this ADR), §9, §16, §21; PDF §5 "Visibility, Safety, and Moderation", §6, §8 "Security architecture"
 
 ## Context
@@ -64,11 +66,30 @@ REVOKE ALL ON ALL TABLES    IN SCHEMA app    FROM anon, authenticated, PUBLIC;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA app    FROM anon, authenticated, PUBLIC;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA app    FROM anon, authenticated, PUBLIC;
 REVOKE ALL ON ALL ROUTINES  IN SCHEMA app    FROM anon, authenticated, PUBLIC;
-ALTER DEFAULT PRIVILEGES FOR ROLE app_migrator IN SCHEMA app
-  REVOKE ALL ON TABLES, SEQUENCES, FUNCTIONS, ROUTINES, TYPES FROM anon, authenticated, PUBLIC;
+
+-- One object type per statement, and deliberately NOT `IN SCHEMA app` — see below.
+ALTER DEFAULT PRIVILEGES FOR ROLE app_migrator REVOKE ALL ON TABLES    FROM anon, authenticated, PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE app_migrator REVOKE ALL ON SEQUENCES FROM anon, authenticated, PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE app_migrator REVOKE ALL ON FUNCTIONS FROM anon, authenticated, PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE app_migrator REVOKE ALL ON ROUTINES  FROM anon, authenticated, PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE app_migrator REVOKE ALL ON TYPES     FROM anon, authenticated, PUBLIC;
 ```
 
-Three things this spells out deliberately:
+> **Corrected 2026-08-02 (M1b.2).** This block previously read
+> `ALTER DEFAULT PRIVILEGES … IN SCHEMA app REVOKE ALL ON TABLES, SEQUENCES, FUNCTIONS, ROUTINES,
+> TYPES …` as a single statement. That text was wrong twice, and the second way was silent:
+> PostgreSQL's grammar takes one object type per statement, and **the `IN SCHEMA` form cannot revoke
+> a hard-wired default at all.** `get_user_default_acl()` treats a per-schema `pg_default_acl` row as
+> *additive* — it starts from the hard-wired default and merges the row in — so a schema-scoped entry
+> can only ever grant more. A global row (`defaclnamespace = 0`) replaces the hard-wired default
+> outright, which is the only way to express "PUBLIC gets nothing". Measured on `postgres:17`: with
+> the `IN SCHEMA` form PostgreSQL stores no catalog row, reports `ALTER DEFAULT PRIVILEGES`, and a
+> function created afterwards is still `PUBLIC`-executable. Evidence:
+> `.github/evidence/alter-default-privileges-scope.txt`; the regression that catches it is case (h)
+> in `.github/evidence/security-suite-falsification.txt`. The decision is unchanged — only the
+> statement that implements it.
+
+Four things this spells out deliberately:
 
 - **Functions.** PostgreSQL grants `EXECUTE` on new functions to `PUBLIC` **by default**. Without the
   function revoke *and* the default-privilege revoke, every new `app.visible_*` function is
@@ -78,7 +99,13 @@ Three things this spells out deliberately:
   Omitting it fails inserts at deploy time, and the field fix under pressure is `GRANT ALL`.
 - **`ALTER DEFAULT PRIVILEGES` is per-creating-role.** It must be declared `FOR ROLE app_migrator`.
   If anything else ever creates an object in `app`, the defaults do not apply — the same hole as
-  ownership drift, and caught by the same assertion (B3).
+  ownership drift, and caught by the same assertion (B3). `FOR ROLE` is what keeps the global form
+  narrow: it binds only to objects that role creates, and `app_migrator` creates objects only in `app`.
+- **The default-privilege revokes are asserted behaviourally, not by reading `pg_default_acl`.** B3
+  creates a function, a type, a table and a sequence as `app_migrator` inside a rolled-back
+  transaction and asserts `anon`, `authenticated` and `PUBLIC` hold nothing on them. A catalog-row
+  assertion would have passed against the broken statement above, because the broken statement's
+  distinguishing symptom is the *absence* of a row.
 
 ### 4. RLS backstop — the exact policy shape
 
