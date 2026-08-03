@@ -27,6 +27,11 @@ export interface DatabaseConnectionOptions {
    * the owner or as a superuser silently disables `FORCE ROW LEVEL SECURITY` for
    * every query the application makes, and nothing else in the system would
    * notice.
+   *
+   * Give it a **complete** URI. `pg` fills anything the URI omits from `PGUSER`,
+   * `PGPASSWORD`, `PGHOST` and friends, so a URI without a role does not fail —
+   * it connects as whatever the environment happens to name, which is the one
+   * outcome this parameter exists to prevent.
    */
   readonly connectionString: string;
   /** Pool ceiling. Omitted or `undefined` → {@link DEFAULT_MAX_CONNECTIONS}. */
