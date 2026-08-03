@@ -1,0 +1,18 @@
+{
+  "name": "@playa-post/observability",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/sdk-trace-base": "2.10.0",
+    "pino": "10.3.1"
+  }
+}
