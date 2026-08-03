@@ -122,6 +122,19 @@ COMMENT ON POLICY app_rw_full_access ON app.<t> IS
   'Intentionally unconditional. Viewer-scoped authorization lives in the application layer (ADR-0002).';
 ```
 
+**A migration does not write the block above.** The shape is applied by
+`app.apply_rls_backstop(regclass)`, defined in the security baseline migration; the SQL above is what
+it *emits*, not what a migration writes. A product-table migration writes one line:
+
+```sql
+SELECT app.apply_rls_backstop('app.<t>');
+```
+
+The verbatim block stays here as the **asserted contract** — B3 reads the catalog, so a table that
+never calls the helper fails exactly as loudly as one that calls it and then drifts. Keeping the four
+statements as copy-paste guidance is what the helper exists to prevent: every clause below is
+load-bearing, and a reviewer who does not know that drops one.
+
 Every clause is load-bearing:
 
 - **`FORCE`** — without it the table owner (`app_migrator`, and any object that drifts to `postgres`
@@ -338,7 +351,7 @@ decisions 2 and 4 sit inert. ADR-0001 spike criterion S3a covers the same ground
 | Q2 | **`SECURITY DEFINER` allowlist governance.** B4 makes the allowlist the escape hatch. | Additions require a CODEOWNERS review, a `SET search_path`, and an explicit test. The operator model (§8) exists so the allowlist is not the default answer to "I need a cross-viewer read". |
 | Q3 | **Telemetry and tracing.** PDF §6 forbids sensitive content in "logs, analytics, queue payloads, or exception traces"; nothing yet forbids a span attribute carrying a `viewerId`+`ghost_id` pair or a bulletin body in an error trace. | Covered by the observability redaction allowlist (plan M1.7) and asserted over a **captured trace**, not only over log lines. Recorded in the repo DoD (`docs/engineering/repo-map.md`). |
 | Q4 | **Audit scope.** Neither the addendum nor the PDF enumerates audited events. | v1 audits: blocking, report creation and resolution, erasure execution, every operator read (§8) and operator action, and invitation issuance and revocation. |
-| Q5 | **`app_migrator` credential handling.** It owns every table; a leaked migrator credential would bypass RLS absent `FORCE` — which is why `FORCE` is mandatory in §4. | Stored in the deploy platform's secret store, usable only by the migration job, rotated on any suspicion. Break-glass is a two-person operation documented in `docs/procedures/operations.md` (plan M4.9). |
+| Q5 | **`app_migrator` credential handling.** It owns every table; a leaked migrator credential would bypass RLS absent `FORCE` — which is why `FORCE` is mandatory in §4. | Stored in the deploy platform's secret store, usable only by the migration job, rotated on any suspicion. Break-glass is a two-person operation documented in `docs/procedures/operations.md` (plan M4.9). **Recorded deviation (M1b.2):** the baseline migration grants the migration runner `SET` on `app_migrator` (`GRANT app_migrator TO <runner> WITH SET OPTION`) and does **not** revoke it afterwards, so on Supabase the console `postgres` role keeps a standing `SET ROLE` path into the schema owner. Two reasons it stays: every subsequent product-table migration needs the same right, so revoking it at the end of this file would only mean re-granting it in the next one; and `postgres` is CREATEROLE and already holds ADMIN OPTION on `app_migrator` from having created it, so it can re-grant itself `SET` at will — revoking would remove the audit trail, not the capability. The real containment is that `app_migrator` is `NOBYPASSRLS` and that B18 asserts the deployed API connects as `app_rw`, never as `postgres`. |
 
 ## Verification
 

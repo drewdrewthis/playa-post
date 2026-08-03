@@ -10,12 +10,18 @@ import { defineConfig } from 'vitest/config';
  *                   only place SQL correctness can actually be proven.
  * - `security`    — the ADR-0002 bypass suite. Same Testcontainers cost as
  *                   `integration`, kept separate because it is a **control**, not a
- *                   test suite: it has its own CI job so it can never be skipped as
- *                   part of "the slow tests", and its own manifest gate.
+ *                   test suite: it has its own script and CI step, and its own
+ *                   manifest gate. Its own *job* lands with M1b.5 (ten named jobs +
+ *                   branch protection) — today it is a step inside `verify`, so it
+ *                   shares that job's failure domain.
  *
- * The suffix (`*.unit.test.ts` / `*.integration.test.ts` / `*.security.test.ts`) is
- * the selector, so a test's cost is visible in its filename and a new module needs
- * no config change.
+ * `unit` and `integration` select on the suffix alone, so a test's cost is visible in
+ * its filename and a new module needs no config change. `security` is scoped to
+ * `tests/security/**` as well, deliberately: the suite is a checked-in control with a
+ * manifest, not a pattern any package may opt into. ⚠ The cost of that choice is that
+ * a `*.security.test.ts` written under `apps/` or `packages/` never runs — if that
+ * ever becomes a real place to put one, widen the include rather than assuming the
+ * suffix was enough.
  */
 export default defineConfig({
   test: {
