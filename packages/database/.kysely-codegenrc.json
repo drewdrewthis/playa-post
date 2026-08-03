@@ -1,0 +1,7 @@
+{
+  "dialect": "postgres",
+  "envFile": null,
+  "includePattern": "app.*",
+  "outFile": "src/schema.ts",
+  "url": "env(DATABASE_URL)"
+}

@@ -18,6 +18,8 @@
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
+    "db:migrate": "supabase migration up",
+    "db:types": "DATABASE_URL=\"$(supabase status -o env | grep '^DB_URL=' | cut -d'\"' -f2)\" pnpm --filter @playa-post/database db:types",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",

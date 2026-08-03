@@ -87,10 +87,11 @@ PR that introduces the code they bind to — `no-container-outside-composition` 
 `no-sql-outside-persistence` with the first repository. A rule configured against nothing is the empty
 abstraction §4 forbids, and it reports green forever.
 
-Likewise the `db:*`, `test:security`, and `test:e2e` commands below: they arrive with M1b.1, M1b.3, and
-M4 respectively. Working today: `pnpm install/dev/build/build:web/build:server:node/typecheck/lint/
-boundaries/test/test:unit/test:integration`. The script is `pnpm boundaries` — one name, no alias; the
-CI *job* that runs it is named `lint:boundaries`.
+Of the commands below, only `test:e2e` is still absent — it arrives with M4. Everything else works
+today: `pnpm install/dev/build/build:web/build:server:node/typecheck/lint/boundaries/test/test:unit/
+test:integration/test:security` plus the `db:*` family
+(`db:start/db:stop/db:reset/db:migrate/db:types`, completed by M1b.1). The script is `pnpm boundaries`
+— one name, no alias; the CI *job* that runs it is named `lint:boundaries`.
 
 Cross-module interaction goes through: a small public application interface, a published event, a shared
 contract with clear ownership, or a coordinating application service. Never a direct reach-in.
@@ -118,7 +119,8 @@ the job. Read ADR-0002 before touching anything in `tests/security/`.
 ```bash
 pnpm install
 pnpm db:start          # local Supabase
-pnpm db:reset          # apply migrations + seed
+pnpm db:reset          # drop, re-apply every migration, re-seed
+pnpm db:migrate        # or: apply only the migrations not yet applied
 pnpm db:types          # regenerate Kysely types (checked in; CI fails on drift)
 pnpm dev               # web + server
 ```
