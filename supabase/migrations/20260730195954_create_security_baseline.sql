@@ -213,17 +213,23 @@ as $$
 declare
   qualified_name text := target_table::text;
   schema_name text;
+  relation_kind "char";
 begin
-  select n.nspname
-    into schema_name
+  select n.nspname, c.relkind
+    into schema_name, relation_kind
     from pg_catalog.pg_class c
     join pg_catalog.pg_namespace n on n.oid = c.relnamespace
    where c.oid = target_table;
 
-  if schema_name is distinct from 'app' then
+  -- Both halves fail loudly and by name. Without the relkind half a view or
+  -- materialized view passes the schema check and dies inside `alter table` with a
+  -- generic PostgreSQL error that says nothing about this function or ADR-0002 —
+  -- and RLS on a view is not the backstop anyway, it is a different control.
+  if schema_name is distinct from 'app' or relation_kind is distinct from 'r' then
     raise exception
-      'apply_rls_backstop: % is not in schema app; product tables live in app (ADR-0002 §1)',
-      qualified_name;
+      'apply_rls_backstop: % is not an ordinary table in schema app '
+      '(schema %, relkind %); product tables live in app (ADR-0002 §1)',
+      qualified_name, coalesce(schema_name, '<unknown>'), coalesce(relation_kind, '?');
   end if;
 
   execute format('alter table %s enable row level security', qualified_name);
@@ -277,12 +283,34 @@ select app.apply_rls_backstop('app.security_baseline_canary');
 -- likely to ship with.
 grant select, insert, update, delete on table app.security_baseline_canary to app_rw;
 
+-- Schema `app` would otherwise contain no sequence at all until M2's first
+-- identity column, which leaves B3's "no privilege on any sequence" branch
+-- quantifying over an empty set — green, and asserting nothing. This is the
+-- sequence half of the same argument the canary table makes for tables.
+--
+-- It also pins the grant ADR-0002 §3 singles out: a `bigserial`/identity column
+-- needs USAGE **and** SELECT on its sequence or inserts fail at deploy time, and
+-- the field fix under pressure is `GRANT ALL`. Copy this line, not that one.
+create sequence app.security_baseline_canary_seq;
+
+comment on sequence app.security_baseline_canary_seq is
+  'Holds no state. Exists so B3 quantifies over at least one sequence before M2 '
+  'has identity columns. Drop it with the canary table.';
+
+grant usage, select on sequence app.security_baseline_canary_seq to app_rw;
+
 --------------------------------------------------------------------------------
 -- 6. Sweep (ADR-0002 §3)
 --------------------------------------------------------------------------------
 
--- The default-privilege revokes above cover objects created from here on. These
--- cover the objects this migration just created, and anything that predates it.
+-- The default-privilege revokes above cover objects created from here on; these
+-- cover the objects this migration just created.
+--
+-- They do NOT clean up after a prior owner: a REVOKE only removes grants made by
+-- the revoking role, and this runs as app_migrator. A grant made by someone else
+-- before this migration ran survives it — which is B3's job to catch, not this
+-- sweep's to fix. B3 asserts the end state from the catalog, so it fails on such a
+-- grant regardless of who made it.
 revoke all on all tables in schema app from anon, authenticated, public;
 revoke all on all sequences in schema app from anon, authenticated, public;
 revoke all on all functions in schema app from anon, authenticated, public;

@@ -51,6 +51,7 @@ will fail in CI and in production.
 | **Never edit a migration that has been merged** | It has already run somewhere. Write a new one. |
 | **Forward-only** | No down-migrations. Reversing a schema change is a new migration written deliberately, not an auto-generated guess. |
 | **Product tables go in schema `app`** | `app` is not exposed to PostgREST (see `../config.toml`), which is the first layer of ADR-0002's authorization model. |
+| **`app_migrator` must never create objects outside schema `app`** | Its default-privilege revokes are declared per-role and **globally**, not `IN SCHEMA app` — the schema-scoped form cannot revoke a hard-wired default at all (ADR-0002 §3). The cost of the form that works is reach: anything `app_migrator` creates elsewhere, e.g. a `CREATE EXTENSION` landing in `public`, silently loses its `PUBLIC` grants too. Create outside `app` as a different role. |
 | **RLS on, deny-by-default, on every product table** | The backstop for when application-side authorization has a bug. Enabling it later means auditing every table at once. |
 | **Visibility logic goes in checked-in SQL functions, not in the app** | Addendum §15: visibility is enforced before data leaves the database, and §9: all SQL lives in a repository, a query, a checked-in `.sql` file, or a migration. |
 | **A schema change ships with its integration test** | Addendum §25. `packages/testing` runs this directory against a throwaway Postgres 17 container, so the test is cheap. |
