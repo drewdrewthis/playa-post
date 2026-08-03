@@ -53,23 +53,24 @@ describe('ADR-0002 B-row manifest', () => {
       expect(existsSync(provenBy), `${id} claims proof in ${row.provenBy}, which does not exist`).toBe(
         true,
       );
+      // Word-boundary, not substring: `toContain('B1')` is satisfied by any file that
+      // happens to mention B10-B18, and `toContain('B4')` by a mention of B14. That
+      // turns the promotion gate into a coincidence check.
       expect(
         readFileSync(provenBy, 'utf8'),
         `${id} claims proof in ${row.provenBy}, which never mentions ${id}`,
-      ).toContain(id);
+      ).toMatch(new RegExp(`\\b${id}\\b`));
     });
   });
 
   it('reports the live/pending split so a shrinking suite is visible in the log', () => {
     const live = manifest.filter((row) => row.status === 'live').map((row) => row.id);
-    const pending = manifest.filter((row) => row.status === 'pending').map((row) => row.id);
+    const pending = manifest.filter((row) => row.status === 'pending');
 
-    // Not a redundant restatement of the per-row checks: this is the one line a human
-    // reads to see the control's current size. It is deliberately exact, so promoting a
-    // row to `live` is a visible diff here and not just a JSON edit.
-    expect({ live, pending: pending.length }).toEqual({
-      live: ['B1', 'B3', 'B4'],
-      pending: 15,
-    });
+    // The live list is pinned; the pending count is *derived*, so promoting a row is a
+    // one-line diff here rather than two edits that can disagree. Pinning both would
+    // let a promotion land with the count still reading 15 and nothing complaining.
+    expect(live).toEqual(['B1', 'B3', 'B4']);
+    expect(pending).toHaveLength(B_ROW_IDS.length - live.length);
   });
 });

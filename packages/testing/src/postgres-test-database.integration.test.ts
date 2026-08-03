@@ -5,6 +5,7 @@ import { join, sep } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  POSTGRES_TEST_IMAGE,
   REPOSITORY_MIGRATIONS_DIRECTORY,
   startPostgresTestDatabase,
   type PostgresTestDatabase,
@@ -30,12 +31,16 @@ describe('startPostgresTestDatabase', () => {
       await database?.stop();
     });
 
-    it('boots Postgres 17 and yields a connection that answers queries', async () => {
+    it('boots the pinned Postgres major and yields a connection that answers queries', async () => {
       const { rows } = await database.client.query<{ version: string }>(
         'select version() as version',
       );
 
-      expect(rows[0]?.version).toContain('PostgreSQL 17');
+      // Derived from the constant rather than restating the number: a literal here is
+      // a third place the major version has to be bumped, and the one most likely to
+      // be missed because it only fails once a container has booted.
+      const major = POSTGRES_TEST_IMAGE.split(':')[1];
+      expect(rows[0]?.version).toContain(`PostgreSQL ${major}`);
       expect(database.connectionString).toMatch(/^postgres(ql)?:\/\//);
     });
 

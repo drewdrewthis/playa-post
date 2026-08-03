@@ -59,6 +59,32 @@ describe('ADR-0002 security baseline', () => {
   }
 
   /**
+   * Functions in `app`, keyed by `regprocedure` so the argument types are part of the
+   * identity.
+   *
+   * Bare `proname` would make the SECURITY DEFINER allowlist grant blanket amnesty to
+   * every future overload of an allowlisted name — the exact unreviewed addition the
+   * allowlist exists to prevent.
+   *
+   * @param definerOnly restrict to `SECURITY DEFINER` functions (ADR-0002 B4).
+   */
+  async function listAppFunctions(
+    { definerOnly = false }: { definerOnly?: boolean } = {},
+  ): Promise<readonly { signature: string; config: string }[]> {
+    const { rows } = await database.client.query<{ signature: string; config: string }>(
+      `select p.oid::regprocedure::text                       as signature,
+              coalesce(array_to_string(p.proconfig, ', '), '') as config
+         from pg_catalog.pg_proc p
+         join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'app'
+          and (not $1::boolean or p.prosecdef)
+        order by 1`,
+      [definerOnly],
+    );
+    return rows;
+  }
+
+  /**
    * Run `statement` as `role` inside a transaction that is always rolled back, and
    * report the SQLSTATE it raised.
    *
@@ -293,6 +319,30 @@ describe('ADR-0002 security baseline', () => {
       expect(rows).toEqual([]);
     });
 
+    it('quantifies over a non-empty set of each object kind it claims to check', async () => {
+      // Same argument as B1's table-count guard, for the other three branches of the
+      // query above: `where <leak condition>` over zero rows returns zero rows, so a
+      // bug in the sequence or function branch would pass silently until M2 created
+      // the first object of that kind. The canary table and canary sequence exist to
+      // keep this honest.
+      const { rows } = await database.client.query<{ kind: string; count: string }>(
+        `select 'table' as kind, count(*)::text as count
+           from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+          where n.nspname = 'app' and c.relkind = 'r'
+         union all
+         select 'sequence', count(*)::text
+           from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+          where n.nspname = 'app' and c.relkind = 'S'
+         union all
+         select 'function', count(*)::text
+           from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'app'
+          order by 1`,
+      );
+
+      expect(rows.filter((row) => row.count === '0')).toEqual([]);
+    });
+
     it('leaves objects created later just as locked down', async () => {
       // The forward guarantee, asserted behaviourally rather than by reading
       // pg_default_acl — because `ALTER DEFAULT PRIVILEGES ... IN SCHEMA app REVOKE
@@ -356,77 +406,66 @@ describe('ADR-0002 security baseline', () => {
     });
   });
 
+  describe('B3 — apply_rls_backstop refuses what it cannot back up', () => {
+    it.each([
+      ['a table outside schema app', 'public.outside_app', 'create table public.outside_app (id int)'],
+      ['a view, which alter table cannot enable RLS on', 'app.canary_view', 'create view app.canary_view as select 1 as one'],
+    ])('raises a named exception for %s', async (_label, target, ddl) => {
+      // The guard clause is the only thing standing between a mistyped call and a
+      // migration that half-applies the backstop, so it needs its own coverage: an
+      // uncovered guard is a guard nobody has watched fire.
+      // Created as the connected superuser rather than app_migrator: PostgreSQL 15
+      // removed PUBLIC's CREATE on `public`, so the out-of-schema case would fail on
+      // the CREATE instead of reaching the guard. `apply_rls_backstop` is SECURITY
+      // INVOKER, so the guard fires the same either way.
+      const { client } = database;
+      await client.query('begin');
+      try {
+        await client.query(ddl);
+        await expect(
+          client.query(`select app.apply_rls_backstop('${target}')`),
+        ).rejects.toThrow(/apply_rls_backstop: .* is not an ordinary table in schema app/);
+      } finally {
+        await client.query('rollback');
+      }
+    });
+  });
+
   describe('B4 — no unallowlisted SECURITY DEFINER function in app', () => {
     it('has no SECURITY DEFINER function outside the checked-in allowlist', async () => {
       const allowlist = loadSecurityDefinerAllowlist();
-      const { rows } = await database.client.query<{ function_name: string; config: string }>(
-        `select quote_ident(n.nspname) || '.' || quote_ident(p.proname) as function_name,
-                coalesce(array_to_string(p.proconfig, ', '), '') as config
-           from pg_catalog.pg_proc p
-           join pg_catalog.pg_namespace n on n.oid = p.pronamespace
-          where n.nspname = 'app' and p.prosecdef
-          order by 1`,
-      );
+      const definers = await listAppFunctions({ definerOnly: true });
 
       // A definer function bypasses the caller's privileges, so one bug in one of
       // these is total. Adding one is a reviewed act, not a line in a migration
       // (ADR-0002 B4, Q2).
-      expect(rows.map((row) => row.function_name).filter((name) => !allowlist.includes(name))).toEqual(
-        [],
-      );
-    });
-
-    it('requires every allowlisted definer to pin its search_path', async () => {
-      const allowlist = loadSecurityDefinerAllowlist();
-      if (allowlist.length === 0) {
-        // Vacuous by construction, and correctly so — but say it out loud rather than
-        // reporting a green assertion over nothing.
-        expect(allowlist).toEqual([]);
-        return;
-      }
-
-      const { rows } = await database.client.query<{ function_name: string; config: string }>(
-        `select quote_ident(n.nspname) || '.' || quote_ident(p.proname) as function_name,
-                coalesce(array_to_string(p.proconfig, ', '), '') as config
-           from pg_catalog.pg_proc p
-           join pg_catalog.pg_namespace n on n.oid = p.pronamespace
-          where n.nspname = 'app' and p.prosecdef
-          order by 1`,
-      );
-
-      expect(rows.filter((row) => !row.config.includes('search_path='))).toEqual([]);
+      expect(
+        definers.map((row) => row.signature).filter((signature) => !allowlist.includes(signature)),
+      ).toEqual([]);
     });
 
     it('rejects an allowlist entry naming a function that does not exist', async () => {
       const allowlist = loadSecurityDefinerAllowlist();
-      const { rows } = await database.client.query<{ function_name: string }>(
-        `select quote_ident(n.nspname) || '.' || quote_ident(p.proname) as function_name
-           from pg_catalog.pg_proc p
-           join pg_catalog.pg_namespace n on n.oid = p.pronamespace
-          where n.nspname = 'app'`,
-      );
-      const existing = new Set(rows.map((row) => row.function_name));
+      const existing = new Set((await listAppFunctions()).map((row) => row.signature));
 
-      // A stale allowlist pre-authorizes a future function that nobody reviewed.
-      expect(allowlist.filter((name) => !existing.has(name))).toEqual([]);
+      // A stale allowlist pre-authorizes a future function that nobody reviewed. It
+      // is keyed by signature, so allowlisting `app.claim_invite(uuid)` does not
+      // silently pre-authorize a later `app.claim_invite(uuid, text)` overload.
+      expect(allowlist.filter((signature) => !existing.has(signature))).toEqual([]);
     });
   });
 
   describe('ADR-0002 §5 — every function in app pins its search_path', () => {
     it('leaves no function whose meaning a caller can change', async () => {
-      const { rows } = await database.client.query<{ function_name: string; config: string }>(
-        `select quote_ident(n.nspname) || '.' || quote_ident(p.proname) as function_name,
-                coalesce(array_to_string(p.proconfig, ', '), '') as config
-           from pg_catalog.pg_proc p
-           join pg_catalog.pg_namespace n on n.oid = p.pronamespace
-          where n.nspname = 'app'
-          order by 1`,
-      );
+      const functions = await listAppFunctions();
 
-      // Without `SET search_path`, a caller's search_path decides which `bulletins` a
-      // function body means. Under a transaction-mode pooler that is not a
-      // theoretical risk (ADR-0002 §5).
-      expect(rows.filter((row) => !row.config.includes('search_path='))).toEqual([]);
+      // Deliberately over *every* function, not only the SECURITY DEFINER ones: this
+      // is a superset of the search_path rule B4 would otherwise assert on allowlisted
+      // definers, so B4 does not restate it. Without `SET search_path`, a caller's
+      // search_path decides which `bulletins` a function body means — under a
+      // transaction-mode pooler that is not a theoretical risk (ADR-0002 §5).
+      expect(functions).not.toHaveLength(0);
+      expect(functions.filter((row) => !row.config.includes('search_path='))).toEqual([]);
     });
   });
 });

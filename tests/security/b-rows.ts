@@ -92,8 +92,11 @@ export function loadBRowManifest(): readonly BRow[] {
 }
 
 /**
- * The SECURITY DEFINER functions ADR-0002 B4 permits in schema `app`, as
- * schema-qualified `identity_arguments`-free names (e.g. `app.claim_invite`).
+ * The SECURITY DEFINER functions ADR-0002 B4 permits in schema `app`, as full
+ * `regprocedure` signatures (e.g. `app.claim_invite(uuid)`).
+ *
+ * The argument list is part of the key on purpose: keyed by bare name, allowlisting
+ * one function would silently pre-authorize every later overload of that name.
  *
  * @throws if the file is unreadable or is not an object with a `functions` array
  *   of strings.

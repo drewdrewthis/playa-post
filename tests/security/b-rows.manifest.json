@@ -33,14 +33,14 @@
     {
       "id": "B3",
       "title": "Full policy-shape and privilege assertion",
-      "assertion": "For every table in `app`: relrowsecurity, relforcerowsecurity, relowner = app_migrator, and exactly one pg_policies row `app_rw_full_access` / PERMISSIVE / {app_rw} / ALL / qual true / with_check null-or-true. Plus app_rw is not super, cannot bypass RLS, and holds no pg_auth_members row; plus the ADR-0002 §3 revoke set is in force.",
+      "assertion": "For every table in `app`: relrowsecurity, relforcerowsecurity, relowner = app_migrator, and exactly one pg_policies row `app_rw_full_access` / PERMISSIVE / {app_rw} / ALL / qual true / with_check true. Plus app_rw is not super, cannot bypass RLS, and holds no pg_auth_members row; plus the ADR-0002 §3 revoke set is in force.",
       "status": "live",
       "provenBy": "tests/security/baseline-catalog.security.test.ts"
     },
     {
       "id": "B4",
       "title": "No unallowlisted SECURITY DEFINER function in app",
-      "assertion": "No SECURITY DEFINER function exists in `app` unless listed in `security-definer-allowlist.json`; allowlisted definers must carry `SET search_path`.",
+      "assertion": "No SECURITY DEFINER function exists in `app` unless listed in `security-definer-allowlist.json`, keyed by full `regprocedure` signature so an allowlisted name does not pre-authorize its future overloads; a stale entry naming no live function fails too. The `SET search_path` requirement is asserted over every function in `app` by the ADR-0002 section 5 test in the same file, which is a superset.",
       "status": "live",
       "provenBy": "tests/security/baseline-catalog.security.test.ts"
     },
