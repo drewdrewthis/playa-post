@@ -45,6 +45,13 @@ infrastructure adapters, so moving hosts is a change to `main.ts`, `http-server.
 and `render.yaml`, never to a module. A new hosting target is a new ADR, not a new
 build script.
 
+That guarantee is **Node-host** portability (Render → Railway → Fly → a container),
+not edge-runtime portability. Nothing proves this tree would run under `workerd`
+any more. Need a domain service to make randomness, read a file, or open a socket?
+Declare the port in `domain/` and let an adapter import `node:crypto` — the
+boundary rule fails the build otherwise, and that rule is now the only thing
+checking it.
+
 `render.yaml` at the repo root is the service definition. Its `healthCheckPath`
 must equal `HEALTH_PATH` in `apps/server/src/entrypoints/http/health.ts`;
 `health.unit.test.ts` fails if they drift, because a mismatch breaks a deploy
@@ -63,7 +70,7 @@ architecture-addendum §19.
 
 | Rule | What it stops |
 |---|---|
-| `no-domain-to-infrastructure` | `modules/*/domain/` importing persistence, entrypoints, composition, or tRPC/Supabase/Kysely/pg/Fastify/pino/React |
+| `no-domain-to-infrastructure` | `modules/*/domain/` **and** `modules/*/application/` importing its own module's persistence, entrypoints, composition, a **Node builtin** (`node:crypto`, `fs`, …), or tRPC/Supabase/Kysely/pg/Fastify/pino/React |
 | `no-application-to-transport` | `modules/*/application/` importing `transport/` or an entrypoint |
 | `no-transport-to-persistence` | `modules/*/transport/` importing a repository or a database client |
 | `no-web-to-server-internals` | `apps/web` importing anything under `apps/server` |

@@ -39,25 +39,57 @@ const SERVER_MODULE = 'apps/server/src/modules/[^/]+';
 const FORBIDDEN_IN_DOMAIN = '@trpc|@supabase|kysely|pg|fastify|pino|react|react-dom';
 const FORBIDDEN_IN_TRANSPORT = 'kysely|pg';
 
+/**
+ * Node's standard library. Forbidden in `domain/` and `application/` because a
+ * module that reaches for `node:crypto`, `node:fs`, or a socket is a module that
+ * has chosen a host — which is precisely the portability property ADR-0009 claims
+ * this rule protects, now that the second (`platform: 'neutral'`) bundle that used
+ * to fail on a Node builtin in module code is gone.
+ *
+ * The shape this forces is dependency inversion, not deprivation: declare the port
+ * in `domain/` (`TokenGenerator`, `Clock`) and implement it in an infrastructure
+ * adapter that may import `node:crypto` freely. M2's CSPRNG invite token
+ * (M2-AC17) is the first real instance.
+ *
+ * Both spellings are listed. `node:crypto` is what this repo writes, but bare
+ * `crypto` resolves to the same core module, and a boundary rule with a
+ * one-token bypass is the "green while enforcing nothing" failure the TypeScript 7
+ * pin already taught us to design against.
+ */
+const NODE_BUILTINS =
+  'assert|buffer|child_process|cluster|dgram|dns|events|fs|http|http2|https|inspector|module|net|os|path|perf_hooks|process|querystring|readline|repl|stream|string_decoder|timers|tls|tty|url|util|v8|vm|worker_threads|zlib|crypto';
+
 module.exports = {
   forbidden: [
     {
       name: 'no-domain-to-infrastructure',
       severity: 'error',
       comment:
-        'Addendum §2: the domain must not import tRPC, React, Kysely, Supabase clients, HTTP ' +
-        'request types, database row types, or logging implementations — nor its own module’s ' +
-        'persistence, entrypoints, or composition root. Infrastructure implements interfaces ' +
-        'defined by the domain; never the reverse. Define a repository interface in domain/ and ' +
-        'let persistence/ implement it.',
-      from: { path: `${SERVER_MODULE}/domain/` },
+        'Addendum §2: neither the domain nor an application service may import tRPC, React, ' +
+        'Kysely, Supabase clients, Fastify, a logging implementation, or a Node builtin — nor ' +
+        'its own module’s persistence, entrypoints, or composition root. Infrastructure ' +
+        'implements interfaces defined by the domain; never the reverse. Define the interface ' +
+        '(repository, TokenGenerator, Clock) in domain/ and let persistence/ or an adapter ' +
+        'implement it.',
+      // The name is the addendum §19 / M1-AC2 identifier and is kept stable, but the
+      // scope is domain AND application: an application service holding a Kysely
+      // handle or a `node:crypto` import has picked a database and a host just as
+      // surely as a domain entity would. Non-capturing group so `$1` below stays the
+      // module name.
+      from: { path: `apps/server/src/modules/([^/]+)/(?:domain|application)/` },
       to: {
         path: [
-          `${SERVER_MODULE}/persistence/`,
+          // Own module only. A reach into ANOTHER module's persistence is
+          // `no-cross-module-persistence`'s violation, and letting both rules fire on
+          // one import would make each look load-bearing while masking the other —
+          // which the fitness suite's "no rule masks another" assertion fails on.
+          'apps/server/src/modules/$1/persistence/',
           'apps/server/src/entrypoints/',
           'apps/server/src/composition/',
           `node_modules/(${FORBIDDEN_IN_DOMAIN})(/|$)`,
           `^(${FORBIDDEN_IN_DOMAIN})(/|$)`,
+          '^node:',
+          `^(${NODE_BUILTINS})$`,
         ],
       },
     },

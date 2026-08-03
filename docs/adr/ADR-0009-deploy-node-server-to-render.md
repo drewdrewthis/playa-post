@@ -46,12 +46,29 @@ free plan, defined by `render.yaml` at the repository root. It is the only serve
    function for a choice that no longer exists. Building a bundle for a runtime nobody will deploy to is
    not reversibility, it is maintenance of a fiction — the very thing addendum §4 calls an empty
    abstraction.
-3. **ADR-0001's structural rule 1 survives unchanged and is now the whole §22 guarantee.**
+3. **ADR-0001's structural rule 1 survives, and this PR makes it actually enforce what it claimed.**
    Runtime-specific code lives only under `apps/server/src/entrypoints/**` and infrastructure adapters;
-   nothing under `modules/*/application` or `modules/*/domain` may reference `node:*`, Fastify, or a
-   hosting provider's API. That rule is executable — `no-domain-to-infrastructure` in
-   `.dependency-cruiser.cjs` fails the build on a violation — and it, not the second bundle, is what
-   keeps the system deployable elsewhere without touching domain or application code.
+   nothing under `modules/*/domain` or `modules/*/application` may reference a Node builtin, Fastify, a
+   database client, or a hosting provider's API.
+
+   **State plainly what was traded away.** Until this ADR, the thing that actually failed when a Node
+   builtin reached module code was the `platform: 'neutral'` bundle — not the boundary rule, which had
+   no `node:` term and scoped `from` to `domain/` alone. Deleting that bundle without widening the rule
+   would have left "runtime code lives only in entrypoints" as an assertion nothing checked. So the rule
+   is widened here in the same PR: `no-domain-to-infrastructure` now covers `domain/` **and**
+   `application/`, and forbids Node's standard library in both, with fixtures under
+   `tests/fitness/__fixtures__/no-domain-to-infrastructure/` proving each case fails.
+
+   **What that buys, precisely — and what it does not.** It guarantees *Node-host* portability: moving
+   Render → Railway → Fly → a container is a diff to `main.ts`, `http-server.ts`, and `render.yaml`, and
+   the rule fails the build if a module quietly acquires a host dependency. It does **not** guarantee
+   edge-runtime portability. Nothing now proves the tree would run under `workerd`, and this ADR does not
+   claim it does; re-establishing that would mean re-adding a neutral-platform build, which is the
+   expensive half of the "new ADR" in the Reversibility section.
+
+   The shape the rule forces is dependency inversion, not deprivation: declare the port in `domain/`
+   (`TokenGenerator`, `Clock`) and let an adapter import `node:crypto`. M2's CSPRNG invite token
+   (M2-AC17) is the first real instance.
 4. **The service is infrastructure-as-code.** `render.yaml` declares the plan, region, Node version,
    build command, start command, and health check path. Secrets are never valued in it: a secret gets a
    `key` and `sync: false`, and its value is set in the Render dashboard (addendum §17).

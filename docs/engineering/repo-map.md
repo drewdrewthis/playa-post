@@ -69,7 +69,7 @@ Allowed: `Transport → Application → Domain ← Infrastructure`.
 
 | Rule | Meaning |
 |---|---|
-| `no-domain-to-infrastructure` | domain must not import tRPC, React, Kysely, Supabase, hosting-provider APIs, HTTP types, DB row types, or logging implementations |
+| `no-domain-to-infrastructure` | domain **and application** must not import tRPC, React, Kysely, Supabase, Fastify, a **Node builtin**, hosting-provider APIs, HTTP types, DB row types, or logging implementations |
 | `no-application-to-transport` | application services must not touch request/response objects |
 | `no-transport-to-persistence` | routers never call repositories or the database |
 | `no-web-to-server-internals` | `apps/web` may import `packages/contracts`, nothing else from the server |
