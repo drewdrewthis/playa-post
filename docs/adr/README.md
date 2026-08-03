@@ -14,7 +14,7 @@ later milestone must. ADR-0009 is the only one so far.
 | ADR | Title | Status |
 |-----|-------|--------|
 | [0001](ADR-0001-runtime-and-deployment-target.md) | Runtime and deployment target (Cloudflare Worker vs Node on Railway) | superseded by [0009](ADR-0009-deploy-node-server-to-render.md) |
-| [0002](ADR-0002-authorization-and-visibility-enforcement.md) | Authorization and visibility enforcement strategy | proposed (revised — core decision endorsed by stress test; bar is now B1–B18) |
+| [0002](ADR-0002-authorization-and-visibility-enforcement.md) | Authorization and visibility enforcement strategy | Accepted (revised — core decision endorsed by stress test; bar is now B1–B18) |
 | [0003](ADR-0003-dependency-injection.md) | Dependency injection via explicit factory composition | proposed |
 | [0004](ADR-0004-graph-traversal-and-visibility-queries.md) | Graph traversal and visibility queries | proposed |
 | [0005](ADR-0005-offline-sync-protocol.md) | Offline sync protocol, idempotency, and conflict rules | proposed |

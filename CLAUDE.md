@@ -166,6 +166,16 @@ to check reports green forever, which is worse than no rule at all.
 - **Integration tests need no `db:start`.** `startPostgresTestDatabase()` boots
   its own `postgres:17` and applies `supabase/migrations` by default; call
   `truncateAllTables()` in `beforeEach` rather than restarting the container.
+- **The security suite runs two harnesses, not one.** B1/B3/B4 are catalog facts
+  and use the database above; **B2 is about the REST layer**, so it uses
+  `startSupabaseRestTestStack()` — the same database plus Supabase's PostgREST,
+  started with the `[api] schemas` list read from `supabase/config.toml`
+  ([ADR-0010](docs/adr/ADR-0010-supabase-rest-security-harness.md)). Still no
+  `db:start`, still the same `test:security` job. That config list is an **input**
+  to the server under test, never the subject of an assertion — adding `"app"` to
+  it makes B2 red because the schema becomes reachable, which is the only version
+  of that check worth having. `POSTGREST_TEST_IMAGE` must be bumped **by hand**
+  when the Supabase CLI's PostgREST pin moves; nothing couples them.
 - **`packages/database/src/schema.ts` is generated and checked in.** Write a
   migration and you owe a `pnpm db:types` in the same commit; an integration test
   regenerates the file against Testcontainers and fails CI on any difference.

@@ -250,6 +250,17 @@ is infrastructure work with its own runtime cost and its own CI job shape, and b
 as a sub-bullet of "M1b remainder" is how it silently becomes M3's problem. **Give it a
 work item, a PR, and a decision on which of the two stacks before L1 starts.**
 
+> **Decided and shipped — [ADR-0010](../adr/ADR-0010-supabase-rest-security-harness.md).**
+> Neither of the two, in the end: a purpose-built **PostgREST-only** pair
+> (`startSupabaseRestTestStack()` in `@playa-post/testing`), started with the `[api] schemas`
+> list read from `supabase/config.toml`, with JWTs minted in-process. GoTrue was rejected
+> because PostgREST cannot distinguish its token from a locally-signed one, so it would cost
+> a container, the `auth` schema, and a sign-up flow to buy nothing the control asserts; the
+> CLI stack was rejected on PR #13's precedent ("eight containers and a new job"). **No CI
+> change at all** — it runs inside the existing `test:security` job. B2 is `live` in
+> `b-rows.manifest.json`. B16 (storage) is the next row on this surface and should extend
+> this stack rather than introduce a third.
+
 ### M2.2 — contracts, tRPC, `Actor`, `ViewerId`
 
 - `packages/contracts/src/index.ts` is currently a deliberately empty barrel and is the
