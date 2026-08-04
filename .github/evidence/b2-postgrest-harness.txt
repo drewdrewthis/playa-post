@@ -1,0 +1,317 @@
+Script started on 2026-08-03 23:58:18+00:00 [COMMAND="/tmp/claude-1000/-home-ubuntu-Projects-playa-post/a722686e-4c9a-487a-b0eb-7a79fe12a7d9/scratchpad/capture-b2-falsification.sh" <not executed on terminal>]
+
+
+===================== CONTEXT =====================
+
+3f404f5b810dc0d6f8d6efbcafdc981e2b5e4e64
+ M .github/evidence/README.md
+?? .github/evidence/b2-postgrest-harness.txt
+docker 29.5.3
+
+
+===================== BASELINE — the suite as committed, expected GREEN =====================
+
+[2m$ vitest run --project security[22m
+[?25l
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post/.worktrees/l0-b2-harness
+
+
+ Test Files  3 passed (3)
+      Tests  70 passed (70)
+   Start at  23:58:19
+   Duration  6.72s (transform 95ms, setup 0ms, import 918ms, tests 5.39s, environment 0ms)
+
+[?25hbaseline exit=0
+
+
+===================== CASE 1 — the protection B2 exists to enforce: expose schema app =====================
+
+mutated supabase/config.toml: added "app" to [api] schemas
+[1mdiff --git a/supabase/config.toml b/supabase/config.toml[m
+[1mindex 246d56b..42cd04c 100644[m
+[1m--- a/supabase/config.toml[m
+[1m+++ b/supabase/config.toml[m
+[36m@@ -16,7 +16,7 @@[m [mport = 54321[m
+ # reaches Postgres directly as a least-privileged role; there is no public REST[m
+ # surface over product data. Adding "app" to this list would hand every[m
+ # authenticated client direct table access and bypass every visibility function.[m
+[31m-schemas = ["public", "graphql_public"][m
+[32m+[m[32mschemas = ["public", "graphql_public", "app"][m
+ extra_search_path = ["public", "extensions"][m
+ max_rows = 1000[m
+ [m
+[2m$ vitest run --project security[22m
+[?25l
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post/.worktrees/l0-b2-harness
+
+ ❯ |security| tests/security/postgrest-schema-exposure.security.test.ts (14 tests | 6 failed) 3171ms
+       × answers as a server configured from supabase/config.toml, read back over HTTP 15ms
+       × anon: schema app addressed explicitly is refused (406 PGRST106) 4ms
+       × authenticated: schema app addressed explicitly is refused (406 PGRST106) 3ms
+       × service_role: schema app addressed explicitly is refused (406 PGRST106) 3ms
+       × refuses writes into app, not only reads 17ms
+       × refuses RPC into app, which is the other door into a schema 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |security| tests/security/postgrest-schema-exposure.security.test.ts > ADR-0002 B2 — PostgREST cannot reach schema app > harness credibility — every B2 assertion is void if one of these fails > answers as a server configured from supabase/config.toml, read back over HTTP
+AssertionError: expected { status: 404, code: 'PGRST205' } to deeply equal { status: 406, code: 'PGRST106' }
+
+- Expected
++ Received
+
+  {
+-   "code": "PGRST106",
+-   "status": 406,
++   "code": "PGRST205",
++   "status": 404,
+  }
+
+ ❯ tests/security/postgrest-schema-exposure.security.test.ts:235:9
+    233|           headers: { 'accept-profile': 'app' },
+    234|         }),
+    235|       ).toEqual({ status: 406, code: 'PGRST106' });
+       |         ^
+    236|     });
+    237|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  |security| tests/security/postgrest-schema-exposure.security.test.ts > ADR-0002 B2 — PostgREST cannot reach schema app > B2 — every table in app is unreachable, for every Supabase principal > anon: schema app addressed explicitly is refused (406 PGRST106)
+AssertionError: expected [ { …(3) } ] to deeply equal [ { …(3) } ]
+
+- Expected
++ Received
+
+  [
+    {
+-     "code": "PGRST106",
+-     "status": 406,
++     "code": "42501",
++     "status": 401,
+      "table": "security_baseline_canary",
+    },
+  ]
+
+ ❯ tests/security/postgrest-schema-exposure.security.test.ts:277:26
+    275|         );
+    276|
+    277|         expect(observed).toEqual(
+       |                          ^
+    278|           appTables.map((table) => ({ table, status: 406, code: 'PGRST…
+    279|         );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  |security| tests/security/postgrest-schema-exposure.security.test.ts > ADR-0002 B2 — PostgREST cannot reach schema app > B2 — every table in app is unreachable, for every Supabase principal > authenticated: schema app addressed explicitly is refused (406 PGRST106)
+ FAIL  |security| tests/security/postgrest-schema-exposure.security.test.ts > ADR-0002 B2 — PostgREST cannot reach schema app > B2 — every table in app is unreachable, for every Supabase principal > service_role: schema app addressed explicitly is refused (406 PGRST106)
+AssertionError: expected [ { …(3) } ] to deeply equal [ { …(3) } ]
+
+- Expected
++ Received
+
+  [
+    {
+-     "code": "PGRST106",
+-     "status": 406,
++     "code": "42501",
++     "status": 403,
+      "table": "security_baseline_canary",
+    },
+  ]
+
+ ❯ tests/security/postgrest-schema-exposure.security.test.ts:277:26
+    275|         );
+    276|
+    277|         expect(observed).toEqual(
+       |                          ^
+    278|           appTables.map((table) => ({ table, status: 406, code: 'PGRST…
+    279|         );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  |security| tests/security/postgrest-schema-exposure.security.test.ts > ADR-0002 B2 — PostgREST cannot reach schema app > B2 — every table in app is unreachable, for every Supabase principal > refuses writes into app, not only reads
+AssertionError: expected [ { method: 'POST', …(3) }, …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "code": "42501",
++     "method": "POST",
++     "status": 403,
++     "table": "security_baseline_canary",
++   },
++   {
++     "code": "42501",
++     "method": "PATCH",
++     "status": 403,
++     "table": "security_baseline_canary",
++   },
++   {
++     "code": "42501",
++     "method": "DELETE",
++     "status": 403,
++     "table": "security_baseline_canary",
++   },
++ ]
+
+ ❯ tests/security/postgrest-schema-exposure.security.test.ts:305:9
+    303|       expect(
+    304|         observed.filter(({ status, code }) => status !== 406 || code !…
+    305|       ).toEqual([]);
+       |         ^
+    306|       // Derived, not a literal: adding a method above must not leave …
+    307|       expect(observed).toHaveLength(writeMethods.length * appTables.le…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  |security| tests/security/postgrest-schema-exposure.security.test.ts > ADR-0002 B2 — PostgREST cannot reach schema app > B2 — every table in app is unreachable, for every Supabase principal > refuses RPC into app, which is the other door into a schema
+AssertionError: expected [ { …(3) } ] to deeply equal [ { …(3) } ]
+
+- Expected
++ Received
+
+  [
+    {
+-     "code": "PGRST106",
++     "code": "PGRST202",
+      "routine": "apply_rls_backstop",
+-     "status": 406,
++     "status": 404,
+    },
+  ]
+
+ ❯ tests/security/postgrest-schema-exposure.security.test.ts:328:24
+    326|       );
+    327|
+    328|       expect(observed).toEqual(
+       |                        ^
+    329|         appFunctions.map((routine) => ({ routine, status: 406, code: '…
+    330|       );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  6 failed | 64 passed (70)
+   Start at  23:58:26
+   Duration  6.34s (transform 92ms, setup 0ms, import 905ms, tests 5.01s, environment 0ms)
+
+[?25h[41m[31m[[39m[49m[41m[30mELIFECYCLE[39m[49m[41m[31m][39m[49m [31mCommand failed with exit code 1.[39m
+[K[0JCASE 1 exit=1 (non-zero == the control works)
+CASE 1 reverted
+
+
+===================== CASE 2 — the harness cannot silently pass against a dead server =====================
+
+mutated packages/testing/src/supabase-rest-test-stack.ts: removed the missing-schema guard
+[1mdiff --git a/packages/testing/src/supabase-rest-test-stack.ts b/packages/testing/src/supabase-rest-test-stack.ts[m
+[1mindex 862d639..46f5806 100644[m
+[1m--- a/packages/testing/src/supabase-rest-test-stack.ts[m
+[1m+++ b/packages/testing/src/supabase-rest-test-stack.ts[m
+[36m@@ -275,7 +275,7 @@[m [masync function provisionPlatformRoles([m
+     // created because PostgREST refuses to build its schema cache when a listed schema is[m
+     // missing and then answers `503 PGRST002` to everything, and granted because that is[m
+     // what a real Supabase project does with it.[m
+[31m-    await client.query(`create schema ${quoteIdentifier(schema)}`);[m
+[32m+[m[32m    // SABOTAGE: missing exposed schema not created[m
+     await client.query([m
+       `grant usage on schema ${quoteIdentifier(schema)} to ` +[m
+         SUPABASE_POSTGREST_ROLES.map(quoteIdentifier).join(', '),[m
+[2m$ vitest run --project security[22m
+[?25l
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post/.worktrees/l0-b2-harness
+
+ ❯ |security| tests/security/postgrest-schema-exposure.security.test.ts (14 tests | 14 skipped) 2029ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |security| tests/security/postgrest-schema-exposure.security.test.ts > ADR-0002 B2 — PostgREST cannot reach schema app
+error: schema "graphql_public" does not exist
+ ❯ node_modules/.pnpm/pg@8.22.0/node_modules/pg/lib/client.js:652:17
+ ❯ provisionPlatformRoles packages/testing/src/supabase-rest-test-stack.ts:279:5
+    277|     // what a real Supabase project does with it.
+    278|     // SABOTAGE: missing exposed schema not created
+    279|     await client.query(
+       |     ^
+    280|       `grant usage on schema ${quoteIdentifier(schema)} to ` +
+    281|         SUPABASE_POSTGREST_ROLES.map(quoteIdentifier).join(', '),
+ ❯ startPostgrest packages/testing/src/supabase-rest-test-stack.ts:169:45
+ ❯ Object.startPostgrest packages/testing/src/supabase-rest-test-stack.ts:138:24
+ ❯ tests/security/postgrest-schema-exposure.security.test.ts:83:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  56 passed | 14 skipped (70)
+   Start at  23:58:33
+   Duration  5.30s (transform 95ms, setup 0ms, import 908ms, tests 3.97s, environment 0ms)
+
+[?25h[41m[31m[[39m[49m[41m[30mELIFECYCLE[39m[49m[41m[31m][39m[49m [31mCommand failed with exit code 1.[39m
+[K[0JCASE 2 exit=1 (non-zero == the harness refuses a broken endpoint)
+CASE 2 reverted
+
+
+===================== CASE 3 — the pending->live flip cannot be made by editing JSON =====================
+
+deleted the B2 proving test; manifest still says live
+[2m$ vitest run --project security[22m
+[?25l
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post/.worktrees/l0-b2-harness
+
+ ❯ |security| tests/security/b-row-manifest.security.test.ts (38 tests | 1 failed) 18ms
+       × carries what its state requires 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |security| tests/security/b-row-manifest.security.test.ts > ADR-0002 B-row manifest > B2 > carries what its state requires
+AssertionError: B2 claims proof in tests/security/postgrest-schema-exposure.security.test.ts, which does not exist: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/security/b-row-manifest.security.test.ts:53:99
+     51|       // assertion, or the file, fails here rather than quietly shrink…
+     52|       const provenBy = join(REPOSITORY_ROOT, row.provenBy);
+     53|       expect(existsSync(provenBy), `${id} claims proof in ${row.proven…
+       |                                                                                                   ^
+     54|         true,
+     55|       );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 55 passed (56)
+   Start at  23:58:40
+   Duration  2.63s (transform 85ms, setup 0ms, import 507ms, tests 1.84s, environment 0ms)
+
+[?25h[41m[31m[[39m[49m[41m[30mELIFECYCLE[39m[49m[41m[31m][39m[49m [31mCommand failed with exit code 1.[39m
+[K[0JCASE 3 exit=1 (non-zero == the manifest gate has teeth)
+CASE 3 reverted
+
+
+===================== RESTORED BASELINE — must be GREEN again, and the tree must be clean =====================
+
+ M .github/evidence/README.md
+?? .github/evidence/b2-postgrest-harness.txt
+[2m$ vitest run --project security[22m
+[?25l
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post/.worktrees/l0-b2-harness
+
+
+ Test Files  3 passed (3)
+      Tests  70 passed (70)
+   Start at  23:58:43
+   Duration  6.36s (transform 94ms, setup 0ms, import 900ms, tests 5.05s, environment 0ms)
+
+[?25hrestored baseline exit=0
+
+Script done on 2026-08-03 23:58:50+00:00 [COMMAND_EXIT_CODE="0"]

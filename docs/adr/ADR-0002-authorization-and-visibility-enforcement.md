@@ -1,6 +1,6 @@
 # ADR-0002 — Authorization and visibility enforcement strategy
 
-- **Status:** proposed
+- **Status:** Accepted
 - **Date:** 2026-07-30 (revised 2026-07-30 after devil's-advocate stress test —
   `docs/engineering/reviews/2026-07-30-adr-0002-stress-test.md`, verdict *sound-with-changes*;
   §3's `ALTER DEFAULT PRIVILEGES` statement corrected 2026-08-02 when M1b.2 implemented it and

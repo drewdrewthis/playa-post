@@ -25,10 +25,9 @@
     {
       "id": "B2",
       "title": "PostgREST cannot reach schema app",
-      "assertion": "A request to the Supabase REST endpoint for every table in `app` with a valid user JWT returns 404 / PGRST106. Catalog-driven, so exposing `app` fails.",
-      "status": "pending",
-      "pendingUntil": "M1b.3",
-      "reason": "Needs a running PostgREST and a signed user JWT. The Testcontainers harness boots Postgres alone — there is no REST layer to call, and asserting the config file instead would prove the setting, not the behaviour."
+      "assertion": "A request to the Supabase REST endpoint for every table in `app` with a valid user JWT returns 404 / PGRST106, for `anon`, `authenticated` and `service_role`, on reads, writes and RPC, and the OpenAPI document advertises no `app` relation. Catalog-driven, and PostgREST is started from `supabase/config.toml`'s own `[api] schemas`, so exposing `app` fails.",
+      "status": "live",
+      "provenBy": "tests/security/postgrest-schema-exposure.security.test.ts"
     },
     {
       "id": "B3",

@@ -114,6 +114,20 @@ database-enforced viewer visibility, so this suite is what replaces it. `b-rows.
 all eighteen rows; a row that is neither implemented nor explicitly marked `pending: <milestone>` fails
 the job. Read ADR-0002 before touching anything in `tests/security/`.
 
+The suite runs against **two** harnesses, both from `@playa-post/testing`, because its rows are not all
+the same shape:
+
+| Harness | Rows | What it boots |
+|---|---|---|
+| `startPostgresTestDatabase()` | B1, B3, B4 — catalog and privilege facts | `postgres:17` with `supabase/migrations` applied |
+| `startSupabaseRestTestStack()` | B2 — a statement about the **REST layer**, which bare Postgres does not have | the same database plus Supabase's PostgREST image, started with the `[api] schemas` list read from `supabase/config.toml` |
+
+[ADR-0010](../adr/ADR-0010-supabase-rest-security-harness.md) records why the second one is a
+purpose-built pair rather than `supabase start`'s ten containers, and why it mints its own JWTs instead
+of running GoTrue. The exposure list is an **input** to the server under test, never the subject of an
+assertion: add `"app"` to `[api] schemas` and B2 goes red because the schema becomes reachable, not
+because a string stopped matching.
+
 ## How to run it
 
 ```bash
