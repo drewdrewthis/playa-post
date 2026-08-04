@@ -13,6 +13,17 @@ import { filterAllowedFields } from './filter-allowed-fields';
 export type LogLevel = 'silent' | 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace';
 
 /**
+ * What {@link createLogger} returns, re-exported so a consumer can declare a logger
+ * field without importing pino itself.
+ *
+ * This package owns the "pino is the structured logger" decision (addendum §18). A
+ * server file that writes `import type { Logger } from 'pino'` has taken a direct
+ * dependency on that choice — and, more practically, has to add pino to its own
+ * `package.json` to type one field.
+ */
+export type { Logger } from 'pino';
+
+/**
  * Field names permitted to leave the process by default.
  *
  * Deliberately small. `correlationId` makes request tracing possible at

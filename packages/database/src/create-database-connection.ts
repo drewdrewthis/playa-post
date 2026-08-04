@@ -4,6 +4,17 @@ import { Pool } from 'pg';
 import type { DB } from './schema';
 
 /**
+ * An open, pooled, typed handle on the application database.
+ *
+ * Named here rather than written as `Kysely<Database>` at every call site: this
+ * package owns the choice of query builder (addendum §18), so a consumer that has to
+ * spell `Kysely<...>` to declare a field has taken a dependency on that choice it did
+ * not need. Swapping the builder then becomes a repo-wide rename instead of a change
+ * to this file.
+ */
+export type DatabaseConnection = Kysely<DB>;
+
+/**
  * Connections held open by one pool when the caller does not choose.
  *
  * Exported because the composition root has to put a number in its configuration
@@ -65,7 +76,7 @@ export interface DatabaseConnectionOptions {
  * }
  * ```
  */
-export function createDatabaseConnection(options: DatabaseConnectionOptions): Kysely<DB> {
+export function createDatabaseConnection(options: DatabaseConnectionOptions): DatabaseConnection {
   const pool = new Pool({
     connectionString: options.connectionString,
     max: options.maxConnections ?? DEFAULT_MAX_CONNECTIONS,

@@ -1,8 +1,24 @@
 # ADR-0003 — Dependency injection via explicit factory composition
 
-- **Status:** proposed (revisit after the ADR-0001 runtime spike, criterion S8)
-- **Date:** 2026-07-30
+- **Status:** proposed (implemented at M2.3; see the two amendments below)
+- **Date:** 2026-07-30 (amended 2026-08-04 when M2.3 built the composition root)
 - **Drivers:** addendum §12, §18, §24; PDF §8 "Dependency injection"
+
+> **Amended 2026-08-04 (M2.3), twice. The decision is unchanged; two of its restatements were.**
+>
+> **1. Spike criterion S8 is retired.** ADR-0009 supersedes ADR-0001 and cancels its runtime spike, so
+> the original status line pointed at a gate that no longer exists. The reason the decision held —
+> a container's whole job is wiring plus two lifetimes, which the type system already does — never
+> depended on `workerd` bundle size. Nothing to revisit; the remaining revisit trigger is the
+> ~300-line `registrations.ts` rule below.
+>
+> **2. `registrations.ts` does not ship until there is a module to register.** The four-file shape
+> below is the target, not a checklist to satisfy on day one. `config.ts`, `container.ts`, and
+> `request-scope.ts` land at M2.3; `registrations.ts` lands with lane L1's first module. An empty
+> `registrations.ts` is the placeholder addendum §4 forbids, and the addendum is normative over this
+> file.
+>
+> The Verification section's substantive clauses are unaffected.
 
 ## Context
 
@@ -66,6 +82,9 @@ composition/
 
 ## Verification
 
-`accepted` when the M2 vertical slice runs entirely through `buildAppContainer` / `buildRequestScope`,
-the dependency-cruiser rule `no-container-outside-composition` is green in CI, and spike criterion S8
-is recorded as passing.
+`accepted` when the M2 vertical slice runs entirely through `buildAppContainer` / `buildRequestScope`
+and the dependency-cruiser rule `no-container-outside-composition` is green in CI **with its
+deliberately-violating fixture proving it still fires** (`tests/fitness/__fixtures__/`).
+
+The rule and its fixture landed at M2.3. The first clause needs a slice to run, so it stays open until
+lane L5. The former third clause — spike criterion S8 — is void; see the amendment at the top.

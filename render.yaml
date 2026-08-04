@@ -65,7 +65,17 @@ services:
       # PORT is deliberately absent — Render injects it and the configuration
       # schema coerces it. Declaring it here would fight the platform.
       #
-      # No secret is read by the server yet, so no key below carries `sync: false`
-      # today. M2's DATABASE_URL is the first; it is added as a bare `key` plus
-      # `sync: false`, with the value set in the Render dashboard. Keys the runtime
-      # does not read are not listed here (addendum §4).
+      # Below: the two secrets the server reads. `sync: false` means "Render
+      # prompts for this once and keeps it in its own store" — the value is
+      # never in this file, and a value here would be a value in git
+      # (addendum §17; names and retrieval in docs/engineering/secrets.md).
+      # Keys the runtime does not read are not listed here (addendum §4).
+      #
+      # ⚠ DATABASE_URL's user must be `app_rw`. ADR-0002 §2 puts the entire
+      # privilege backstop on that one string, and B18 asserts post-deploy that
+      # the live API really did connect as it. A URI naming any other role
+      # passes every other check in the system while disabling FORCE RLS.
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
