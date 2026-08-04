@@ -23,6 +23,7 @@
     "db:types": "DATABASE_URL=\"$(supabase status -o env | grep '^DB_URL=' | cut -d'\"' -f2)\" pnpm --filter @playa-post/database db:types",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
+    "test:unit:changed": "vitest --changed --project unit",
     "test:integration": "vitest run --project integration",
     "test:security": "vitest run --project security"
   },

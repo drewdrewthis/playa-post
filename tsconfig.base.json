@@ -26,6 +26,15 @@
     "skipLibCheck": true,
 
     "noEmit": true,
-    "types": []
+    "types": [],
+
+    // Local-only speedup: `tsc --noEmit` still writes a `.tsbuildinfo` (verified
+    // against the pinned TS 6.0.3 — noEmit does not block incremental in this
+    // config shape) and reads it back on the next run to skip unchanged files.
+    // No `composite` — that implies declaration emit, which this repo never wants.
+    // Each leaf tsconfig sets its own `tsBuildInfoFile` so projects don't collide;
+    // *.tsbuildinfo is gitignored and CI checks out fresh every run, so this
+    // cannot change what CI enforces or mask a CI failure.
+    "incremental": true
   }
 }

@@ -31,6 +31,7 @@ pnpm db:migrate         # apply only the migrations not yet applied
 pnpm db:types           # rewrite packages/database/src/schema.ts from the live database
 pnpm test               # every vitest project
 pnpm test:unit          # no infrastructure; fast enough to run on save
+pnpm test:unit:changed  # unit tests touched by uncommitted changes; local iteration only, not in CI
 pnpm test:integration   # Testcontainers Postgres; needs a running docker daemon
 pnpm test:security      # ADR-0002 bypass suite; needs a running docker daemon
 ```
@@ -165,6 +166,15 @@ and it needs a named AST/`sql`-tag-aware detection rule of its own.
   zero files** and passes. The fitness test asserts `totalCruised > 0` precisely
   to catch that failure mode. Do not bump TypeScript past 6 until both tools
   support it.
+- **`tsc --noEmit` is incremental locally.** `incremental: true` lives in
+  `tsconfig.base.json`; each leaf tsconfig sets its own `tsBuildInfoFile` so
+  the root check and all seven package checks cache independently. Verified
+  against the pinned TS 6.0.3: `noEmit` does not block `incremental` in this
+  config shape (no `composite`), the `.tsbuildinfo` files are written on every
+  run, and `*.tsbuildinfo` is already gitignored. CI checks out fresh every
+  run and never sees a cache, so this cannot mask a CI failure — but if a
+  local typecheck ever looks suspiciously clean, delete the `*.tsbuildinfo`
+  files and re-run before trusting it.
 - **Workspace packages ship TypeScript source**, not build output — their
   `exports` point at `src/index.ts`. Vite, Vitest, and tsc consume that directly;
   the server bundle uses tsup with `noExternal: [/^@playa-post\//]`.
