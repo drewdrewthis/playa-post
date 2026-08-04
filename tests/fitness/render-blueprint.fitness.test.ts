@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { HEALTH_PATH } from '../../apps/server/src/entrypoints/http/health';
+import { environmentSchema } from '../../packages/configuration/src/environment-schema';
 
 /**
  * Fitness function for the deployment blueprint (ADR-0009).
@@ -60,6 +61,21 @@ function declaredEnvVar(name: string): string | undefined {
   return captured === undefined ? undefined : unquote(captured);
 }
 
+/**
+ * The keys `@playa-post/configuration` has no default for.
+ *
+ * Derived by parsing an empty environment rather than restated, so a key added to the
+ * schema is covered the day it lands — a list copied here would be one more thing to
+ * remember, and forgetting it is the exact failure this asserts against.
+ */
+function undefaultedEnvironmentKeys(): readonly string[] {
+  const result = environmentSchema.safeParse({});
+  if (result.success) {
+    return [];
+  }
+  return [...new Set(result.error.issues.map((issue) => String(issue.path[0])))].sort();
+}
+
 function serverPackageMain(): string {
   const parsed = JSON.parse(readRepositoryFile('apps', 'server', 'package.json')) as {
     main: string;
@@ -102,5 +118,32 @@ describe('render.yaml (ADR-0009)', () => {
 
   it('binds a reachable host — 127.0.0.1 is unroutable from outside the container', () => {
     expect(declaredEnvVar('HOST')).toBe('0.0.0.0');
+  });
+
+  it('declares every environment key the configuration schema has no default for', () => {
+    // A required key missing from the blueprint is a service that builds, starts, and
+    // exits non-zero inside `loadConfiguration` — a green CI run and a dead deploy.
+    // Nothing else couples this file to the schema.
+    const undefaulted = undefaultedEnvironmentKeys();
+
+    // Non-vacuity: were the schema ever to require nothing, the loop below would pass
+    // by asserting nothing at all.
+    expect(undefaulted.length).toBeGreaterThan(0);
+
+    for (const key of undefaulted) {
+      expect(blueprint).toMatch(new RegExp(String.raw`-[ \t]*key:[ \t]*${key}\b`));
+    }
+  });
+
+  it('carries the Supabase project URL as a value, because it identifies rather than authenticates', () => {
+    // The JWKS this server trusts is derived from it (ADR-0011), so this one line
+    // decides whose users are accepted. `sync: false` would move that decision into
+    // dashboard state no pull request can show; DATABASE_URL beside it is what a
+    // genuine secret looks like. Validated with the server's own schema, so a typo is
+    // caught here rather than at boot on Render.
+    const declared = declaredEnvVar('SUPABASE_URL');
+
+    expect(declared).toBeDefined();
+    expect(environmentSchema.shape.SUPABASE_URL.safeParse(declared).error).toBeUndefined();
   });
 });

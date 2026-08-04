@@ -65,11 +65,12 @@ services:
       # PORT is deliberately absent — Render injects it and the configuration
       # schema coerces it. Declaring it here would fight the platform.
       #
-      # Below: the two secrets the server reads. `sync: false` means "Render
-      # prompts for this once and keeps it in its own store" — the value is
-      # never in this file, and a value here would be a value in git
-      # (addendum §17; names and retrieval in docs/engineering/secrets.md).
-      # Keys the runtime does not read are not listed here (addendum §4).
+      # Below: the environment the server has no default for. A secret is
+      # declared as a bare `key` with `sync: false` — Render prompts for the
+      # value once and keeps it in its own store, so the value is never in this
+      # file, and a value here would be a value in git (addendum §17; names and
+      # retrieval in docs/engineering/secrets.md). Keys the runtime does not
+      # read are not listed here (addendum §4).
       #
       # ⚠ DATABASE_URL's user must be `app_rw`. ADR-0002 §2 puts the entire
       # privilege backstop on that one string, and B18 asserts post-deploy that
@@ -77,5 +78,11 @@ services:
       # passes every other check in the system while disabling FORCE RLS.
       - key: DATABASE_URL
         sync: false
-      - key: SUPABASE_JWT_SECRET
-        sync: false
+      # NOT a secret, and carried in git on purpose. The project ref is a public
+      # identifier — docs/engineering/secrets.md §3 lists it as one, and it is in
+      # every URL the browser sends. It belongs here rather than behind
+      # `sync: false` because the server derives the JWKS it trusts from it
+      # (ADR-0011): this line decides whose users are accepted, and that is a
+      # decision a pull request should show, not dashboard state nobody can diff.
+      - key: SUPABASE_URL
+        value: https://raiemsytiokplvmoqsze.supabase.co

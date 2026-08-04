@@ -1,3 +1,5 @@
+import { createRemoteJWKSet } from 'jose';
+
 import { createDatabaseConnection, type DatabaseConnection } from '@playa-post/database';
 import { createLogger, DEFAULT_ALLOWED_LOG_FIELDS, type Logger } from '@playa-post/observability';
 
@@ -8,6 +10,7 @@ import { createSupabaseJwtVerifier } from '../shared/auth/supabase-jwt-verifier'
 import { createAppRouter, type AppRouter } from '../shared/trpc/app.router';
 
 import type { Configuration } from './config';
+import { supabaseJwksUrl } from './supabase-jwks-url';
 
 /**
  * The singleton-scoped object graph: everything built once per process and shared by
@@ -45,11 +48,12 @@ export interface AppContainer {
 /**
  * Build the application's object graph from validated configuration.
  *
- * **Touches no socket.** The `pg` pool connects lazily, the JWT key is encoded in
- * memory, and the router is a pure data structure — so this can be called before the
- * database is reachable, and a unit test can build the whole graph without
- * infrastructure. It is also why `main.ts` can build the container, register signal
- * handlers, and only then start listening.
+ * **Touches no socket.** The `pg` pool connects lazily, `createRemoteJWKSet` returns a
+ * resolver that fetches nothing until it is first asked for a key, and the router is a
+ * pure data structure — so this can be called before the database or Supabase is
+ * reachable, and a unit test can build the whole graph without infrastructure. It is
+ * also why `main.ts` can build the container, register signal handlers, and only then
+ * start listening.
  *
  * Everything it constructs is stateless or pooled; nothing here is per-request. The
  * actor, correlation ID, and request logger come from `buildRequestScope`
@@ -85,7 +89,13 @@ export function buildAppContainer(configuration: Configuration): AppContainer {
     logger,
     database,
     accessTokenVerifier: createSupabaseJwtVerifier({
-      jwtSecret: configuration.supabaseJwtSecret,
+      // One key source per process, deliberately. `createRemoteJWKSet` holds the fetched
+      // key set in its own closure and refuses to re-fetch inside a cooldown window, so
+      // rebuilding it per request would discard the cache and turn Supabase's JWKS
+      // endpoint into a hard dependency of every authenticated call — an availability
+      // coupling, and abusive traffic, for no benefit. Key rotation still lands: an
+      // unrecognised `kid` is what triggers a refresh.
+      keySource: createRemoteJWKSet(supabaseJwksUrl(configuration.supabaseUrl)),
     }),
     // Replaced in lane L1 by modules/identity's ResolveActorQuery, which reads
     // app.users. Until that table exists, "nobody is onboarded" is the truth, not a

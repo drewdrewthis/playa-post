@@ -3,13 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { ConfigurationError, loadConfiguration } from './load-configuration';
 
 /**
- * Values for the two keys that have no default. Obvious placeholders on purpose:
- * a realistic-looking credential in a test file is a credential in source control
- * as far as `secret-scan` and a future reader are concerned.
+ * Values for the two keys that have no default — `DATABASE_URL`, a secret, and
+ * `SUPABASE_URL`, which is not one but must still be stated. Obvious placeholders on
+ * purpose: a realistic-looking credential in a test file is a credential in source
+ * control as far as `secret-scan` and a future reader are concerned.
  */
 const REQUIRED_ENVIRONMENT = {
   DATABASE_URL: 'postgres://app_rw@localhost:5432/playa_post_test',
-  SUPABASE_JWT_SECRET: 'x'.repeat(32),
+  SUPABASE_URL: 'https://project-ref.supabase.co',
 } as const;
 
 describe('loadConfiguration', () => {
@@ -22,13 +23,13 @@ describe('loadConfiguration', () => {
       port: 3000,
       logLevel: 'info',
       databaseUrl: REQUIRED_ENVIRONMENT.DATABASE_URL,
-      supabaseJwtSecret: REQUIRED_ENVIRONMENT.SUPABASE_JWT_SECRET,
+      supabaseUrl: REQUIRED_ENVIRONMENT.SUPABASE_URL,
     });
   });
 
   // M1-AC10, non-vacuous from M2 onward: before DATABASE_URL existed there was no key
   // whose absence could fail, so "boot fails naming the missing key" asserted nothing.
-  it('fails naming every missing required key, because a secret must never have a default', () => {
+  it('fails naming every missing required key rather than defaulting its way past one', () => {
     let thrown: unknown;
     try {
       loadConfiguration({});
@@ -37,15 +38,17 @@ describe('loadConfiguration', () => {
     }
 
     expect(thrown).toBeInstanceOf(ConfigurationError);
-    expect((thrown as ConfigurationError).invalidKeys).toEqual([
-      'DATABASE_URL',
-      'SUPABASE_JWT_SECRET',
-    ]);
+    expect((thrown as ConfigurationError).invalidKeys).toEqual(['DATABASE_URL', 'SUPABASE_URL']);
   });
 
-  it('rejects an HS256 secret too short to sign with, at boot rather than at first request', () => {
+  // `SUPABASE_URL` is not a secret, but it is the string the server derives its JWKS
+  // endpoint from (ADR-0011). A malformed one produces a 404 on every verification,
+  // and ADR-0011's uniform error makes that indistinguishable from "the token was bad"
+  // — so the whole symptom is "all logins fail" with nothing pointing at the cause.
+  // Failing at boot with the key named is the only place that diagnosis is cheap.
+  it('rejects a Supabase URL that is not a URL, at boot rather than at first request', () => {
     expect(() =>
-      loadConfiguration({ ...REQUIRED_ENVIRONMENT, SUPABASE_JWT_SECRET: 'too-short' }),
+      loadConfiguration({ ...REQUIRED_ENVIRONMENT, SUPABASE_URL: 'project-ref.supabase.co' }),
     ).toThrow(ConfigurationError);
   });
 
@@ -69,7 +72,7 @@ describe('loadConfiguration', () => {
       port: 3000,
       logLevel: 'warn',
       databaseUrl: REQUIRED_ENVIRONMENT.DATABASE_URL,
-      supabaseJwtSecret: REQUIRED_ENVIRONMENT.SUPABASE_JWT_SECRET,
+      supabaseUrl: REQUIRED_ENVIRONMENT.SUPABASE_URL,
     });
   });
 
@@ -117,18 +120,24 @@ describe('loadConfiguration', () => {
   });
 
   // The failure mode this guards is specific: a ConfigurationError that helpfully
-  // quotes what it received turns a boot log into a credential dump, and DATABASE_URL
-  // is the first key where that would matter.
-  it('never echoes a rejected secret value either', () => {
+  // quotes what it received turns a boot log into a credential dump. It has to hold on
+  // *every* key, not just the ones declared secret — the realistic way a credential
+  // reaches a boot log is an operator pasting one into the wrong variable, and the
+  // schema cannot tell a mis-pasted service-role key from a malformed URL.
+  it('never echoes a rejected value, whichever key it arrived on', () => {
+    // An obvious placeholder, not a realistic credential: a string shaped like a real
+    // key in a test file is a finding for `secret-scan` and for the next reader.
+    const mispasted = 'a-credential-hunter2-pasted-into-the-wrong-variable';
+
     let thrown: unknown;
     try {
-      loadConfiguration({ ...REQUIRED_ENVIRONMENT, SUPABASE_JWT_SECRET: 'short-but-secret' });
+      loadConfiguration({ ...REQUIRED_ENVIRONMENT, SUPABASE_URL: mispasted });
     } catch (error) {
       thrown = error;
     }
 
     expect(thrown).toBeInstanceOf(ConfigurationError);
-    expect((thrown as ConfigurationError).message).toContain('SUPABASE_JWT_SECRET');
-    expect((thrown as ConfigurationError).message).not.toContain('short-but-secret');
+    expect((thrown as ConfigurationError).message).toContain('SUPABASE_URL');
+    expect((thrown as ConfigurationError).message).not.toContain(mispasted);
   });
 });

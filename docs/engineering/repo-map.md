@@ -40,8 +40,8 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  state,tests}. Shell/router/providers in src/app/. Shared UI in src/shared/.
 apps/server/     The modular monolith.
   composition/   The ONLY place that knows about the object graph, and the only place that reads
-                 process.env (ADR-0003). config.ts · container.ts · request-scope.ts; registrations.ts
-                 arrives with the first module.
+                 process.env (ADR-0003). config.ts · container.ts · request-scope.ts ·
+                 supabase-jwks-url.ts; registrations.ts arrives with the first module.
   entrypoints/   http/ · queue/ · cron/. The ONLY place that knows about the runtime (ADR-0009).
   modules/       identity · connections · graph · bulletins · views · notifications · moderation ·
                  sync · storage · audit. Each: transport/ application/ domain/ persistence/ tests/

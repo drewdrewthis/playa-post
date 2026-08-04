@@ -62,6 +62,6 @@ function toConfiguration(environment: ValidatedEnvironment): Configuration {
     port: environment.PORT,
     logLevel: environment.LOG_LEVEL,
     databaseUrl: environment.DATABASE_URL,
-    supabaseJwtSecret: environment.SUPABASE_JWT_SECRET,
+    supabaseUrl: environment.SUPABASE_URL,
   };
 }

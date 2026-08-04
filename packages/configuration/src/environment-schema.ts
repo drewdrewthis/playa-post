@@ -1,16 +1,6 @@
 import { z } from 'zod';
 
 /**
- * Minimum length of an HS256 signing secret.
- *
- * `jose` refuses an HS256 key shorter than the hash output, and PostgREST refuses a
- * `jwt-secret` shorter than 32 characters. Checking it here is the difference between
- * failing at boot with the key named (M1-AC10) and failing on the first request that
- * carries a token — the second reads as an auth outage, not a misconfiguration.
- */
-const HS256_MINIMUM_SECRET_LENGTH = 32;
-
-/**
  * The environment variables every Playa Post runtime understands.
  *
  * Rules for anything added here:
@@ -18,6 +8,9 @@ const HS256_MINIMUM_SECRET_LENGTH = 32;
  *   secret in source control (addendum §17). Secrets are required and never logged.
  *   The only shape a secret gets validated for is length — enough to fail at boot
  *   rather than at first use, never enough to encode its format here.
+ * - **Being non-secret does not earn a default.** A default is right only when every
+ *   deployment would want the same value; for anything that identifies an external
+ *   system, a wrong-but-plausible default fails silently instead of at boot.
  * - Keep the key set to what a runtime actually reads today. An unused key is
  *   an empty abstraction (§4).
  * - Mirror every change in `.env.example`, which lists the same keys with safe
@@ -43,13 +36,19 @@ export const environmentSchema = z.object({
    */
   DATABASE_URL: z.string().min(1),
   /**
-   * HS256 secret the Supabase project signs end-user access tokens with.
+   * Base URL of the Supabase project — `https://<project-ref>.supabase.co`.
    *
-   * **Required, secret, and deliberately undefaulted.** It is the only thing standing
-   * between a forged `sub` claim and a session as any user in the system (ADR-0011,
-   * ADR-0002 §5a). Verification-only here: the server never mints a token with it.
+   * **Required and deliberately undefaulted, though it is not a secret.** Composition
+   * derives the project's JWKS endpoint from it and verifies every access token against
+   * the keys published there (ADR-0011), so this string decides *whose* users this
+   * server accepts. A default would point a misconfigured deployment at some other
+   * project and let that project's users in — a failure that presents as a working
+   * login, which is the worst shape available.
+   *
+   * No protocol constraint, deliberately: the local stack `pnpm db:start` boots is
+   * served over plain `http`, and pinning `https` here would break every developer.
    */
-  SUPABASE_JWT_SECRET: z.string().min(HS256_MINIMUM_SECRET_LENGTH),
+  SUPABASE_URL: z.url(),
 });
 
 /** Raw, validated environment. Prefer {@link Configuration} in consuming code. */
@@ -62,10 +61,10 @@ export type ValidatedEnvironment = z.infer<typeof environmentSchema>;
  * as `LOG_LEVEL`, and renaming an environment variable should not ripple through
  * application code.
  *
- * ⚠ **This object carries secrets.** Never log it, never put it in a span attribute,
- * never return it from a procedure. `createLogger`'s field allowlist
- * (`@playa-post/observability`) drops `databaseUrl` and `supabaseJwtSecret` because
- * they are not on it — that is a backstop for a mistake, not a licence to make one.
+ * ⚠ **This object carries a secret** — `databaseUrl`. Never log it, never put it in a
+ * span attribute, never return it from a procedure. `createLogger`'s field allowlist
+ * (`@playa-post/observability`) drops `databaseUrl` because it is not on it — that is a
+ * backstop for a mistake, not a licence to make one.
  */
 export interface Configuration {
   readonly nodeEnv: ValidatedEnvironment['NODE_ENV'];
@@ -74,6 +73,6 @@ export interface Configuration {
   readonly logLevel: ValidatedEnvironment['LOG_LEVEL'];
   /** `postgres://` URI whose user is the least-privileged `app_rw` role (ADR-0002 §2). */
   readonly databaseUrl: string;
-  /** HS256 secret Supabase signs user access tokens with. Verification only (ADR-0011). */
-  readonly supabaseJwtSecret: string;
+  /** Supabase project base URL. Composition derives the JWKS endpoint from it (ADR-0011). */
+  readonly supabaseUrl: string;
 }

@@ -17,9 +17,9 @@ import { createHttpServer } from './http-server';
  * `127.0.0.1` is unreachable from outside the container.
  *
  * Configuration is loaded and the container is built **before** the signal handlers
- * are registered, so a missing `DATABASE_URL` or `SUPABASE_JWT_SECRET` exits non-zero
- * within milliseconds, naming the key and never its value (M1-AC10). Neither step
- * opens a socket, so nothing is half-started when it fails.
+ * are registered, so a missing `DATABASE_URL` or `SUPABASE_URL` exits non-zero within
+ * milliseconds, naming the key and never its value (M1-AC10). Neither step opens a
+ * socket, so nothing is half-started when it fails.
  */
 const configuration = loadServerConfiguration();
 const container = buildAppContainer(configuration);

@@ -25,3 +25,12 @@ export {
 export type { SupabaseApiConfiguration } from './supabase-api-configuration';
 export { generateJwtSigningSecret, mintSupabaseUserToken } from './supabase-user-token';
 export type { SupabaseUserTokenOptions } from './supabase-user-token';
+export {
+  createSupabaseJwksKeySource,
+  generateSupabaseSigningKeyPair,
+  mintSupabaseAsymmetricUserToken,
+} from './supabase-asymmetric-token';
+export type {
+  SupabaseAsymmetricUserTokenOptions,
+  SupabaseSigningKeyPair,
+} from './supabase-asymmetric-token';
