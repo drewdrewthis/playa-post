@@ -23,7 +23,7 @@ later milestone must. ADR-0009 is the only one so far.
 | [0008](ADR-0008-identity-model.md) | Identity model — auth user ↔ internal ID | proposed |
 | [0009](ADR-0009-deploy-node-server-to-render.md) | Deploy the Node server to Render (supersedes 0001) | accepted — owner decision 2026-08-02 |
 | [0010](ADR-0010-supabase-rest-security-harness.md) | A purpose-built PostgREST harness for the Supabase-shaped security rows (ADR-0002 B2) | proposed |
-| [0011](ADR-0011-access-token-verification-at-the-trpc-boundary.md) | Access-token verification at the tRPC boundary (how ADR-0008 rule 8 is implemented) | proposed |
+| [0011](ADR-0011-access-token-verification-at-the-trpc-boundary.md) | Access-token verification at the tRPC boundary (how ADR-0008 rule 8 is implemented) | proposed (amended — ES256 via the project JWKS, superseding the HS256 shared secret) |
 
 Normative inputs, in precedence order:
 

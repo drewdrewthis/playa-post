@@ -49,7 +49,7 @@ Retrieved values are staged in `.env.local` at the repo root. This file is gitig
 | `SUPABASE_ACCESS_TOKEN` | From "Supabase PlayaPost API TOKEN" / `credential` |
 | `SUPABASE_DB_PASSWORD` | From "Supabase Postgres DB Password" / `password` |
 | `SUPABASE_PROJECT_REF` | `raiemsytiokplvmoqsze` — project ref/identifier, not a secret |
-| `SUPABASE_URL` | Project API URL |
+| `SUPABASE_URL` | Project API URL. **Not a secret**, and the one key here the running server also reads: it derives the JWKS endpoint it verifies access tokens against from this value (ADR-0011). Committed in `render.yaml` as a plain value — see §4 |
 | `SUPABASE_ANON_KEY` | Project anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Project service role key |
 | `RENDER_API_KEY` | From `PERSONAL_RENDER_API_KEY` / `credential`. Needed only to drive the Render API or CLI (`render blueprint launch`); the running service never reads it |
@@ -63,4 +63,6 @@ Supabase project identity (identifiers, not secrets): project **PlayaPost**, ref
 - Never echo, log, or commit secret values. This document itself contains names and paths only, never values.
 - Deployment secrets go to platform secret stores (Render environment variables, GitHub Actions secrets), never to source control. See `architecture-addendum.md` §17.
 - In `render.yaml`, a secret is declared as a `key` with `sync: false` and its value is entered in the Render dashboard. A value in the blueprint is a value in git.
+- **`SUPABASE_URL` is the deliberate exception, and is committed with its value.** It identifies a project rather than authenticating to one (§3), and it is the string that decides whose users the API accepts (ADR-0011) — a decision that belongs in a reviewable pull request, not in dashboard state. Do not "fix" it into a `sync: false` entry.
+- **The project's legacy HS256 JWT secret is retired and is not needed anywhere.** The project signs access tokens with asymmetric keys; the server verifies against the published JWKS and holds no signing material at all (ADR-0011). Nothing in this repository reads a shared JWT secret — if you find yourself hunting for one, the thing you actually want is `SUPABASE_URL`.
 - Rotation procedure: update the 1Password item first, then re-run the retrieval commands in §2 to refresh `.env.local`.

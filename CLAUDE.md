@@ -133,14 +133,18 @@ and it needs a named AST/`sql`-tag-aware detection rule of its own.
 - **Secret names, paths, and retrieval steps** live in `docs/engineering/secrets.md`
   (never values).
 - **`.env.example` lists every key `@playa-post/configuration` reads** — the
-  defaulted ones (`NODE_ENV`, `HOST`, `PORT`, `LOG_LEVEL`) and the two
-  required secrets (`DATABASE_URL`, `SUPABASE_JWT_SECRET`), **names and
-  placeholders only, never a value**; see
-  `packages/configuration/src/environment-schema.ts` and
-  `docs/engineering/secrets.md`. The two files must stay in sync, and the
-  secrets are also declared in `render.yaml` as bare keys with `sync: false`.
-  `DATABASE_URL`'s user must be `app_rw` (ADR-0002 §2) — any other role
-  silently disables `FORCE ROW LEVEL SECURITY` for every query.
+  defaulted ones (`NODE_ENV`, `HOST`, `PORT`, `LOG_LEVEL`) and the two with no
+  default (`DATABASE_URL`, `SUPABASE_URL`), **names and placeholders only,
+  never a value**; see `packages/configuration/src/environment-schema.ts` and
+  `docs/engineering/secrets.md`. The two files must stay in sync, and
+  `tests/fitness/render-blueprint.fitness.test.ts` asserts that every
+  undefaulted key is declared in `render.yaml` too.
+  `DATABASE_URL` is a secret, declared there as a bare key with `sync: false`;
+  its user must be `app_rw` (ADR-0002 §2) — any other role silently disables
+  `FORCE ROW LEVEL SECURITY` for every query. `SUPABASE_URL` is **not** a
+  secret and carries its value in the blueprint, because a project ref is a
+  public identifier and this line decides whose users the API accepts
+  ([ADR-0011](docs/adr/ADR-0011-access-token-verification-at-the-trpc-boundary.md)).
 - **A pre-commit hook scans staged changes for secrets**, mirroring the
   `secret-scan` CI job. It lives at `.githooks/pre-commit`; `pnpm install`'s
   `prepare` script wires it in via `git config core.hooksPath .githooks`.
