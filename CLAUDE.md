@@ -91,6 +91,7 @@ architecture-addendum §19.
 | `no-transport-to-persistence` | `modules/*/transport/` importing a repository or a database client |
 | `no-web-to-server-internals` | `apps/web` importing anything under `apps/server` |
 | `no-cross-module-persistence` | one module importing **another** module's `persistence/` |
+| `no-container-outside-composition` | anything outside `entrypoints/**` and `composition/**` importing `composition/container.ts` |
 
 Allowed direction: **Transport → Application → Domain ← Infrastructure.**
 
@@ -107,11 +108,13 @@ Each rule has a deliberately-violating fixture in
 its own fixture and by nothing else. **Do not "fix" a fixture.** Adding a rule
 without adding its fixture fails that test on purpose.
 
-Two more rules from the repo map — `no-container-outside-composition` and
-`no-sql-outside-persistence` — are **M1b.9** in the implementation plan: they
-ship in the M2 PR that introduces the code they bind to (the DI container and
-the first repository). They are not configured yet because a rule with nothing
-to check reports green forever, which is worse than no rule at all.
+`no-container-outside-composition` shipped with the DI container it binds to
+(M2.3, ADR-0003). **`no-sql-outside-persistence` is still owed** — the second
+half of **M1b.9**, landing in the M2 PR that introduces the first repository.
+It is not configured yet because a rule with nothing to check reports green
+forever, which is worse than no rule at all; it is also a rule about SQL
+*literals* rather than an import edge, so dependency-cruiser is the wrong tool
+and it needs a named AST/`sql`-tag-aware detection rule of its own.
 
 ## Conventions
 
@@ -129,11 +132,15 @@ to check reports green forever, which is worse than no rule at all.
   is a secret in source control (addendum §17).
 - **Secret names, paths, and retrieval steps** live in `docs/engineering/secrets.md`
   (never values).
-- **`.env.example` lists the non-secret keys `@playa-post/configuration` reads**
-  — `NODE_ENV`, `HOST`, `PORT`, `LOG_LEVEL`; see
-  `packages/configuration/src/environment-schema.ts`. The two files must stay
-  in sync, and neither ever carries a secret
-  (`docs/engineering/secrets.md`).
+- **`.env.example` lists every key `@playa-post/configuration` reads** — the
+  defaulted ones (`NODE_ENV`, `HOST`, `PORT`, `LOG_LEVEL`) and the two
+  required secrets (`DATABASE_URL`, `SUPABASE_JWT_SECRET`), **names and
+  placeholders only, never a value**; see
+  `packages/configuration/src/environment-schema.ts` and
+  `docs/engineering/secrets.md`. The two files must stay in sync, and the
+  secrets are also declared in `render.yaml` as bare keys with `sync: false`.
+  `DATABASE_URL`'s user must be `app_rw` (ADR-0002 §2) — any other role
+  silently disables `FORCE ROW LEVEL SECURITY` for every query.
 - **A pre-commit hook scans staged changes for secrets**, mirroring the
   `secret-scan` CI job. It lives at `.githooks/pre-commit`; `pnpm install`'s
   `prepare` script wires it in via `git config core.hooksPath .githooks`.

@@ -44,16 +44,37 @@ importers:
       vitest:
         specifier: 4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(vite@8.1.5(@types/node@26.1.2)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0))
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
 
   apps/server:
     dependencies:
       '@playa-post/configuration':
         specifier: workspace:*
         version: link:../../packages/configuration
+      '@playa-post/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@playa-post/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
+      '@trpc/server':
+        specifier: 11.0.0
+        version: 11.0.0(typescript@6.0.3)
       fastify:
         specifier: 5.10.0
         version: 5.10.0
+      jose:
+        specifier: 6.2.4
+        version: 6.2.4
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
+      '@playa-post/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
       tsup:
         specifier: 8.5.1
         version: 8.5.1(postcss@8.5.25)(supports-color@7.2.0)(tsx@4.23.1)(typescript@6.0.3)(yaml@2.9.0)
@@ -1545,6 +1566,11 @@ packages:
   '@trickfilm400/rollup-plugin-off-main-thread@3.0.0-pre1':
     resolution: {integrity: sha512-/67zpWDBLV+oYAEL682s1ktXL0HgqX76f6gaVGkGnVZlBbm1zd0v4Bz8MFF2GGhoX9rvfq3KSQHubFHwa6w6/Q==}
     engines: {node: '>=12'}
+
+  '@trpc/server@11.0.0':
+    resolution: {integrity: sha512-xY9q/b/wR/tWGYTm5xmRjivkYD2EZZXmOKmHuNJRYZuLbieeNUsdfQRjJC409WB1pjKWInomhHwuA8bahZJ4lQ==}
+    peerDependencies:
+      typescript: '>=5.7.2'
 
   '@tybys/wasm-util@0.10.3':
     resolution: {integrity: sha512-F3fo1MYrRJYL3zER0OUOmkutjr1Vp23m7OsSgp7nq4SP6OqX6C/56XFIPAl5bt3zaBRjmW7SGz3u/6LwFpYcOg==}
@@ -5474,6 +5500,10 @@ snapshots:
       json5: 2.2.3
       magic-string: 0.30.21
       string.prototype.matchall: 4.0.12
+
+  '@trpc/server@11.0.0(typescript@6.0.3)':
+    dependencies:
+      typescript: 6.0.3
 
   '@tybys/wasm-util@0.10.3':
     dependencies:

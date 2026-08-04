@@ -39,12 +39,16 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  bulletins,views,notifications,moderation,sync}/{api,components,hooks,model,routes,
                  state,tests}. Shell/router/providers in src/app/. Shared UI in src/shared/.
 apps/server/     The modular monolith.
-  composition/   The ONLY place that knows about the object graph (ADR-0003).
+  composition/   The ONLY place that knows about the object graph, and the only place that reads
+                 process.env (ADR-0003). config.ts · container.ts · request-scope.ts; registrations.ts
+                 arrives with the first module.
   entrypoints/   http/ · queue/ · cron/. The ONLY place that knows about the runtime (ADR-0009).
   modules/       identity · connections · graph · bulletins · views · notifications · moderation ·
                  sync · storage · audit. Each: transport/ application/ domain/ persistence/ tests/
                  plus a <name>.module.ts. (Addendum §4 — a module only grows the directories it needs.)
-  shared/        auth · events · errors · logging · transactions.
+  shared/        auth (Actor, branded ViewerId, JWT verification — ADR-0011) · trpc (initTRPC, the
+                 root router, the request context) · errors · health. events/logging/transactions
+                 arrive with the code that needs them.
 packages/        contracts · database · observability · configuration · testing.
 supabase/        migrations/ · sql/ · seed/ · tests/.
 scripts/         Repo tooling.
@@ -81,11 +85,12 @@ Allowed: `Transport → Application → Domain ← Infrastructure`.
 Deliberately-violating fixtures live in `tests/fitness/__fixtures__/`; a test asserts each is caught.
 If you find yourself wanting to add an exception, that is the signal to change the design, not the rule.
 
-**Live as of M1a:** the first five — the addendum §19 minimums, each proven by its own fixture. The
-last two are deferred to **M1b.9** in the implementation plan (not merely "later"): they ship in the M2
-PR that introduces the code they bind to — `no-container-outside-composition` with the DI container,
-`no-sql-outside-persistence` with the first repository. A rule configured against nothing is the empty
-abstraction §4 forbids, and it reports green forever.
+**Live as of M2.3:** the first six, each proven by its own fixture — the five addendum §19 minimums
+from M1a, plus `no-container-outside-composition`, which shipped with the DI container it binds to.
+`no-sql-outside-persistence` is still deferred to the M2 PR that introduces the first repository
+(lane L1): it is a rule about SQL *literals* rather than an import edge, so dependency-cruiser is the
+wrong tool for it. A rule configured against nothing is the empty abstraction §4 forbids, and it
+reports green forever.
 
 Of the commands below, only `test:e2e` is still absent — it arrives with M4. Everything else works
 today: `pnpm install/dev/build/build:web/build:server:node/typecheck/lint/boundaries/test/test:unit/
