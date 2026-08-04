@@ -16,12 +16,11 @@
  * (`tests/fitness/__fixtures__/<rule>/apps/server/src/modules/…`). One rule,
  * one fixture, no second copy of the rule to drift.
  *
- * Not yet enforced here, because M1 has no code for them to bind to (adding a
- * rule with nothing to check is the empty abstraction §4 forbids):
- *   - `no-container-outside-composition` — lands with the DI container (M2, ADR-0003).
+ * Not yet enforced here, because the tree still has no code for it to bind to
+ * (adding a rule with nothing to check is the empty abstraction §4 forbids):
  *   - `no-sql-outside-persistence`       — an ESLint rule about SQL *literals*,
  *                                          not an import edge; lands with the
- *                                          first repository (M2).
+ *                                          first repository (M2, lane L1).
  *
  * @type {import('dependency-cruiser').IConfiguration}
  */
@@ -129,6 +128,25 @@ module.exports = {
         'quietly re-creates the "trust the frontend" failure the trust model forbids (§15).',
       from: { path: 'apps/web/' },
       to: { path: 'apps/server/' },
+    },
+    {
+      name: 'no-container-outside-composition',
+      severity: 'error',
+      comment:
+        'ADR-0003:41 / addendum §12: only `entrypoints/**` and `composition/**` may import the ' +
+        'container. Business code that reaches for the object graph is a service locator wearing ' +
+        'an import statement — §12 forbids `container.resolve(...)`, and the import that makes it ' +
+        'possible is the same violation one step earlier. Take what you need through your ' +
+        'constructor or your module factory; if that list is uncomfortably long, the class has ' +
+        'more than one reason to change (§5).',
+      // `from` is deliberately "everything except the two sanctioned callers" rather than an
+      // enumeration of offenders: a new top-level directory under apps/ or packages/ must be
+      // forbidden by default, not silently exempt until someone remembers to list it.
+      //
+      // Non-capturing group so this rule declares no `$1` — `to` below is a fixed path, and a
+      // capture that nothing consumes is a trap for whoever edits it next.
+      from: { pathNot: 'apps/server/src/(?:entrypoints|composition)/' },
+      to: { path: 'apps/server/src/composition/container' },
     },
     {
       name: 'no-cross-module-persistence',

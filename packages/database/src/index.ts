@@ -1,5 +1,8 @@
 export { createDatabaseConnection, DEFAULT_MAX_CONNECTIONS } from './create-database-connection';
-export type { DatabaseConnectionOptions } from './create-database-connection';
+export type {
+  DatabaseConnection,
+  DatabaseConnectionOptions,
+} from './create-database-connection';
 /**
  * The generated schema, exported under the name the rest of the system uses.
  *

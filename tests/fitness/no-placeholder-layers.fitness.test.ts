@@ -30,6 +30,7 @@ const modulesRoot = join(repositoryRoot, 'apps', 'server', 'src', 'modules');
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']);
 
 /** An empty export list, with or without a re-export source — "a re-export of nothing". */
+// Matches a single-line empty-export statement only; a file with two separate empty-export statements would slip past. Known, accepted.
 const EMPTY_EXPORT_PATTERN = /^export\s*\{\s*\}(\s*from\s*['"][^'"]*['"])?\s*;?$/;
 
 /**
