@@ -1,15 +1,19 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { generateJwtSigningSecret, mintSupabaseUserToken } from '@playa-post/testing';
+import {
+  generateSupabaseSigningKeyPair,
+  mintSupabaseAsymmetricUserToken,
+} from '@playa-post/testing';
 
 import type { Configuration } from '../../composition/config';
 import { buildAppContainer, type AppContainer } from '../../composition/container';
+import { createSupabaseJwtVerifier } from '../../shared/auth/supabase-jwt-verifier';
 import { readHealth } from '../../shared/health/read-health';
 
 import { HEALTH_PATH } from './health';
 import { createHttpServer, TRPC_PREFIX } from './http-server';
 
-const supabaseJwtSecret = generateJwtSigningSecret();
+const projectKey = await generateSupabaseSigningKeyPair();
 
 const testConfiguration: Configuration = {
   nodeEnv: 'test',
@@ -17,7 +21,7 @@ const testConfiguration: Configuration = {
   port: 0,
   logLevel: 'silent',
   databaseUrl: 'postgres://app_rw@127.0.0.1:1/nothing_listening_here',
-  supabaseJwtSecret,
+  supabaseUrl: 'https://project-that-does-not-exist.supabase.co',
 };
 
 describe('createHttpServer', () => {
@@ -25,7 +29,12 @@ describe('createHttpServer', () => {
   let container: AppContainer | undefined;
 
   function start(): ReturnType<typeof createHttpServer> {
-    container = buildAppContainer(testConfiguration);
+    container = {
+      ...buildAppContainer(testConfiguration),
+      // The verifier stays real — same algorithm pin, same claim assertions (ADR-0011).
+      // Only its key source is local, so this suite never fetches the project's JWKS.
+      accessTokenVerifier: createSupabaseJwtVerifier({ keySource: projectKey.publicKey }),
+    };
     server = createHttpServer(container);
     return server;
   }
@@ -91,11 +100,11 @@ describe('createHttpServer', () => {
     });
 
     // Proves the context factory ran on a real request: a valid, correctly-signed
-    // token is accepted by the verifier the container wired, and rejected only by the
-    // onboarding check — which is exactly the state L0 ships in (no app.users yet).
+    // token is accepted by the real verifier, and rejected only by the onboarding
+    // check — which is exactly the state L0 ships in (no app.users yet).
     it('runs the context factory, resolving a real token to a not-onboarded session', async () => {
-      const token = await mintSupabaseUserToken({
-        secret: supabaseJwtSecret,
+      const token = await mintSupabaseAsymmetricUserToken({
+        signingKey: projectKey,
         role: 'authenticated',
       });
 

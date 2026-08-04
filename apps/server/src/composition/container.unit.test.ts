@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { generateJwtSigningSecret, mintSupabaseUserToken } from '@playa-post/testing';
 
 import type { Configuration } from './config';
 import { buildAppContainer } from './container';
@@ -16,8 +18,27 @@ const configuration: Configuration = {
   port: 0,
   logLevel: 'silent',
   databaseUrl: 'postgres://app_rw@127.0.0.1:1/nothing_listening_here',
-  supabaseJwtSecret: 'x'.repeat(32),
+  supabaseUrl: 'https://project-that-does-not-exist.supabase.co',
 };
+
+/**
+ * Stands in for the network, and fails if anything reaches for it.
+ *
+ * The container's verifier holds a remote JWKS resolver pointed at a project that does
+ * not exist. Left unstubbed, an accidental fetch would surface as a slow DNS failure
+ * that still made the assertion pass — a unit suite quietly doing I/O. Stubbed, the
+ * attempt is visible and assertable.
+ */
+const networkAttempt = vi.fn(() => Promise.reject(new Error('unit tests do not use the network')));
+
+beforeEach(() => {
+  networkAttempt.mockClear();
+  vi.stubGlobal('fetch', networkAttempt);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('buildAppContainer', () => {
   it('builds the whole graph without opening a socket', async () => {
@@ -28,6 +49,7 @@ describe('buildAppContainer', () => {
     expect(container.accessTokenVerifier).toBeDefined();
     expect(container.actorResolver).toBeDefined();
     expect(container.router).toBeDefined();
+    expect(networkAttempt).not.toHaveBeenCalled();
 
     await container.dispose();
   });
@@ -43,13 +65,22 @@ describe('buildAppContainer', () => {
     return container.dispose();
   });
 
-  it('verifies tokens against the configured secret and no other', async () => {
+  it('wires a verifier pinned to ES256, refusing a legacy HS256 token', async () => {
     const container = buildAppContainer(configuration);
 
-    // Not a re-test of the verifier — an assertion that the *wiring* passed the right
-    // string. A container that defaulted the secret, or read a different key, would
-    // accept tokens this project never issued.
+    // Not a re-test of the verifier — an assertion that the *wiring* is the asymmetric
+    // one (ADR-0011). A container still verifying against the project's retired shared
+    // secret would accept the token below, and nothing else in the repository would
+    // notice. The `fetch` assertion is the second half: `jose` checks the algorithm
+    // before it resolves a key, so refusing a forged header costs no outbound request.
+    const legacyToken = await mintSupabaseUserToken({
+      secret: generateJwtSigningSecret(),
+      role: 'authenticated',
+    });
+
+    await expect(container.accessTokenVerifier.verify(legacyToken)).rejects.toThrow();
     await expect(container.accessTokenVerifier.verify('not-a-token')).rejects.toThrow();
+    expect(networkAttempt).not.toHaveBeenCalled();
 
     await container.dispose();
   });
