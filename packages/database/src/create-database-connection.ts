@@ -70,7 +70,7 @@ export interface DatabaseConnectionOptions {
  * ```ts
  * const database = createDatabaseConnection({ connectionString: config.databaseUrl });
  * try {
- *   await database.selectFrom('app.security_baseline_canary').selectAll().execute();
+ *   await database.selectFrom('app.users').select('handle').execute();
  * } finally {
  *   await database.destroy();
  * }

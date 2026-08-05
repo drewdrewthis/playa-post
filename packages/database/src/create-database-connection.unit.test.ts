@@ -31,26 +31,26 @@ describe('createDatabaseConnection', () => {
   });
 
   it('splits the schema off the table key instead of quoting it whole', () => {
-    // `"app.security_baseline_canary"` as a single identifier would resolve to a
-    // table of that literal name in the search path — a silently wrong table
-    // rather than an error. The dot must land outside the quotes.
-    const { sql } = connect().selectFrom('app.security_baseline_canary').selectAll().compile();
+    // `"app.users"` as a single identifier would resolve to a table of that literal
+    // name in the search path — a silently wrong table rather than an error. The dot
+    // must land outside the quotes.
+    const { sql } = connect().selectFrom('app.users').selectAll().compile();
 
-    expect(sql).toBe('select * from "app"."security_baseline_canary"');
+    expect(sql).toBe('select * from "app"."users"');
   });
 
   it('binds values as parameters rather than interpolating them into the SQL', () => {
     // ADR-0007: "no string interpolation of user input anywhere". The board filter
     // compiler is built on this being true of the builder underneath it.
-    const injection = "'; drop table app.security_baseline_canary; --";
+    const injection = "'; drop table app.users; --";
 
     const { sql, parameters } = connect()
-      .selectFrom('app.security_baseline_canary')
+      .selectFrom('app.users')
       .selectAll()
       .where('id', '=', injection)
       .compile();
 
-    expect(sql).toBe('select * from "app"."security_baseline_canary" where "id" = $1');
+    expect(sql).toBe('select * from "app"."users" where "id" = $1');
     expect(parameters).toEqual([injection]);
   });
 

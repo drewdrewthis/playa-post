@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { createIdentityRouter } from '../../apps/server/src/modules/identity/transport/identity.router';
 import { createAppRouter } from '../../apps/server/src/shared/trpc/app.router';
 import {
   authenticatedProcedure,
@@ -33,6 +34,24 @@ import {
  * file is the mechanism L5's row will point at or reuse.
  */
 
+/**
+ * The router this process serves, assembled the way `composition/container.ts`
+ * assembles it.
+ *
+ * The onboarding service behind it is a null object: this suite reads input *schemas*
+ * and never invokes a procedure, so a working service would add nothing but a
+ * database. A rejection rather than a stub value keeps that assumption checkable.
+ */
+function appRouter(): ReturnType<typeof createAppRouter> {
+  return createAppRouter({
+    identity: createIdentityRouter({
+      completeOnboarding: {
+        complete: () => Promise.reject(new Error('no procedure is invoked by this suite')),
+      },
+    }),
+  });
+}
+
 /** The offending shapes, kept out of the real router — a fixture, exactly like `__fixtures__/`. */
 const impersonationFixtureRouter = router({
   flat: publicProcedure
@@ -55,11 +74,11 @@ const impersonationFixtureRouter = router({
 describe('viewerId provenance (ADR-0002 §5a, M2-AC20/B14)', () => {
   describe('the router this server actually serves', () => {
     it('has procedures to check — a walk over an empty router proves nothing', () => {
-      expect(procedurePaths(createAppRouter())).not.toHaveLength(0);
+      expect(procedurePaths(appRouter())).not.toHaveLength(0);
     });
 
     it('accepts no viewer, user, actor, or owner identifier on any procedure input', () => {
-      expect(findForbiddenIdentifierInputs(createAppRouter())).toEqual([]);
+      expect(findForbiddenIdentifierInputs(appRouter())).toEqual([]);
     });
   });
 

@@ -90,18 +90,27 @@ describe('reaching the security baseline as app_rw', () => {
     }
   });
 
-  it('writes and reads the canary table through the generated types', async () => {
+  it('writes and reads app.users through the generated types', async () => {
+    // Was the security-baseline canary until the `app.users` migration retired it
+    // (ADR-0008). A real product table is the better subject anyway: the canary's
+    // every column was defaulted, so it could not have caught the `Timestamp` and
+    // `citext` claims asserted below.
     const database = createDatabaseConnection({ connectionString: appRwConnectionString });
 
     try {
       const inserted = await database
-        .insertInto('app.security_baseline_canary')
-        .defaultValues()
+        .insertInto('app.users')
+        .values({
+          auth_user_id: '00000000-0000-4000-8000-00000000beef',
+          handle: 'dusty_rhodes',
+          display_name: 'Dusty Rhodes',
+          created_at: new Date(),
+        })
         .returning(['id', 'created_at'])
         .executeTakeFirstOrThrow();
 
       const rows = await database
-        .selectFrom('app.security_baseline_canary')
+        .selectFrom('app.users')
         .select(['id', 'created_at'])
         .execute();
 

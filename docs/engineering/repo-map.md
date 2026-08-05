@@ -80,17 +80,25 @@ Allowed: `Transport → Application → Domain ← Infrastructure`.
 | `no-web-to-server-internals` | `apps/web` may import `packages/contracts`, nothing else from the server |
 | `no-cross-module-persistence` | a module must not import another module's persistence, internal domain entity, private service, SQL, test helper, or internal transport schema |
 | `no-container-outside-composition` | only `entrypoints/` and `composition/` may import the container |
-| `no-sql-outside-persistence` | SQL literals only in `**/persistence/**` and `supabase/**` |
+| `no-sql-outside-persistence` | SQL literals and `sql` fragments only in `**/persistence/**` (and `supabase/**`, which is SQL by definition) |
 
-Deliberately-violating fixtures live in `tests/fitness/__fixtures__/`; a test asserts each is caught.
-If you find yourself wanting to add an exception, that is the signal to change the design, not the rule.
+Deliberately-violating fixtures live in `tests/fitness/__fixtures__/` (dependency-cruiser's, one
+directory per rule) and `tests/fitness/sql-fixtures/` (the SQL walker's — kept separate because
+`boundaries.fitness.test.ts` asserts every directory in `__fixtures__/` is named after a
+dependency-cruiser rule). A test asserts each fixture is still caught. If you find yourself wanting to
+add an exception, that is the signal to change the design, not the rule.
 
-**Live as of M2.3:** the first six, each proven by its own fixture — the five addendum §19 minimums
-from M1a, plus `no-container-outside-composition`, which shipped with the DI container it binds to.
-`no-sql-outside-persistence` is still deferred to the M2 PR that introduces the first repository
-(lane L1): it is a rule about SQL *literals* rather than an import edge, so dependency-cruiser is the
-wrong tool for it. A rule configured against nothing is the empty abstraction §4 forbids, and it
-reports green forever.
+**All seven are live as of M2.4 (lane L1).** The first six are dependency-cruiser rules in
+`.dependency-cruiser.cjs`, each proven by its own fixture. **`no-sql-outside-persistence` is not one of
+them**: it is a rule about SQL *literals and `sql` fragments* rather than an import edge, so it is a
+TypeScript-AST walker (`tests/fitness/find-sql-outside-persistence.ts`) driven by
+`no-sql-outside-persistence.fitness.test.ts` — the same reasoning `find-viewer-identifier-inputs.ts`
+used for B14. It landed with the first repository, because a rule configured against nothing is the
+empty abstraction §4 forbids and reports green forever.
+
+Its scope is `apps/server/src/**` minus `persistence/` minus tests. `packages/**` is out of scope on
+purpose: those are libraries rather than layered modules, and `packages/database` and
+`packages/testing` both run SQL by design.
 
 Of the commands below, only `test:e2e` is still absent — it arrives with M4. Everything else works
 today: `pnpm install/dev/build/build:web/build:server:node/typecheck/lint/boundaries/test/test:unit/

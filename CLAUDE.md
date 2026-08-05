@@ -110,12 +110,17 @@ its own fixture and by nothing else. **Do not "fix" a fixture.** Adding a rule
 without adding its fixture fails that test on purpose.
 
 `no-container-outside-composition` shipped with the DI container it binds to
-(M2.3, ADR-0003). **`no-sql-outside-persistence` is still owed** — the second
-half of **M1b.9**, landing in the M2 PR that introduces the first repository.
-It is not configured yet because a rule with nothing to check reports green
-forever, which is worse than no rule at all; it is also a rule about SQL
-*literals* rather than an import edge, so dependency-cruiser is the wrong tool
-and it needs a named AST/`sql`-tag-aware detection rule of its own.
+(M2.3, ADR-0003). **`no-sql-outside-persistence` shipped with the first
+repository** (M1b.9's second half, lane L1) and is **not** a dependency-cruiser
+rule: it governs SQL *literals and `sql` fragments*, not import edges, so it is a
+TypeScript-AST walker at
+[`tests/fitness/find-sql-outside-persistence.ts`](tests/fitness/find-sql-outside-persistence.ts),
+driven by `no-sql-outside-persistence.fitness.test.ts`, with its own fixtures
+under `tests/fitness/sql-fixtures/` (a sibling of `__fixtures__/`, because
+`boundaries.fitness.test.ts` requires every directory in `__fixtures__/` to be
+named after a dependency-cruiser rule). It scopes to `apps/server/src/**` minus
+`persistence/` minus tests, and it is the only check that can see a `sql` tag
+imported as `@playa-post/database`'s re-export rather than as `kysely`.
 
 ## Conventions
 

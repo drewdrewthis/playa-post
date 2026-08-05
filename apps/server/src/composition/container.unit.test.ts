@@ -85,14 +85,27 @@ describe('buildAppContainer', () => {
     await container.dispose();
   });
 
-  it('resolves no actor until an identity module is registered', async () => {
+  it('registers the identity module, so its procedures are served', () => {
+    // Was "resolves no actor until an identity module is registered", which asserted
+    // L0's truth: with no `app.users`, `createNoOnboardedUsersResolver` answered null
+    // for everyone. That resolver is gone (ADR-0011 Verification row 4) and the
+    // container now wires `modules/identity`'s query, which reads a real table — so
+    // *calling* it here would open a socket to a connection string pointed at nothing,
+    // which is the one thing the unit project may never do.
+    //
+    // What that leaves provable without infrastructure is the wiring itself, and it is
+    // the half that would actually regress: a container that forgot to mount identity.
+    // The resolver's behaviour is proven twice elsewhere, at the level each belongs to
+    // — `modules/identity/tests/application/resolve-actor.query.unit.test.ts` against
+    // an in-memory repository, and `tests/integration/actor-resolution.integration.test.ts`
+    // against real Postgres.
     const container = buildAppContainer(configuration);
 
-    await expect(
-      container.actorResolver.resolve({ authUserId: 'auth-user-1' }),
-    ).resolves.toBeNull();
+    expect(Object.keys(container.router._def.procedures)).toContain(
+      'identity.completeOnboarding',
+    );
 
-    await container.dispose();
+    return container.dispose();
   });
 
   it('serves a router carrying at least one procedure', () => {

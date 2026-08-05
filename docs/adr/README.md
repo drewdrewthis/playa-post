@@ -20,10 +20,10 @@ later milestone must. ADR-0009 is the only one so far.
 | [0005](ADR-0005-offline-sync-protocol.md) | Offline sync protocol, idempotency, and conflict rules | proposed |
 | [0006](ADR-0006-outbox-and-queue-delivery.md) | Transactional outbox and asynchronous delivery | proposed |
 | [0007](ADR-0007-board-query-dsl.md) | Board query DSL — restricted validated grammar | proposed |
-| [0008](ADR-0008-identity-model.md) | Identity model — auth user ↔ internal ID | proposed |
+| [0008](ADR-0008-identity-model.md) | Identity model — auth user ↔ internal ID | proposed (amended — the confusable-normalization algorithm named; `HANDLE_TOO_SHORT` beside `HANDLE_TOO_LONG`) |
 | [0009](ADR-0009-deploy-node-server-to-render.md) | Deploy the Node server to Render (supersedes 0001) | accepted — owner decision 2026-08-02 |
 | [0010](ADR-0010-supabase-rest-security-harness.md) | A purpose-built PostgREST harness for the Supabase-shaped security rows (ADR-0002 B2) | proposed |
-| [0011](ADR-0011-access-token-verification-at-the-trpc-boundary.md) | Access-token verification at the tRPC boundary (how ADR-0008 rule 8 is implemented) | proposed (amended — ES256 via the project JWKS, superseding the HS256 shared secret) |
+| [0011](ADR-0011-access-token-verification-at-the-trpc-boundary.md) | Access-token verification at the tRPC boundary (how ADR-0008 rule 8 is implemented) | proposed (amended — ES256 via the project JWKS, superseding the HS256 shared secret; `signedInProcedure` added, Verification row 4 done; authentication resolves lazily so a public procedure touches no dependency) |
 
 Normative inputs, in precedence order:
 

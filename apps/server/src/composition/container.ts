@@ -3,9 +3,9 @@ import { createRemoteJWKSet } from 'jose';
 import { createDatabaseConnection, type DatabaseConnection } from '@playa-post/database';
 import { createLogger, DEFAULT_ALLOWED_LOG_FIELDS, type Logger } from '@playa-post/observability';
 
+import { createIdentityModule } from '../modules/identity/identity.module';
 import type { AccessTokenVerifier } from '../shared/auth/access-token-verifier';
 import type { ActorResolver } from '../shared/auth/actor-resolver';
-import { createNoOnboardedUsersResolver } from '../shared/auth/no-onboarded-users.resolver';
 import { createSupabaseJwtVerifier } from '../shared/auth/supabase-jwt-verifier';
 import { createAppRouter, type AppRouter } from '../shared/trpc/app.router';
 
@@ -83,6 +83,10 @@ export function buildAppContainer(configuration: Configuration): AppContainer {
     allowedFields: [...DEFAULT_ALLOWED_LOG_FIELDS, 'code'],
   });
   const database = createDatabaseConnection({ connectionString: configuration.databaseUrl });
+  // Identity is built before the router because it supplies two things at once: the
+  // procedures to mount and the `ActorResolver` every other module's authorization
+  // depends on (ADR-0008 rule 8).
+  const identity = createIdentityModule({ database });
 
   return {
     configuration,
@@ -97,11 +101,13 @@ export function buildAppContainer(configuration: Configuration): AppContainer {
       // unrecognised `kid` is what triggers a refresh.
       keySource: createRemoteJWKSet(supabaseJwksUrl(configuration.supabaseUrl)),
     }),
-    // Replaced in lane L1 by modules/identity's ResolveActorQuery, which reads
-    // app.users. Until that table exists, "nobody is onboarded" is the truth, not a
-    // stub — see the resolver's own doc comment.
-    actorResolver: createNoOnboardedUsersResolver(),
-    router: createAppRouter(),
+    // modules/identity's ResolveActorQuery, reading the real app.users (ADR-0011
+    // Verification row 4). It replaced `createNoOnboardedUsersResolver`, which was
+    // deleted rather than kept: a working implementation of "nobody is signed in"
+    // sitting beside the real one is one wiring mistake away from locking every user
+    // out with a green test suite.
+    actorResolver: identity.actorResolver,
+    router: createAppRouter({ identity: identity.router }),
     dispose: () => database.destroy(),
   };
 }

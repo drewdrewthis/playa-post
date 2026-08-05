@@ -172,3 +172,62 @@ and lived less than a day. It was never exercised against the live project — h
 mismatch would have surfaced immediately. The lesson is cheap and worth writing down: a decision
 between two arrangements a platform *supports* is not a judgement call when the platform has already
 picked one. Check which is live before weighing the trade-off.
+
+## Amendment — 2026-08-05 — `signedInProcedure`, the onboarding-shaped exception
+
+**What changed.** `shared/trpc/trpc.ts` gained a third procedure kind beside `publicProcedure` and
+`authenticatedProcedure`. `signedInProcedure` requires a **verified token** and hands the procedure the
+`AuthenticatedPrincipal`; it does not require an `Actor`.
+
+**Why.** The `ActorResolver` split above is what makes 403 `ONBOARDING_REQUIRED` expressible — and it
+makes onboarding itself unreachable, because its caller is by definition not onboarded.
+`identity.completeOnboarding` under `authenticatedProcedure` would answer every attempt with the 403
+telling the caller to onboard. The alternative, making it a `publicProcedure` that takes an
+`authUserId`, is precisely the ADR-0002 §5a impersonation bug and is not an alternative at all.
+
+**The constraint that comes with it.** `principal.authUserId` is not a product identifier
+(ADR-0008 rule 2) and no viewer-scoped read may be performed with it — that is what the branded
+`ViewerId`, constructible only from an `Actor`, keeps unwritable. `signedInProcedure` is for
+operations where "has a session, has no product user yet" is the *designed* state. It has exactly one
+call site today, and a second one needs a reason in this file. Everything else stays
+`authenticatedProcedure`.
+
+**Unchanged.** The two credential failures still produce a byte-identical 401 — `signedInProcedure`
+refuses `anonymous` and `invalid-token` the same indistinguishable way `authenticatedProcedure` does.
+
+**Verification row 4 is done.** `createNoOnboardedUsersResolver` was deleted in the lane-L1 PR that
+registered `modules/identity` and wired `createResolveActorQuery` into the container. Row 3 (M2-AC2's
+three transcripts against a real `app.users`) is the remaining bar for `accepted`.
+
+## Amendment — 2026-08-05 — authentication resolves lazily, still exactly once
+
+**What changed.** `RequestContext.authentication` went from a value the context factory had already
+computed to a **memoised function**: `authentication(): Promise<AuthenticationOutcome>`.
+`buildRequestScope` is now synchronous and performs no I/O; the token is verified and `app.users` is
+read the first time a procedure asks, which in practice means the first `authenticatedProcedure` or
+`signedInProcedure` in the request.
+
+**Why.** Eager resolution was free while `createNoOnboardedUsersResolver` was the implementation — it
+returned `null` without touching anything. Wiring the real resolver made it a JWKS lookup plus a
+database read **on every request, including `health.check`**, and an unreachable database therefore
+turned the liveness probe into a 500. Render reads that as an unhealthy instance and pulls a process
+out of rotation for a dependency the probe was specifically designed not to depend on
+([#19](https://github.com/drewdrewthis/playa-post/pull/19)). A health check that fails when the
+database is down reports the wrong thing about the wrong component.
+
+**Why not the alternative.** The other option was to keep resolution eager and have the context factory
+swallow resolver failures for public procedures. That trades a loud 500 for a wrong answer: a database
+outage would render every signed-in caller `not-onboarded` and answer them 403 `ONBOARDING_REQUIRED`,
+which is indistinguishable from the truthful case and would be debugged as an onboarding bug. It also
+still pays the round trip on the public path.
+
+**What "once" still means.** The promise is memoised, not the resolved value, so two concurrent
+procedures in one request share one in-flight resolution rather than racing to start a second; a
+rejection is cached identically. ADR-0008 rule 8's guarantee — no procedure sees a token, and no two
+procedures in a request disagree about who is calling — is unchanged.
+
+**The cost, stated.** A credential presented *only* to public procedures is now never verified, so it
+produces no entry in the logs the `anonymous`/`invalid-token` split exists for. That split still
+distinguishes "tokens are arriving and failing" from "no tokens are arriving" for every request that
+reaches a guarded procedure, which is where an auth incident actually shows up. A token nobody used is
+not an authentication event.

@@ -88,7 +88,7 @@ describe('buildRequestScope', () => {
 
     const scope = await buildRequestScope(container, {});
 
-    expect(scope.authentication).toEqual({ kind: 'anonymous' });
+    await expect(scope.authentication()).resolves.toEqual({ kind: 'anonymous' });
     await container.dispose();
   });
 
@@ -104,7 +104,7 @@ describe('buildRequestScope', () => {
       authorizationHeader: `Bearer ${token}`,
     });
 
-    expect(scope.authentication).toEqual({
+    await expect(scope.authentication()).resolves.toEqual({
       kind: 'authenticated',
       principal: { authUserId: 'auth-user-1' },
       actor,
@@ -124,7 +124,7 @@ describe('buildRequestScope', () => {
       authorizationHeader: `Bearer ${token}`,
     });
 
-    expect(scope.authentication.kind).toBe('not-onboarded');
+    expect((await scope.authentication()).kind).toBe('not-onboarded');
     await container.dispose();
   });
 
@@ -139,7 +139,7 @@ describe('buildRequestScope', () => {
       authorizationHeader: `Bearer ${token}`,
     });
 
-    expect(scope.authentication).toEqual({ kind: 'invalid-token' });
+    await expect(scope.authentication()).resolves.toEqual({ kind: 'invalid-token' });
     await container.dispose();
   });
 

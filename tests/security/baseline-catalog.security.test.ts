@@ -109,9 +109,10 @@ describe('ADR-0002 security baseline', () => {
 
   describe('B1 — anon and authenticated cannot read schema app', () => {
     it('enumerates at least one table, so the rows below cannot pass vacuously', () => {
-      // A `for all tables` assertion over an empty set is green and worthless. The
-      // canary table in the baseline migration exists to keep this honest until M2
-      // brings real tables (ADR-0002 B1: "fails if the enumerated table count is 0").
+      // A `for all tables` assertion over an empty set is green and worthless
+      // (ADR-0002 B1: "fails if the enumerated table count is 0"). The baseline's
+      // canary table held this open until a product table existed; `app.users`
+      // (ADR-0008) is that table, and the canary is gone.
       expect(appTables.length).toBeGreaterThan(0);
     });
 
@@ -320,11 +321,19 @@ describe('ADR-0002 security baseline', () => {
     });
 
     it('quantifies over a non-empty set of each object kind it claims to check', async () => {
-      // Same argument as B1's table-count guard, for the other three branches of the
-      // query above: `where <leak condition>` over zero rows returns zero rows, so a
-      // bug in the sequence or function branch would pass silently until M2 created
-      // the first object of that kind. The canary table and canary sequence exist to
-      // keep this honest.
+      // Same argument as B1's table-count guard, for the other branches of the query
+      // above: `where <leak condition>` over zero rows returns zero rows, so a bug in
+      // the sequence or function branch would pass silently until the first object of
+      // that kind existed.
+      //
+      // ⚠ **The sequence branch is vacuous right now, and that is checked below rather
+      // than assumed.** The canary sequence existed to keep it honest and was dropped
+      // by the `app.users` migration (ADR-0008), whose only identifier is a `uuid`
+      // default — schema `app` therefore holds no sequence until lane L2's first
+      // `bigserial`. `expectedVacuousKinds` is what makes that a scheduled repair
+      // instead of a silent regression: the moment a sequence lands, the assertion
+      // below fails and this test has to be put back.
+      const expectedVacuousKinds = ['sequence'];
       const { rows } = await database.client.query<{ kind: string; count: string }>(
         `select 'table' as kind, count(*)::text as count
            from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace
@@ -340,7 +349,12 @@ describe('ADR-0002 security baseline', () => {
           order by 1`,
       );
 
-      expect(rows.filter((row) => row.count === '0')).toEqual([]);
+      const vacuous = rows.filter((row) => row.count === '0').map((row) => row.kind);
+
+      expect(
+        vacuous,
+        'a branch of the B1 leak query is quantifying over an empty set',
+      ).toEqual(expectedVacuousKinds);
     });
 
     it('leaves objects created later just as locked down', async () => {
@@ -391,15 +405,21 @@ describe('ADR-0002 security baseline', () => {
       const { client } = database;
       await client.query('begin');
       try {
+        // `app.users` since the identity migration retired the canary this used to
+        // write to (ADR-0008). The subject has to be a real table under the backstop,
+        // and now there is one.
         await client.query('set local role app_rw');
-        await client.query('insert into app.security_baseline_canary default values');
+        await client.query(
+          `insert into app.users (auth_user_id, handle, display_name, created_at)
+           values (pg_catalog.gen_random_uuid(), 'backstop_permit_probe', 'Backstop Probe', now())`,
+        );
         const { rows } = await client.query<{ count: string }>(
-          'select count(*)::text as count from app.security_baseline_canary',
+          'select count(*)::text as count from app.users',
         );
         expect(rows[0]?.count).toBe('1');
 
-        await client.query('update app.security_baseline_canary set created_at = now()');
-        await client.query('delete from app.security_baseline_canary');
+        await client.query(`update app.users set display_name = 'Backstop Probe II'`);
+        await client.query('delete from app.users');
       } finally {
         await client.query('rollback');
       }

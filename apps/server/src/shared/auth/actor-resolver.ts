@@ -3,11 +3,11 @@ import type { Actor, AuthenticatedPrincipal } from './actor';
 /**
  * Maps a verified auth identity onto the product user it belongs to.
  *
- * ADR-0008 rule 8, expressed as a port so the auth boundary can be complete before
- * `modules/identity` exists. Lane L0 ships this interface and the context that calls
- * it; **lane L1 implements it** as `modules/identity/application/resolve-actor.query.ts`
- * over `app.users`, and composition swaps the implementation in with no change to any
- * caller.
+ * ADR-0008 rule 8, expressed as a port so `shared/auth` never depends on the module
+ * that answers the question. Implemented by
+ * `modules/identity/application/resolve-actor.query.ts` over `app.users`, and wired in
+ * `composition/container.ts` — the only two files that need to know which module owns
+ * identity.
  *
  * The implementation owns the whole "is this user allowed to be here" question:
  *

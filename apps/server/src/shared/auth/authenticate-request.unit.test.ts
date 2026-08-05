@@ -4,7 +4,6 @@ import { AccessTokenVerificationError, type AccessTokenVerifier } from './access
 import type { Actor, AuthenticatedPrincipal } from './actor';
 import type { ActorResolver } from './actor-resolver';
 import { authenticateRequest, type AuthenticateRequestDependencies } from './authenticate-request';
-import { createNoOnboardedUsersResolver } from './no-onboarded-users.resolver';
 
 const principal: AuthenticatedPrincipal = { authUserId: 'auth-user-1' };
 const actor: Actor = { userId: 'app-user-1', handle: 'dusty_rhodes' };
@@ -95,17 +94,6 @@ describe('authenticateRequest', () => {
     );
 
     expect(outcome).toEqual({ kind: 'not-onboarded', principal });
-  });
-
-  it('is not-onboarded against the resolver that ships until app.users exists', async () => {
-    // Locks in the L0 behaviour the M2-AC2 third case depends on: with no identity
-    // module registered, a perfectly valid session is 403 ONBOARDING_REQUIRED.
-    const outcome = await authenticateRequest(
-      'Bearer good-token',
-      dependencies({ actorResolver: createNoOnboardedUsersResolver() }),
-    );
-
-    expect(outcome.kind).toBe('not-onboarded');
   });
 
   it('is authenticated when the token verifies and an onboarded user is found', async () => {

@@ -11,11 +11,25 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
-export interface AppSecurityBaselineCanary {
-  created_at: Generated<Timestamp>;
+export interface AppUsers {
+  auth_user_id: string;
+  avatar_path: string | null;
+  /**
+   * No default, on purpose (ADR-0008:29): the writer states when onboarding completed rather than inheriting whatever the row happened to be inserted at.
+   */
+  created_at: Timestamp;
+  deactivated_at: Timestamp | null;
+  display_name: string;
+  erased_at: Timestamp | null;
+  /**
+   * citext, so uniqueness is case-insensitive without a functional index. The remaining handle rules (charset, length, reserved words, confusables, immutability) live in modules/identity/domain/handle.policy.ts — this column enforces the one rule a database can enforce (ADR-0008:50-57).
+   */
+  handle: string;
   id: Generated<string>;
+  status: Generated<string>;
+  version: Generated<number>;
 }
 
 export interface DB {
-  "app.security_baseline_canary": AppSecurityBaselineCanary;
+  "app.users": AppUsers;
 }

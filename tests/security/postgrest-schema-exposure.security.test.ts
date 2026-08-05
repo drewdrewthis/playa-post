@@ -177,7 +177,8 @@ describe('ADR-0002 B2 — PostgREST cannot reach schema app', () => {
   describe('harness credibility — every B2 assertion is void if one of these fails', () => {
     it('enumerates at least one table in app, so the rows below cannot pass vacuously', () => {
       // Identical guard to B1's: "denied on every table" over an empty set is green and
-      // worthless. The canary table in the baseline migration keeps it honest until M2.
+      // worthless. `app.users` (ADR-0008) is what keeps it honest now that the
+      // baseline's canary table has been retired.
       expect(appTables.length).toBeGreaterThan(0);
     });
 
