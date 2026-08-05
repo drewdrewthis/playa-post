@@ -5,5 +5,11 @@
     "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
   },
   "include": ["tests/**/*.ts", "vitest.config.ts"],
-  "exclude": ["tests/fitness/__fixtures__/**"]
+  // Deliberately-violating architecture fixtures, in two roots because they answer to
+  // two different tools: `__fixtures__/` is dependency-cruiser's (and
+  // `boundaries.fitness.test.ts` asserts every directory in it is named after a
+  // dependency-cruiser rule, so nothing else may live there), `sql-fixtures/` is the
+  // `no-sql-outside-persistence` walker's. Type-checking either would invite someone
+  // to "fix" the violation and silently disarm the rule.
+  "exclude": ["tests/fitness/__fixtures__/**", "tests/fitness/sql-fixtures/**"]
 }

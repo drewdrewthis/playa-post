@@ -1,31 +1,36 @@
+import type { IdentityRouter } from '../../modules/identity/transport/identity.router';
 import { readHealth, type HealthResponse } from '../health/read-health';
 
 import { publicProcedure, router } from './trpc';
 
 /**
+ * The module routers the root router mounts. One entry per lane, added with that
+ * lane's first procedure.
+ */
+export interface AppRouterModules {
+  readonly identity: IdentityRouter;
+}
+
+/**
  * The root router — the registry every module's router is mounted on.
  *
- * **How a lane adds its module** (lane-brief C5): give this function a parameter for
- * the module's router and append one line to the `router({ … })` literal, in the same
- * PR as the module's first procedure. A registered-but-empty router is the placeholder
- * addendum §4 forbids.
+ * **How a lane adds its module** (lane-brief C5): add its router to
+ * {@link AppRouterModules} and append one line to the `router({ … })` literal, in the
+ * same PR as the module's first procedure. A registered-but-empty router is the
+ * placeholder addendum §4 forbids.
  *
- * ```ts
- * export function createAppRouter(modules: { identity: IdentityRouter }) {
- *   return router({ health: healthRouter, identity: modules.identity });
- * }
- * ```
- *
- * Routers are **passed in, never imported here.** `shared/` importing `modules/` would
- * make the shared transport layer depend on every feature it is supposed to be
- * independent of, and would put a cycle one careless import away. Composition is the
- * layer that is allowed to know every module exists (ADR-0003).
+ * Router **values** are passed in, never imported here; only their *types* are named,
+ * which is what {@link AppRouterModules} does and what makes `AppRouter` describe the
+ * real surface a client will type against (M2.16). `shared/` constructing a module's
+ * router would make the shared transport layer depend on every feature it is supposed
+ * to be independent of, and would put a runtime cycle one careless import away.
+ * Composition is the layer that is allowed to build them (ADR-0003).
  *
  * It is a factory rather than a module-scope constant so that the wiring happens once,
  * explicitly, where the container is built — and so a test can build a router without
  * inheriting whatever the process happens to have registered.
  */
-export function createAppRouter() {
+export function createAppRouter(modules: AppRouterModules) {
   return router({
     health: router({
       /**
@@ -45,6 +50,7 @@ export function createAppRouter() {
        */
       check: publicProcedure.query((): HealthResponse => readHealth()),
     }),
+    identity: modules.identity,
   });
 }
 

@@ -16,11 +16,18 @@
  * (`tests/fitness/__fixtures__/<rule>/apps/server/src/modules/…`). One rule,
  * one fixture, no second copy of the rule to drift.
  *
- * Not yet enforced here, because the tree still has no code for it to bind to
- * (adding a rule with nothing to check is the empty abstraction §4 forbids):
- *   - `no-sql-outside-persistence`       — an ESLint rule about SQL *literals*,
- *                                          not an import edge; lands with the
- *                                          first repository (M2, lane L1).
+ * Deliberately NOT here, because dependency-cruiser is the wrong tool for it:
+ *   - `no-sql-outside-persistence`       — governs SQL *literals* and `sql`
+ *                                          fragments, not import edges, so it is
+ *                                          a TypeScript-AST walker instead:
+ *                                          `tests/fitness/find-sql-outside-persistence.ts`,
+ *                                          with fixtures under
+ *                                          `tests/fitness/sql-fixtures/`. It is
+ *                                          also the only check that can see
+ *                                          Kysely's `sql` tag arriving as
+ *                                          `@playa-post/database`'s re-export,
+ *                                          where the import specifier names no
+ *                                          forbidden package at all.
  *
  * @type {import('dependency-cruiser').IConfiguration}
  */

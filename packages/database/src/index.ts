@@ -4,6 +4,23 @@ export type {
   DatabaseConnectionOptions,
 } from './create-database-connection';
 /**
+ * The query-builder surface a repository needs, re-exported so it has one home.
+ *
+ * This package owns the choice of query builder (addendum §18, and
+ * `create-database-connection.ts`'s own note): a consumer that had to declare
+ * `kysely` as its own dependency to write `Selectable<…>` or a `sql` fragment would
+ * be pinning that choice a second time, and swapping the builder would become a
+ * repo-wide dependency edit rather than a change to this package.
+ *
+ * ⚠ `sql` is a **persistence-layer** tool. Importing it from a module's `domain/` or
+ * `application/` is a boundary break that `.dependency-cruiser.cjs` cannot see —
+ * the specifier says `@playa-post/database`, not `kysely` — so the
+ * `no-sql-outside-persistence` fitness rule is what catches it, by finding the `sql`
+ * tag itself rather than the import edge.
+ */
+export { sql } from 'kysely';
+export type { Insertable, Selectable, SqlBool, Updateable } from 'kysely';
+/**
  * The generated schema, exported under the name the rest of the system uses.
  *
  * `DB` is kysely-codegen's fixed output name and is not configurable; `Database`

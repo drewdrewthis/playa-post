@@ -36,7 +36,10 @@ function contextFor(authentication: AuthenticationOutcome): RequestContext {
   return {
     correlationId: 'correlation-id-for-test',
     logger: createLogger({ level: 'silent' }),
-    authentication,
+    // Resolved lazily in production (`composition/request-scope.ts`) so a public
+    // procedure pays neither the JWKS fetch nor the `app.users` read; the outcome
+    // itself is unchanged, which is why these cases still read as plain values.
+    authentication: () => Promise.resolve(authentication),
   };
 }
 

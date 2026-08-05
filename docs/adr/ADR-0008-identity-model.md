@@ -110,3 +110,33 @@ Anything referencing an erased user must fail closed (ADR-0005 precedence rule 1
 
 `accepted` when sign-in resolves an `Actor` through `auth_user_id`, a fitness test asserts no column
 named `email` exists in schema `app`, and the erasure integration test (B11) is green.
+
+## Amendment — 2026-08-05 — the confusable-normalization algorithm, named
+
+**What changed.** Rule 5 asked for "a confusable-normalization check" without saying what counts as a
+confusable. It now names one: a **digit-substitution skeleton**, `0→o 1→l 3→e 5→s 7→t`, applied after
+lowercasing. Two handles collide when their skeletons are equal, so `m00nlight` cannot be registered
+while `moonlight` exists.
+
+**Why this and not more.** It is the minimum that closes the route the rule exists for — a look-alike
+of an existing handle, registered to impersonate its holder — using only characters the charset
+already permits (`[a-z0-9_]`). A full Unicode confusables table (UTS #39) is the eventual answer and
+is *not needed yet*: the charset admits no non-ASCII character, so there is nothing for it to fold.
+Homoglyph pairs within ASCII (`rn`/`m`, `l`/`I`) are the next extension, and are deliberately deferred
+until the rule has a real false-positive budget to spend — `rn`→`m` refuses `barnaby` for `bamaby`.
+
+**Where it lives.** `CONFUSABLE_SUBSTITUTIONS` in
+`apps/server/src/modules/identity/domain/handle.ts`, as one table. Extending the check means adding an
+entry there and nowhere else: the repository compiles the same table into the Postgres `translate()`
+call it compares with, so the SQL cannot keep folding an older set. A substitution that `translate()`
+cannot express (anything not one character to one character) throws rather than silently diverging.
+
+**What a user is told.** Nothing that distinguishes it. A confusable collision and a `citext` case
+collision return the same generic "not available" sentence, because escalation E5 forbids an
+availability oracle — the codes (`HANDLE_CONFUSABLE`, `HANDLE_CASE_COLLISION`) differ for the server's
+logs and for M2-AC25's evidence, not for the caller.
+
+**Second amendment — the length rule has two codes.** `{3,24}` is one rule with two bounds; M2-AC25
+quotes only the over-length scenario. The implementation raises `HANDLE_TOO_LONG` and
+`HANDLE_TOO_SHORT` rather than folding the lower bound into `HANDLE_INVALID_CHARSET`, because `code`
+is the field a client branches on and naming the wrong rule there is worse than a seventh code.

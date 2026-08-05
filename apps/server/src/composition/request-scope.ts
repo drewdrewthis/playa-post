@@ -1,6 +1,9 @@
 import { generateCorrelationId } from '@playa-post/observability';
 
-import { authenticateRequest } from '../shared/auth/authenticate-request';
+import {
+  authenticateRequest,
+  type AuthenticationOutcome,
+} from '../shared/auth/authenticate-request';
 import type { RequestContext } from '../shared/trpc/request-context';
 
 import type { AppContainer } from './container';
@@ -24,9 +27,19 @@ export interface IncomingRequest {
  * for nothing we need in M2, since there is no upstream service to propagate a trace
  * from. Revisit when one exists, and validate the inbound value then.
  *
- * Authentication is resolved **once, here**, so no procedure downstream ever sees a
- * token and no two procedures in one request can disagree about who is calling
- * (ADR-0008 rule 8).
+ * Authentication is resolved **once per request, on first ask** — the credentials are
+ * captured here and turned into an `AuthenticationOutcome` the first time a procedure
+ * needs one, then memoised. "Once" is ADR-0008 rule 8: no procedure downstream ever
+ * sees a token, and no two procedures in one request can disagree about who is
+ * calling. "On first ask" is what keeps a public procedure public.
+ *
+ * **Building a scope performs no I/O, and that is load-bearing.** Verifying a token
+ * can fetch the project's JWKS and resolving an actor reads `app.users`; paying both
+ * up front would make `health.check` — whose whole purpose is to answer while
+ * dependencies are down — fail with a 500 whenever the database is unreachable, and
+ * Render would pull a healthy instance out of rotation on the strength of it. This
+ * function is therefore synchronous, which is the honest signature for work that
+ * touches nothing.
  *
  * @param container - The application's object graph.
  * @param request - The inbound request's credentials.
@@ -34,20 +47,25 @@ export interface IncomingRequest {
  *   unauthenticated or un-onboarded request still gets a scope, and
  *   `authenticatedProcedure` decides what that means per procedure.
  */
-export async function buildRequestScope(
+export function buildRequestScope(
   container: AppContainer,
   request: IncomingRequest,
-): Promise<RequestContext> {
+): RequestContext {
   const correlationId = generateCorrelationId();
 
-  const authentication = await authenticateRequest(request.authorizationHeader, {
-    accessTokenVerifier: container.accessTokenVerifier,
-    actorResolver: container.actorResolver,
-  });
+  // Memoised by holding the promise, not the resolved value: two concurrent
+  // procedures in one request must share one in-flight resolution rather than race
+  // to start a second. A rejection is cached with the same reasoning — one request,
+  // one answer, even when the answer is a fault.
+  let outcome: Promise<AuthenticationOutcome> | undefined;
 
   return {
     correlationId,
     logger: container.logger.child({ correlationId }),
-    authentication,
+    authentication: () =>
+      (outcome ??= authenticateRequest(request.authorizationHeader, {
+        accessTokenVerifier: container.accessTokenVerifier,
+        actorResolver: container.actorResolver,
+      })),
   };
 }

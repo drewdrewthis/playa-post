@@ -54,6 +54,37 @@ export const createCallerFactory = t.createCallerFactory;
 export const publicProcedure = t.procedure;
 
 /**
+ * A procedure for someone with a verified session who may not have a product user yet.
+ *
+ * The narrow exception `authenticatedProcedure` cannot cover: **onboarding is the one
+ * operation whose caller is by definition not onboarded**, so gating it on an `Actor`
+ * would answer every attempt with the 403 that tells them to onboard. It receives the
+ * verified {@link import('../auth/actor').AuthenticatedPrincipal} — an `auth.users.id`
+ * and nothing more.
+ *
+ * ⚠ **`principal.authUserId` is not a product identifier and must never be used as
+ * one** (ADR-0008 rule 2). It is the input to actor resolution, not a substitute for
+ * it, and no viewer-scoped read may be performed with it — that is what `ViewerId`
+ * exists to make unwritable. Use this only where "has a session, has no user yet" is
+ * the *designed* state; everything else is {@link authenticatedProcedure}.
+ *
+ * Refuses the same two credential failures, the same indistinguishable way.
+ */
+export const signedInProcedure = t.procedure.use(async ({ ctx, next }) => {
+  const authentication = await ctx.authentication();
+
+  switch (authentication.kind) {
+    case 'anonymous':
+    case 'invalid-token':
+      throw new TRPCError({ code: 'UNAUTHORIZED' });
+
+    case 'not-onboarded':
+    case 'authenticated':
+      return next({ ctx: { ...ctx, principal: authentication.principal } });
+  }
+});
+
+/**
  * A procedure that runs only for an onboarded actor, and hands it the branded
  * {@link import('../auth/viewer-id').ViewerId} to read with.
  *
@@ -76,7 +107,10 @@ export const publicProcedure = t.procedure;
  * only mitigation.
  */
 export const authenticatedProcedure = t.procedure.use(async ({ ctx, next }) => {
-  const { authentication } = ctx;
+  // Asking here — rather than reading a value the context factory already computed —
+  // is what confines the JWKS fetch and the `app.users` read to procedures that
+  // actually need an actor. `publicProcedure` never calls this, so it never pays it.
+  const authentication = await ctx.authentication();
 
   switch (authentication.kind) {
     case 'anonymous':
