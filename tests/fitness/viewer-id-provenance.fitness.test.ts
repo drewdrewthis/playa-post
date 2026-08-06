@@ -1,15 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { createBulletinsRouter } from '../../apps/server/src/modules/bulletins/transport/bulletins.router';
-import { createConnectionsRouter } from '../../apps/server/src/modules/connections/transport/connections.router';
-import { createGraphRouter } from '../../apps/server/src/modules/graph/transport/graph.router';
-import { createIdentityRouter } from '../../apps/server/src/modules/identity/transport/identity.router';
-import { createModerationRouter } from '../../apps/server/src/modules/moderation/transport/moderation.router';
-import { createNotificationsRouter } from '../../apps/server/src/modules/notifications/transport/notifications.router';
-import { createSyncRouter } from '../../apps/server/src/modules/sync/transport/sync.router';
-import { createViewsRouter } from '../../apps/server/src/modules/views/transport/views.router';
-import { createAppRouter } from '../../apps/server/src/shared/trpc/app.router';
 import {
   authenticatedProcedure,
   publicProcedure,
@@ -22,6 +13,10 @@ import {
   inputFieldNames,
   procedurePaths,
 } from './find-viewer-identifier-inputs';
+import {
+  buildNullObjectAppRouter as appRouter,
+  EXPECTED_PROCEDURE_COUNT,
+} from './null-object-app-router';
 
 /**
  * Fitness function for ADR-0002 §5a / M2-AC20 / B14 — `viewerId` provenance.
@@ -40,54 +35,6 @@ import {
  * flipped by lane L5 (work item M2.19), which owns the security-suite surface. This
  * file is the mechanism L5's row will point at or reuse.
  */
-
-/**
- * Every application service behind the routers below is a null object: this suite
- * reads input *schemas* and never invokes a procedure, so a working service would add
- * nothing but a database. A rejection rather than a stub value keeps that assumption
- * checkable.
- */
-const unreachable = (): Promise<never> =>
-  Promise.reject(new Error('no procedure is invoked by this suite'));
-
-/**
- * The router this process serves, assembled the way `composition/container.ts`
- * assembles it.
- *
- * ⚠ **Every module a lane mounts has to be listed here, or this control stops seeing
- * it.** `createAppRouter`'s parameter is the whole registry, so a missing module is a
- * compile error rather than a silent gap — which is the only reason this is safe to
- * maintain by hand.
- */
-function appRouter(): ReturnType<typeof createAppRouter> {
-  return createAppRouter({
-    identity: createIdentityRouter({
-      completeOnboarding: { complete: unreachable },
-    }),
-    connections: createConnectionsRouter({
-      createInvite: { create: unreachable },
-      openInvite: { open: unreachable },
-      acceptInvite: { accept: unreachable },
-      setConnectionTrust: { set: unreachable },
-      getConnection: { get: unreachable },
-    }),
-    graph: createGraphRouter({ listVisibleGraph: { list: unreachable } }),
-    bulletins: createBulletinsRouter({
-      createBulletin: { create: unreachable },
-      archiveBulletin: { archive: unreachable },
-      getBulletin: { getById: unreachable },
-      listMyBulletins: { list: unreachable },
-      listBoard: { list: unreachable },
-    }),
-    moderation: createModerationRouter({
-      reportBulletin: { report: unreachable },
-      dismissBulletin: { dismiss: unreachable },
-    }),
-    sync: createSyncRouter({ submitMutations: { submit: unreachable } }),
-    views: createViewsRouter({ updateNotifyMeQuery: { update: unreachable } }),
-    notifications: createNotificationsRouter({ subscribeToPush: { subscribe: unreachable } }),
-  });
-}
 
 /** The offending shapes, kept out of the real router — a fixture, exactly like `__fixtures__/`. */
 const impersonationFixtureRouter = router({
@@ -111,7 +58,11 @@ const impersonationFixtureRouter = router({
 describe('viewerId provenance (ADR-0002 §5a, M2-AC20/B14)', () => {
   describe('the router this server actually serves', () => {
     it('has procedures to check — a walk over an empty router proves nothing', () => {
-      expect(procedurePaths(appRouter())).not.toHaveLength(0);
+      // An exact count, not `not.toHaveLength(0)`: mounting a ninth module without
+      // registering it in `null-object-app-router.ts` would leave this green while the
+      // control walked eight modules' worth of a nine-module surface. A blind control
+      // is worse than an openly `pending` B-row.
+      expect(procedurePaths(appRouter())).toHaveLength(EXPECTED_PROCEDURE_COUNT);
     });
 
     it('accepts no viewer, user, actor, or owner identifier on any procedure input', () => {
