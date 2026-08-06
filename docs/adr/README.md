@@ -25,6 +25,7 @@ later milestone must. ADR-0009 is the only one so far.
 | [0010](ADR-0010-supabase-rest-security-harness.md) | A purpose-built PostgREST harness for the Supabase-shaped security rows (ADR-0002 B2) | proposed |
 | [0011](ADR-0011-access-token-verification-at-the-trpc-boundary.md) | Access-token verification at the tRPC boundary (how ADR-0008 rule 8 is implemented) | proposed (amended — ES256 via the project JWKS, superseding the HS256 shared secret; `signedInProcedure` added, Verification row 4 done; authentication resolves lazily so a public procedure touches no dependency) |
 | [0012](ADR-0012-connection-trust-and-person-projection.md) | Connection trust storage, the §6a person projection's export, and lane L2's amendments (amends 0002, 0004, 0006) | proposed — **trust-row model pending owner confirmation** |
+| [0013](ADR-0013-bulletin-visibility-and-the-board-grammar-split.md) | Bulletin visibility, `BULLETIN_GONE`, and the board grammar's parse/compile split (amends 0002, 0005, 0007) | proposed |
 
 Normative inputs, in precedence order:
 

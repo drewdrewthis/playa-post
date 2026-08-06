@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createLogger } from '@playa-post/observability';
 
+import { createBulletinsRouter } from '../../modules/bulletins/transport/bulletins.router';
 import { createConnectionsRouter } from '../../modules/connections/transport/connections.router';
 import { createGraphRouter } from '../../modules/graph/transport/graph.router';
 import { createIdentityRouter } from '../../modules/identity/transport/identity.router';
@@ -42,6 +43,13 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
       getConnection: { get: unreachable },
     }),
     graph: createGraphRouter({ listVisibleGraph: { list: unreachable } }),
+    bulletins: createBulletinsRouter({
+      createBulletin: { create: unreachable },
+      archiveBulletin: { archive: unreachable },
+      getBulletin: { getById: unreachable },
+      listMyBulletins: { list: unreachable },
+      listBoard: { list: unreachable },
+    }),
   });
 
 describe('createAppRouter', () => {

@@ -85,9 +85,8 @@
       "id": "B10",
       "title": "A filter can narrow but never widen",
       "assertion": "A saved view or Notify Me query crafted to reference a non-authorized author, tag, or bulletin returns 0 rows rather than an error-free leak.",
-      "status": "pending",
-      "pendingUntil": "M2",
-      "reason": "Needs the board query grammar and the authorized-set builder (M2-AC14)."
+      "status": "live",
+      "provenBy": "tests/security/board-query-narrowing.security.test.ts"
     },
     {
       "id": "B11",
@@ -109,9 +108,8 @@
       "id": "B13",
       "title": "Write-path IDOR matrix",
       "assertion": "For every mutation type in ADR-0005's conflict matrix, an unrelated actor gets a structured failure with zero state change and zero outbox rows.",
-      "status": "pending",
-      "pendingUntil": "M2",
-      "reason": "M2.19 covers the seven M2 mutations (M2-AC19); the full ADR-0005 matrix completes at M5 (M5-AC6)."
+      "status": "live",
+      "provenBy": "tests/security/write-path-idor-bulletins.security.test.ts"
     },
     {
       "id": "B14",
@@ -141,9 +139,8 @@
       "id": "B17",
       "title": "Unauthorized is indistinguishable from non-existent",
       "assertion": "Unauthorized and non-existent produce identical status, error code, and byte-identical bodies across single-entity fetch, `from:` resolution, intro-connector resolution, and report/dismiss of an invisible bulletin.",
-      "status": "pending",
-      "pendingUntil": "M2",
-      "reason": "Needs entrypoints returning response bodies to diff (M2-AC14)."
+      "status": "live",
+      "provenBy": "tests/security/bulletin-indistinguishability.security.test.ts"
     },
     {
       "id": "B18",

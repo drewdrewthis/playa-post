@@ -47,11 +47,17 @@ apps/server/     The modular monolith.
                  sync · storage · audit. Each: transport/ application/ domain/ persistence/ tests/
                  plus a <name>.module.ts. (Addendum §4 — a module only grows the directories it needs:
                  modules/graph has no domain/, because ADR-0004 decision 7 makes the graph a read
-                 model rather than an aggregate.) A module MAY also grow an infrastructure/ for a
-                 non-persistence adapter — modules/connections/infrastructure/ holds the node:crypto
-                 CSPRNG behind the invite-token port, because domain/ and application/ may not import
-                 a Node builtin and persistence/ is the one directory domain/ may never import
-                 (ADR-0012).
+                 model rather than an aggregate; modules/views has only domain/ + tests/, because
+                 M2 ships the board grammar and nothing else — its <name>.module.ts is a pure-function
+                 barrel rather than a factory, and it gains a router with saved views in M5,
+                 ADR-0013.) A module MAY also grow an infrastructure/ for a non-persistence adapter —
+                 modules/connections/infrastructure/ holds the node:crypto CSPRNG behind the
+                 invite-token port, because domain/ and application/ may not import a Node builtin and
+                 persistence/ is the one directory domain/ may never import (ADR-0012). A module that
+                 owns a database function checks its source in at persistence/sql/ and carries a
+                 byte-identical copy in the migration that installs it — modules/graph's
+                 visible-people.sql and modules/bulletins' visible-bulletins.sql, each pinned by a
+                 verbatim-containment assertion (ADR-0004:73-74).
   shared/        auth (Actor, branded ViewerId, JWT verification — ADR-0011) · trpc (initTRPC, the
                  root router, the request context) · errors · health. events/logging/transactions
                  arrive with the code that needs them.

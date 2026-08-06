@@ -3,6 +3,7 @@ import { createRemoteJWKSet } from 'jose';
 import { createDatabaseConnection, type DatabaseConnection } from '@playa-post/database';
 import { createLogger, DEFAULT_ALLOWED_LOG_FIELDS, type Logger } from '@playa-post/observability';
 
+import { createBulletinsModule } from '../modules/bulletins/bulletins.module';
 import { createConnectionsModule } from '../modules/connections/connections.module';
 import { createGraphModule } from '../modules/graph/graph.module';
 import { createIdentityModule } from '../modules/identity/identity.module';
@@ -90,11 +91,17 @@ export function buildAppContainer(configuration: Configuration): AppContainer {
   // depends on (ADR-0008 rule 8).
   const identity = createIdentityModule({ database });
   const connections = createConnectionsModule({ database });
-  // Graph is built last of the three because it is the one other modules will consume:
-  // its `visiblePeople` projection is the single §6a person read (lane-brief C8), and
-  // a future module that needs a person card takes it from here rather than joining
-  // `app.users` itself.
+  // Graph is built before bulletins because it is the one other modules consume: its
+  // `visiblePeople` projection is the single §6a person read (lane-brief C8), and a
+  // module that needs a person card takes it from here rather than joining `app.users`
+  // itself.
   const graph = createGraphModule({ database });
+  // Bulletins consumes that same rule one layer lower — `app.visible_bulletins`
+  // composes `app.visible_people` in SQL — so it needs nothing from `graph` here, and
+  // the wiring order between the two carries no meaning. `modules/views` is not built
+  // at all: its board grammar is a pure function bulletins imports directly (ADR-0013),
+  // and there is nothing to construct until saved views gain a table (M5).
+  const bulletins = createBulletinsModule({ database });
 
   return {
     configuration,
@@ -119,6 +126,7 @@ export function buildAppContainer(configuration: Configuration): AppContainer {
       identity: identity.router,
       connections: connections.router,
       graph: graph.router,
+      bulletins: bulletins.router,
     }),
     dispose: () => database.destroy(),
   };

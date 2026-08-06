@@ -23,6 +23,24 @@ export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export interface AppBulletins {
+  /**
+   * NULL means live. Archived bulletins are absent from app.visible_bulletins for everyone, author included; the author keeps them through bulletins.listMine, which reads this table by author_id (M2-AC12).
+   */
+  archived_at: Timestamp | null;
+  author_id: string;
+  body: string;
+  created_at: Timestamp;
+  id: Generated<string>;
+  search_document: Generated<string | null>;
+  title: string;
+  type: string;
+  /**
+   * ADR-0005 optimistic-concurrency version. Unused by M2's two mutations (both `expectedVersion: no`); required so bulletin.update (M5) has a version to compare.
+   */
+  version: Generated<number>;
+}
+
 export interface AppConnections {
   /**
    * What user A grants user B: full | limited. Consumed by app.visible_people, which fails closed — anything that is not exactly full is topology_only.
@@ -99,6 +117,7 @@ export interface AppUsers {
 }
 
 export interface DB {
+  "app.bulletins": AppBulletins;
   "app.connection_trust": AppConnectionTrust;
   "app.connections": AppConnections;
   "app.consumer_receipts": AppConsumerReceipts;
