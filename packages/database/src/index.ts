@@ -19,7 +19,13 @@ export type {
  * tag itself rather than the import edge.
  */
 export { sql } from 'kysely';
-export type { Insertable, Selectable, SqlBool, Updateable } from 'kysely';
+/**
+ * `RawBuilder` is what the `sql` tag returns, and a repository that composes a
+ * fragment in one function and consumes it in another needs to name that type.
+ * `SqlBool` is the parameter it is nearly always given — `RawBuilder<SqlBool>` is
+ * "a `WHERE` fragment", which is exactly what a compiled board filter is.
+ */
+export type { Insertable, RawBuilder, Selectable, SqlBool, Updateable } from 'kysely';
 /**
  * The generated schema, exported under the name the rest of the system uses.
  *

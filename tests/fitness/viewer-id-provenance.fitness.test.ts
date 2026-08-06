@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { createBulletinsRouter } from '../../apps/server/src/modules/bulletins/transport/bulletins.router';
 import { createConnectionsRouter } from '../../apps/server/src/modules/connections/transport/connections.router';
 import { createGraphRouter } from '../../apps/server/src/modules/graph/transport/graph.router';
 import { createIdentityRouter } from '../../apps/server/src/modules/identity/transport/identity.router';
@@ -67,6 +68,13 @@ function appRouter(): ReturnType<typeof createAppRouter> {
       getConnection: { get: unreachable },
     }),
     graph: createGraphRouter({ listVisibleGraph: { list: unreachable } }),
+    bulletins: createBulletinsRouter({
+      createBulletin: { create: unreachable },
+      archiveBulletin: { archive: unreachable },
+      getBulletin: { getById: unreachable },
+      listMyBulletins: { list: unreachable },
+      listBoard: { list: unreachable },
+    }),
   });
 }
 

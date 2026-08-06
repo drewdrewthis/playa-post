@@ -1,0 +1,123 @@
+# L3a local gate verification
+# date: 2026-08-06T06:36:12Z
+# HEAD: 4e6e10b1ee2c2871a0ada7a854f97eab0f18d9c6 (origin/main) + uncommitted L3a lane work
+# node: v24.13.0  pnpm: 11.18.0
+
+===== pnpm typecheck =====
+$ tsc --noEmit && pnpm --recursive typecheck
+Scope: 7 of 8 workspace projects
+apps/web typecheck$ tsc --noEmit
+packages/configuration typecheck$ tsc --noEmit
+packages/observability typecheck$ tsc --noEmit
+packages/contracts typecheck$ tsc --noEmit
+packages/contracts typecheck: Done
+packages/testing typecheck$ tsc --noEmit
+packages/observability typecheck: Done
+packages/configuration typecheck: Done
+packages/testing typecheck: Done
+apps/web typecheck: Done
+packages/database typecheck$ tsc --noEmit
+packages/database typecheck: Done
+apps/server typecheck$ tsc --noEmit
+apps/server typecheck: Done
+----- exit: 0 -----
+
+===== pnpm lint =====
+$ eslint .
+----- exit: 0 -----
+
+===== pnpm boundaries =====
+$ depcruise --config .dependency-cruiser.cjs apps packages
+
+✔ no dependency violations found (178 modules, 492 dependencies cruised)
+
+----- exit: 0 -----
+
+===== pnpm test:unit =====
+$ vitest run --project unit
+
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post/.claude/worktrees/agent-abcb994ce2e123add
+
+(node:498934) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:498934) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:498934) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:498934) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:498934) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:498934) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:498934) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+
+ Test Files  34 passed (34)
+      Tests  204 passed | 1 skipped (205)
+   Start at  06:36:26
+   Duration  6.97s (transform 1.97s, setup 0ms, import 12.32s, tests 15.54s, environment 14ms)
+
+----- exit: 0 -----
+
+===== pnpm test:integration =====
+$ vitest run --project integration
+
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post/.claude/worktrees/agent-abcb994ce2e123add
+
+
+ Test Files  15 passed (15)
+      Tests  97 passed (97)
+   Start at  06:36:34
+   Duration  43.65s (transform 467ms, setup 0ms, import 8.20s, tests 33.36s, environment 1ms)
+
+----- exit: 0 -----
+
+===== pnpm test:security =====
+$ vitest run --project security
+
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post/.claude/worktrees/agent-abcb994ce2e123add
+
+
+ Test Files  8 passed (8)
+      Tests  78 passed (78)
+   Start at  06:37:18
+   Duration  21.49s (transform 276ms, setup 0ms, import 3.85s, tests 16.54s, environment 1ms)
+
+----- exit: 0 -----
+
+===== pnpm build:web =====
+$ pnpm --filter @playa-post/web build
+$ vite build
+vite v8.1.5 building client environment for production...
+[2Ktransforming...✓ 15 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/registerSW.js                0.13 kB
+dist/manifest.webmanifest         0.23 kB
+dist/index.html                   0.70 kB │ gzip:  0.40 kB
+dist/assets/index-CZKGtVXc.css    0.83 kB │ gzip:  0.45 kB
+dist/assets/index-DOPQMNg3.js   141.31 kB │ gzip: 46.03 kB │ map: 327.50 kB
+
+✓ built in 99ms
+
+PWA v1.3.0
+mode      generateSW
+precache  5 entries (139.62 KiB)
+files generated
+  dist/sw.js.map
+  dist/sw.js
+  dist/workbox-9c191d2f.js.map
+  dist/workbox-9c191d2f.js
+----- exit: 0 -----
+
+===== pnpm build:server:node =====
+$ pnpm --filter @playa-post/server build
+$ tsup
+[NODE] CLI Building entry: {"main":"src/entrypoints/http/main.ts"}
+[NODE] CLI Using tsconfig: tsconfig.json
+[NODE] CLI tsup v8.5.1
+[NODE] CLI Using tsup config: /home/ubuntu/Projects/playa-post/.claude/worktrees/agent-abcb994ce2e123add/apps/server/tsup.config.ts
+[NODE] CLI Target: node22
+[NODE] CLI Cleaning output folder
+[NODE] ESM Build start
+[NODE] ESM dist/node/main.js     829.40 KB
+[NODE] ESM dist/node/main.js.map 1.63 MB
+[NODE] ESM ⚡️ Build success in 210ms
+----- exit: 0 -----
+
+===== overall: 0 (0 = all gates green) =====

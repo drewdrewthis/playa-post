@@ -24,8 +24,16 @@ import { findSqlTableOwnershipViolations } from './find-sql-table-ownership-viol
  */
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const fixturesRoot = join(repositoryRoot, 'tests', 'fitness', 'sql-table-ownership-fixtures');
-const violatingFixture = join(fixturesRoot, 'violating');
-const allowedFixture = join(fixturesRoot, 'allowed');
+// ⚠ Scoped to each module's own fixture subdirectory, not the shared 'allowed'/
+// 'violating' root: `collectSqlFiles` walks recursively, so scanning the whole root
+// would sweep another module's fixture files into a module-specific assertion
+// (e.g. modules/bulletins' own `app.bulletins` reference, unpermitted without its
+// `ownTables` entry, would read as a false violation in modules/graph's "allowed
+// counterpart" check, which passes no `ownTables` at all).
+const violatingGraphFixture = join(fixturesRoot, 'violating', 'modules', 'graph');
+const allowedGraphFixture = join(fixturesRoot, 'allowed', 'modules', 'graph');
+const violatingBulletinsFixture = join(fixturesRoot, 'violating', 'modules', 'bulletins');
+const allowedBulletinsFixture = join(fixturesRoot, 'allowed', 'modules', 'bulletins');
 const graphSqlDirectory = join(
   repositoryRoot,
   'apps',
@@ -33,6 +41,16 @@ const graphSqlDirectory = join(
   'src',
   'modules',
   'graph',
+  'persistence',
+  'sql',
+);
+const bulletinsSqlDirectory = join(
+  repositoryRoot,
+  'apps',
+  'server',
+  'src',
+  'modules',
+  'bulletins',
   'persistence',
   'sql',
 );
@@ -51,7 +69,7 @@ function loadAllowlist(): Readonly<Record<string, readonly string[]>> {
 describe('sql-table-ownership (m2-lane-briefs.md:311, blocking finding B-3)', () => {
   describe('against the deliberately-violating fixture', () => {
     it('flags the app.bulletins reference modules/graph does not own and is not allowlisted', () => {
-      const violations = findSqlTableOwnershipViolations([violatingFixture], {
+      const violations = findSqlTableOwnershipViolations([violatingGraphFixture], {
         allowlist: loadAllowlist(),
       });
 
@@ -67,7 +85,7 @@ describe('sql-table-ownership (m2-lane-briefs.md:311, blocking finding B-3)', ()
 
   describe('against the allowed counterpart, same shape, allowlisted tables only', () => {
     it('reports no violation', () => {
-      const violations = findSqlTableOwnershipViolations([allowedFixture], {
+      const violations = findSqlTableOwnershipViolations([allowedGraphFixture], {
         allowlist: loadAllowlist(),
       });
 
@@ -102,6 +120,75 @@ describe('sql-table-ownership (m2-lane-briefs.md:311, blocking finding B-3)', ()
       });
 
       expect(violations).toEqual([]);
+    });
+  });
+
+  /**
+   * m2-lane-briefs.md §L3a: "modules/bulletins' SQL may reference app.bulletins and
+   * the sanctioned app.visible_* functions, and nothing else" — `app.visible_bulletins`
+   * MUST compose `app.visible_people` as a subquery/join and must never re-derive
+   * reachability by joining `app.connections` itself (ADR-0004:75-77).
+   *
+   * Unlike `modules/graph`, `modules/bulletins` needs no cross-module allowlist entry:
+   * it owns `app.bulletins` outright (passed via `ownTables`, not the allowlist), and
+   * every other reference it needs — `app.visible_people(...)` — is already exempt as
+   * a sanctioned function call. `sql-table-ownership-allowlist.json` must therefore
+   * carry **no** `"bulletins"` entry naming `app.connections` or `app.users`: the
+   * assertion below guards against that drifting in later as a shortcut around a
+   * broken composition.
+   */
+  describe('bulletins module ownership scope (m2-lane-briefs.md §L3a)', () => {
+    const bulletinsOwnTables = { bulletins: ['bulletins'] };
+
+    it('does not allowlist modules/bulletins to reach app.connections or app.users directly', () => {
+      const allowlist = loadAllowlist();
+      const bulletinsAllowance = allowlist['bulletins'] ?? [];
+      expect(bulletinsAllowance).not.toContain('connections');
+      expect(bulletinsAllowance).not.toContain('users');
+    });
+
+    describe('against the deliberately-violating fixture', () => {
+      it('flags the app.connections reference modules/bulletins does not own and is not allowlisted', () => {
+        const violations = findSqlTableOwnershipViolations([violatingBulletinsFixture], {
+          allowlist: loadAllowlist(),
+          ownTables: bulletinsOwnTables,
+        });
+
+        expect(violations).not.toHaveLength(0);
+        expect(
+          violations.some(
+            (violation) =>
+              violation.file.includes('bad-visible-bulletins.sql') &&
+              violation.reference === 'app.connections',
+          ),
+        ).toBe(true);
+      });
+    });
+
+    describe('against the allowed counterpart, same shape, own table + sanctioned function call only', () => {
+      it('reports no violation', () => {
+        const violations = findSqlTableOwnershipViolations([allowedBulletinsFixture], {
+          allowlist: loadAllowlist(),
+          ownTables: bulletinsOwnTables,
+        });
+
+        expect(violations).toEqual([]);
+      });
+    });
+
+    describe('against modules/bulletins/persistence/sql/ in the real tree', () => {
+      it('reports no violation once visible-bulletins.sql exists and stays within app.bulletins + app.visible_*', () => {
+        // Vacuous today — `modules/bulletins/persistence/` does not exist yet.
+        // `collectSqlFiles` walks an absent directory to `[]`, so this is a real,
+        // currently-empty assertion rather than a skip — mirrors the graph
+        // describe block's identical "against the real tree" test.
+        const violations = findSqlTableOwnershipViolations([bulletinsSqlDirectory], {
+          allowlist: loadAllowlist(),
+          ownTables: bulletinsOwnTables,
+        });
+
+        expect(violations).toEqual([]);
+      });
     });
   });
 });

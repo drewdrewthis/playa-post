@@ -1,3 +1,4 @@
+import type { BulletinsRouter } from '../../modules/bulletins/transport/bulletins.router';
 import type { ConnectionsRouter } from '../../modules/connections/transport/connections.router';
 import type { GraphRouter } from '../../modules/graph/transport/graph.router';
 import type { IdentityRouter } from '../../modules/identity/transport/identity.router';
@@ -8,11 +9,17 @@ import { publicProcedure, router } from './trpc';
 /**
  * The module routers the root router mounts. One entry per lane, added with that
  * lane's first procedure.
+ *
+ * `modules/views` is deliberately absent: it owns the board grammar and no procedure.
+ * Its grammar reaches clients through `bulletins.board`'s `query` argument, and a
+ * router mounted with nothing on it is the placeholder addendum §4 forbids. It gains an
+ * entry here with saved views and Notify Me (M5).
  */
 export interface AppRouterModules {
   readonly identity: IdentityRouter;
   readonly connections: ConnectionsRouter;
   readonly graph: GraphRouter;
+  readonly bulletins: BulletinsRouter;
 }
 
 /**
@@ -57,6 +64,7 @@ export function createAppRouter(modules: AppRouterModules) {
     identity: modules.identity,
     connections: modules.connections,
     graph: modules.graph,
+    bulletins: modules.bulletins,
   });
 }
 

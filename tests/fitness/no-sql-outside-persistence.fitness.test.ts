@@ -73,14 +73,12 @@ describe('no-sql-outside-persistence (M1b.9 second half)', () => {
   });
 
   describe('against the real tree', () => {
-    it('reports no violation before modules/identity/persistence exists to check', () => {
-      // Vacuous today (`apps/server/src/modules/` has no `persistence/` yet — this
-      // lane's own migration test proves `app.users` doesn't exist either), and
-      // becomes load-bearing the moment `postgres-user.repository.ts` lands beside
-      // an application-layer file that reaches for `client.query` directly. The
-      // fixture assertions above are what keep this from being trusted on faith in
-      // the meantime — same discipline as `boundaries.fitness.test.ts`'s
-      // `totalCruised > 0` guard.
+    it('finds no SQL literal outside a persistence/ directory anywhere in the live tree', () => {
+      // Load-bearing: `identity`, `connections`, `graph`, and `bulletins` all carry
+      // a `persistence/` directory now, so any `client.query` or `sql` fragment
+      // that leaks into an application- or transport-layer file fails here. The
+      // fixture assertions above keep the walker itself honest — same discipline
+      // as `boundaries.fitness.test.ts`'s `totalCruised > 0` guard.
       const violations = findSqlLiteralsOutsidePersistence([
         join(repositoryRoot, 'apps', 'server', 'src'),
         join(repositoryRoot, 'packages'),
