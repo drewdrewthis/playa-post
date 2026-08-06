@@ -11,6 +11,9 @@ importers:
       '@eslint/js':
         specifier: 10.0.1
         version: 10.0.1(eslint@10.8.0(supports-color@7.2.0))
+      '@playa-post/database':
+        specifier: workspace:*
+        version: link:packages/database
       '@playa-post/testing':
         specifier: workspace:*
         version: link:packages/testing

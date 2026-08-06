@@ -1,0 +1,18 @@
+{
+  "$comment": [
+    "Per-module extra app.<table> names the sql-table-ownership rule permits beyond a",
+    "module's own tables (find-sql-table-ownership-violations.ts's ownTables map).",
+    "",
+    "graph: app.visible_people (checked in at",
+    "modules/graph/persistence/sql/visible-people.sql) is the canonical authorized-",
+    "people CTE (ADR-0004:75-77, C8) and reads app.connections + app.connection_trust",
+    "(owned by modules/connections) and app.users (owned by modules/identity) to",
+    "produce the projected read model every other consumer must use instead of",
+    "joining these tables themselves. This is the one sanctioned exception the rule",
+    "exists to police everyone else against — recorded here, not hardcoded, so a",
+    "reviewer sees and approves the grant. See find-sql-table-ownership-violations.ts's",
+    "docstring and this lane's test-writing report for the open question this",
+    "allowlist answers provisionally."
+  ],
+  "graph": ["connections", "connection_trust", "users"]
+}

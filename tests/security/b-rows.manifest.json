@@ -46,18 +46,16 @@
     {
       "id": "B5",
       "title": "Visibility matrix, including the §6a person-projection sub-case",
-      "assertion": "For each viewer-scoped query a viewer with no relationship to the data gets 0 rows; an authorized bulletin whose author is below `full` disclosure renders a Private author everywhere.",
-      "status": "pending",
-      "pendingUntil": "M2",
-      "reason": "No viewer-scoped query and no product table exist yet. M2.19 implements this row against the first slice entities."
+      "assertion": "For the graph read, a viewer with no relationship to either party of a connection gets 0 rows, and a person below `full` disclosure renders with no name, handle, or avatar (ADR-0002 §6a). Scoped to the graph surface, which is what L2 built: the board, search, and notification surfaces of the same rule need `modules/bulletins` and are owed by L3a, which extends this row and this assertion text when it lands.",
+      "status": "live",
+      "provenBy": "tests/security/visibility-matrix.security.test.ts"
     },
     {
       "id": "B6",
       "title": "Directional trust never leaves the holder",
       "assertion": "A trust value and its field name appear nowhere in any payload returned to the other party or a third party, at any nesting depth, across success, error, and conflict envelopes.",
-      "status": "pending",
-      "pendingUntil": "M2",
-      "reason": "Trust is an M2 entity. There is no payload to serialize and no conflict envelope to inspect (M2-AC3)."
+      "status": "live",
+      "provenBy": "tests/security/directional-trust.security.test.ts"
     },
     {
       "id": "B7",

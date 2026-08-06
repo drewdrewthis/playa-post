@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { createConnectionsRouter } from '../../apps/server/src/modules/connections/transport/connections.router';
+import { createGraphRouter } from '../../apps/server/src/modules/graph/transport/graph.router';
 import { createIdentityRouter } from '../../apps/server/src/modules/identity/transport/identity.router';
 import { createAppRouter } from '../../apps/server/src/shared/trpc/app.router';
 import {
@@ -35,20 +37,36 @@ import {
  */
 
 /**
+ * Every application service behind the routers below is a null object: this suite
+ * reads input *schemas* and never invokes a procedure, so a working service would add
+ * nothing but a database. A rejection rather than a stub value keeps that assumption
+ * checkable.
+ */
+const unreachable = (): Promise<never> =>
+  Promise.reject(new Error('no procedure is invoked by this suite'));
+
+/**
  * The router this process serves, assembled the way `composition/container.ts`
  * assembles it.
  *
- * The onboarding service behind it is a null object: this suite reads input *schemas*
- * and never invokes a procedure, so a working service would add nothing but a
- * database. A rejection rather than a stub value keeps that assumption checkable.
+ * ⚠ **Every module a lane mounts has to be listed here, or this control stops seeing
+ * it.** `createAppRouter`'s parameter is the whole registry, so a missing module is a
+ * compile error rather than a silent gap — which is the only reason this is safe to
+ * maintain by hand.
  */
 function appRouter(): ReturnType<typeof createAppRouter> {
   return createAppRouter({
     identity: createIdentityRouter({
-      completeOnboarding: {
-        complete: () => Promise.reject(new Error('no procedure is invoked by this suite')),
-      },
+      completeOnboarding: { complete: unreachable },
     }),
+    connections: createConnectionsRouter({
+      createInvite: { create: unreachable },
+      openInvite: { open: unreachable },
+      acceptInvite: { accept: unreachable },
+      setConnectionTrust: { set: unreachable },
+      getConnection: { get: unreachable },
+    }),
+    graph: createGraphRouter({ listVisibleGraph: { list: unreachable } }),
   });
 }
 

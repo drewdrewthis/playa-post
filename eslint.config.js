@@ -30,13 +30,14 @@ export default tseslint.config(
       // fail the build or, worse, tempt someone to "fix" them and silently
       // disarm a boundary rule. See tests/fitness/__fixtures__/README.md.
       //
-      // Two roots, because they belong to two different tools: `__fixtures__/` is
+      // Three roots, because they belong to three different tools: `__fixtures__/` is
       // dependency-cruiser's, and `boundaries.fitness.test.ts` asserts that every
       // directory in it is named after a dependency-cruiser rule — so the
-      // `no-sql-outside-persistence` fixtures cannot live there and get their own
-      // sibling root instead.
+      // `no-sql-outside-persistence` and `invite-token-csprng` fixtures cannot live
+      // there and get their own sibling roots instead.
       'tests/fitness/__fixtures__/**',
       'tests/fitness/sql-fixtures/**',
+      'tests/fitness/csprng-fixtures/**',
       // The settled UX prototype exported from claude.ai/design. Product
       // evidence, not production code (docs/engineering/repo-map.md) — it is
       // read for intent and never edited, so linting it is pure noise.

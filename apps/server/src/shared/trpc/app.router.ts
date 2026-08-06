@@ -1,3 +1,5 @@
+import type { ConnectionsRouter } from '../../modules/connections/transport/connections.router';
+import type { GraphRouter } from '../../modules/graph/transport/graph.router';
 import type { IdentityRouter } from '../../modules/identity/transport/identity.router';
 import { readHealth, type HealthResponse } from '../health/read-health';
 
@@ -9,6 +11,8 @@ import { publicProcedure, router } from './trpc';
  */
 export interface AppRouterModules {
   readonly identity: IdentityRouter;
+  readonly connections: ConnectionsRouter;
+  readonly graph: GraphRouter;
 }
 
 /**
@@ -51,6 +55,8 @@ export function createAppRouter(modules: AppRouterModules) {
       check: publicProcedure.query((): HealthResponse => readHealth()),
     }),
     identity: modules.identity,
+    connections: modules.connections,
+    graph: modules.graph,
   });
 }
 

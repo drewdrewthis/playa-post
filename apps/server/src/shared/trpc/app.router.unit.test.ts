@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { createLogger } from '@playa-post/observability';
 
+import { createConnectionsRouter } from '../../modules/connections/transport/connections.router';
+import { createGraphRouter } from '../../modules/graph/transport/graph.router';
 import { createIdentityRouter } from '../../modules/identity/transport/identity.router';
 import { readHealth } from '../health/read-health';
 
@@ -18,24 +20,29 @@ const anonymousContext: RequestContext = {
 };
 
 /**
- * A real identity router over a service that is never reached.
+ * Every module router below sits over services that are never reached.
  *
- * These tests are about *registration and routing*, not about onboarding: every
- * assertion below calls `health.check` anonymously, and `identity.completeOnboarding`
- * refuses an anonymous caller at the middleware, before the service would be
- * consulted. A null object keeps that honest — if a test ever did reach it, it would
- * say so rather than quietly return a fabricated user.
+ * These tests are about *registration and routing*, not about any module's behaviour:
+ * every assertion calls `health.check` anonymously, and every other procedure refuses
+ * an anonymous caller at the middleware, before a service would be consulted. Null
+ * objects keep that honest — if a test ever did reach one, it would say so rather than
+ * quietly return a fabricated result.
  */
-function identityRouter(): ReturnType<typeof createIdentityRouter> {
-  return createIdentityRouter({
-    completeOnboarding: {
-      complete: () => Promise.reject(new Error('the onboarding service is not exercised here')),
-    },
-  });
-}
+const unreachable = (): Promise<never> =>
+  Promise.reject(new Error('module services are not exercised here'));
 
 const appRouter = (): ReturnType<typeof createAppRouter> =>
-  createAppRouter({ identity: identityRouter() });
+  createAppRouter({
+    identity: createIdentityRouter({ completeOnboarding: { complete: unreachable } }),
+    connections: createConnectionsRouter({
+      createInvite: { create: unreachable },
+      openInvite: { open: unreachable },
+      acceptInvite: { accept: unreachable },
+      setConnectionTrust: { set: unreachable },
+      getConnection: { get: unreachable },
+    }),
+    graph: createGraphRouter({ listVisibleGraph: { list: unreachable } }),
+  });
 
 describe('createAppRouter', () => {
   it('answers health.check with the same payload GET /healthz returns', () => {

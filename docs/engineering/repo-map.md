@@ -45,7 +45,13 @@ apps/server/     The modular monolith.
   entrypoints/   http/ · queue/ · cron/. The ONLY place that knows about the runtime (ADR-0009).
   modules/       identity · connections · graph · bulletins · views · notifications · moderation ·
                  sync · storage · audit. Each: transport/ application/ domain/ persistence/ tests/
-                 plus a <name>.module.ts. (Addendum §4 — a module only grows the directories it needs.)
+                 plus a <name>.module.ts. (Addendum §4 — a module only grows the directories it needs:
+                 modules/graph has no domain/, because ADR-0004 decision 7 makes the graph a read
+                 model rather than an aggregate.) A module MAY also grow an infrastructure/ for a
+                 non-persistence adapter — modules/connections/infrastructure/ holds the node:crypto
+                 CSPRNG behind the invite-token port, because domain/ and application/ may not import
+                 a Node builtin and persistence/ is the one directory domain/ may never import
+                 (ADR-0012).
   shared/        auth (Actor, branded ViewerId, JWT verification — ADR-0011) · trpc (initTRPC, the
                  root router, the request context) · errors · health. events/logging/transactions
                  arrive with the code that needs them.
