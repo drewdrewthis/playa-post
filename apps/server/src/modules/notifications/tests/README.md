@@ -12,6 +12,7 @@ runs in the `integration` vitest project against a Testcontainers Postgres with
 | `integration/` | `push-subscriptions-schema-migration.integration.test.ts` | `app.push_subscriptions`' catalog shape — RLS, ownership, grants, the primary key on `owner_id` that makes "one subscription per user" a constraint |
 | `integration/` | `notify-me-push.integration.test.ts` | `notify-me.feature` — two `@e2e` (API-level) + four `@integration` (M2-AC7 ×3, M2-AC8, M2-AC21, M2-AC22) |
 | `integration/` | `push-subscription.integration.test.ts` | `notify-me.feature` › "Subscribing to push twice is rejected" (M2-AC18) |
+| `integration/` | `notifications-list.integration.test.ts` | **none** — `notifications.list` (issue #31) is the data source `vertical-slice-e2e.feature` step 9 reads, and no feature-file scenario states it. Its own docblock carries the four design choices that stand in for the missing scenarios, the same disclosure discipline `notify-me-push.integration.test.ts` uses |
 
 There is no `unit/` directory, and that is a statement rather than an omission: the two
 pure rules this module owns — the 60-second tumbling window
