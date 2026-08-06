@@ -165,3 +165,45 @@ jobs:
       # `.gitleaksignore`, deliberately, when it is genuinely a false positive).
       - name: Scan history for secrets
         run: gitleaks git -v --redact --no-banner --platform github --exit-code 1 .
+
+  # ⚠ The TENTH job, appended. The nine `name:` strings above are the checks
+  # branch protection requires, and renaming one silently un-requires its check —
+  # so this diff adds and never edits. `git diff origin/main -- .github/workflows/ci.yml`
+  # must show zero changes to any pre-existing `name:` line.
+  #
+  # **Advisory in M2, deliberately.** Adding a job does not add it to the
+  # protection rule; that is an owner/admin repo-settings change and is out of
+  # this lane's scope. What the job buys today is the thing M2-AC1's evidence
+  # clause actually asks for: the browser proof, green, *on a machine that is not
+  # the author's*, with the HTML report attached to the run.
+  #
+  # Not folded into `test:integration`: a browser failure would read as an
+  # integration failure, it doubles that required job's runtime with a browser
+  # download and a web build, and it destroys the "each failure names itself"
+  # property CI was split into nine jobs for.
+  #
+  # `retries: 0` and one worker live in `playwright.config.ts`. A retried e2e is a
+  # green light that hides a real race, and this run is the milestone exit signal.
+  test-e2e:
+    name: test:e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+
+      # Only the browser this suite runs, and its system libraries. Installing
+      # every engine triples the download for two engines nothing drives.
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - run: pnpm test:e2e
+        env:
+          DEBUG: testcontainers*
+
+      # `always()`: the report is most valuable on the run that failed.
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14

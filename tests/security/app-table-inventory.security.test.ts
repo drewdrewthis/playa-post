@@ -1,0 +1,80 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { startPostgresTestDatabase, type PostgresTestDatabase } from '@playa-post/testing';
+
+/**
+ * The M2 exit assertion on `schema app` (`m2-lane-briefs.md` §"Ratified decisions" (a)):
+ * *"each lane's migration PR reconciles its own rows against the table in §Migration
+ * ownership, and **L5 asserts the total**"*.
+ *
+ * ⚠ **The exact set of names, not a count.** A count-only assertion fails with
+ * `expected 13, got 12` and tells the reader nothing about which table went missing or
+ * which one appeared. The count is derived from the set below so the two can never
+ * disagree — which is the failure mode a hand-maintained count-plus-list acquires
+ * within one milestone.
+ *
+ * A table added by a later migration is *supposed* to fail this test. Adding its name
+ * here is how a new table is declared owned by a lane; the test is the door, and a
+ * silent addition is what it exists to stop.
+ */
+const INVENTORY = [
+  // identity (L1)
+  'users',
+  // connections (L2)
+  'connections',
+  'connection_trust',
+  'invitations',
+  // the transactional outbox and its consumers (L2 / L3b-infra)
+  'consumer_receipts',
+  'outbox_events',
+  // bulletins (L3a)
+  'bulletins',
+  // audit (L3b-infra)
+  'audit_entries',
+  // Notify Me and push (L3b-notify)
+  'notify_me_queries',
+  'push_subscriptions',
+  // moderation and sync (L4)
+  'bulletin_dismissals',
+  'bulletin_reports',
+  'mutation_results',
+] as const;
+
+describe('schema app holds exactly the tables M2 declared (m2-lane-briefs.md ratified decision (a))', () => {
+  let testDatabase: PostgresTestDatabase;
+
+  beforeAll(async () => {
+    testDatabase = await startPostgresTestDatabase();
+  }, 300_000);
+
+  afterAll(async () => {
+    await testDatabase?.stop();
+  });
+
+  it('matches the thirteen-name inventory as a set, and in count', async () => {
+    const { rows } = await testDatabase.client.query<{ tablename: string }>(
+      `select tablename from pg_tables where schemaname = 'app' order by tablename`,
+    );
+    const actual = rows.map((row) => row.tablename);
+
+    expect(actual).toEqual([...INVENTORY].sort());
+    expect(actual).toHaveLength(INVENTORY.length);
+  });
+
+  it('enumerated something — a comparison against an empty database proves nothing', () => {
+    expect(INVENTORY.length).toBeGreaterThan(0);
+  });
+
+  it('retired the M1b security-baseline canary rather than leaving it in the inventory', async () => {
+    // The canary existed only to prove the RLS backstop applied to *something* before
+    // any real table existed, and `create_app_users.sql` drops it. Asserted by name so
+    // a re-introduced canary shows up as a deliberate decision rather than as a
+    // fourteenth row nobody can account for.
+    const { rows } = await testDatabase.client.query<{ count: string }>(
+      `select count(*)::text as count from pg_tables
+       where schemaname = 'app' and tablename = 'security_baseline_canary'`,
+    );
+
+    expect(rows[0]?.count).toBe('0');
+  });
+});

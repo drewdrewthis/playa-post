@@ -62,24 +62,23 @@
       "title": "Blocking is total, including the flush and offline boundaries",
       "assertion": "After A blocks B neither sees the other, no graph path routes through the blocked edge, no notification is deliverable, and a push computed before the block is not flushed after it.",
       "status": "pending",
-      "pendingUntil": "M2",
-      "reason": "Precursors land with the M2 slice (M2.19); the flush and offline boundaries need the ADR-0006 queue and ADR-0005 sync, so the row completes at M5 (M5-AC2)."
+      "pendingUntil": "M5",
+      "reason": "Corrected from M2, not deferred from it: this row's own text already said it completes at M5. The M2 half is asserted today - blocking has no entity in M2, so there is nothing here an M2 test could execute. The flush boundary needs ADR-0006's scheduled queue to be observable and the offline boundary needs ADR-0005 sync replay against a blocked subject; both are M5 (M5-AC2)."
     },
     {
       "id": "B8",
       "title": "Hidden people leak nothing but topology",
       "assertion": "A ghost payload contains no name, handle, avatar, role, mutual count, or real internal ID; surrogates differ across viewers; a re-identification fixture holds against ADR-0004's adjacency rule.",
       "status": "pending",
-      "pendingUntil": "M2",
-      "reason": "Payload shape asserted from M2.19; the structural re-identification fixture needs the full graph model and completes at M5 (M5-AC3)."
+      "pendingUntil": "M5",
+      "reason": "Corrected from M2, not deferred from it: this row's own text already said it completes at M5. The payload half is asserted today by the visibility matrix's ADR-0002 section 6a sub-case (tests/security/visibility-matrix.security.test.ts) - a person below full disclosure renders with no name, handle, or avatar. The structural re-identification fixture needs the full graph model and surrogate identifiers, which land at M5 (M5-AC3)."
     },
     {
       "id": "B9",
       "title": "Report privacy",
       "assertion": "The reported author's every read path — bulletin, notifications, audit, API, operator-mediated surfaces — contains no reporter identity.",
-      "status": "pending",
-      "pendingUntil": "M2",
-      "reason": "Reports are an M2 entity (M2-AC10)."
+      "status": "live",
+      "provenBy": "tests/security/report-privacy.security.test.ts"
     },
     {
       "id": "B10",
@@ -100,9 +99,8 @@
       "id": "B12",
       "title": "Composition assertion, plus the SQL-location secondary rule",
       "assertion": "Every query implementation taking a `ViewerId` references `app.visible_people` / `app.visible_bulletins` or the shared authorized-set builder; secondary: no SQL outside `persistence/` and `supabase/`.",
-      "status": "pending",
-      "pendingUntil": "M2",
-      "reason": "Both halves are vacuous today: there is no `ViewerId`, no query implementation, and no SQL outside `supabase/`. A rule configured against nothing reports green forever (M1-AC2's own reasoning). The secondary rule ships as the `no-sql-outside-persistence` boundary rule in M1b.9."
+      "status": "live",
+      "provenBy": "tests/security/composition-assertion.security.test.ts"
     },
     {
       "id": "B13",
@@ -115,9 +113,8 @@
       "id": "B14",
       "title": "viewerId provenance fitness",
       "assertion": "No tRPC input schema on any procedure carries a viewerId/userId/actorId/ownerId field, asserted by walking the router type tree; and `ViewerId` has exactly one constructor, taking an `Actor`.",
-      "status": "pending",
-      "pendingUntil": "M2",
-      "reason": "There is no tRPC router and no `ViewerId` type to walk (M2-AC20)."
+      "status": "live",
+      "provenBy": "tests/security/viewer-id-provenance.security.test.ts"
     },
     {
       "id": "B15",

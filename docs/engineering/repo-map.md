@@ -37,7 +37,8 @@ carry proposed defaults that proceed unless objected to; see the end of the impl
 ```text
 apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,connections,graph,
                  bulletins,views,notifications,moderation,sync}/{api,components,hooks,model,routes,
-                 state,tests}. Shell/router/providers in src/app/. Shared UI in src/shared/.
+                 state,tests}. Shell/router/providers/auth/api client/offline queue in
+                 src/app/{routes,auth,api,offline,shell} (the M2 frontend). Shared UI in src/shared/.
 apps/server/     The modular monolith.
   composition/   The ONLY place that knows about the object graph, and the only place that reads
                  process.env (ADR-0003). config.ts · container.ts · request-scope.ts ·
@@ -64,10 +65,17 @@ apps/server/     The modular monolith.
   shared/        auth (Actor, branded ViewerId, JWT verification — ADR-0011) · trpc (initTRPC, the
                  root router, the request context) · errors · health. events/logging/transactions
                  arrive with the code that needs them.
-packages/        contracts · database · observability · configuration · testing.
+packages/        contracts · database · observability · configuration · testing. contracts/src/*.ts
+                 is the declared wire surface (ADR-0014) — the only legal import from apps/web
+                 into the server side.
 supabase/        migrations/ · sql/ · seed/ · tests/.
 scripts/         Repo tooling.
-tests/           fitness/ (executable architecture rules) · security/ (ADR-0002 bypass suite).
+tests/           fitness/ (executable architecture rules) · security/ (ADR-0002 bypass suite) ·
+                 integration/ (root-level cross-module integration tests) · e2e/ (Playwright
+                 browser proof: spec + global-setup + support harness). tests/integration/ is
+                 the legal place to import composition/container.ts outside apps/ — dependency-
+                 cruiser cruises only apps/ and packages/, so a container import under
+                 apps/*/tests would trip no-container-outside-composition; here it does not.
 ```
 
 **Do not create a package because code *could* be shared** (addendum §3). Code stays in its owning app
@@ -115,10 +123,11 @@ Its scope is `apps/server/src/**` minus `persistence/` minus tests. `packages/**
 purpose: those are libraries rather than layered modules, and `packages/database` and
 `packages/testing` both run SQL by design.
 
-Of the commands below, only `test:e2e` is still absent — it arrives with M4. Everything else works
-today: `pnpm install/dev/build/build:web/build:server:node/typecheck/lint/boundaries/test/test:unit/
-test:integration/test:security` plus the `db:*` family
-(`db:start/db:stop/db:reset/db:migrate/db:types`, completed by M1b.1). The script is `pnpm boundaries`
+All commands below now work, including `test:e2e` (M2, lane L5) — a **tenth**, advisory-only CI
+job not in branch protection (see `CLAUDE.md`). `pnpm install/dev/build/build:web/
+build:server:node/typecheck/lint/boundaries/test/test:unit/test:integration/test:security/
+test:e2e` plus the `db:*` family (`db:start/db:stop/db:reset/db:migrate/db:types`, completed by
+M1b.1). The script is `pnpm boundaries`
 — one name, no alias; the CI *job* that runs it is named `lint:boundaries`.
 
 Cross-module interaction goes through: a small public application interface, a published event, a shared
