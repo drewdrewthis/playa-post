@@ -13,7 +13,7 @@ import { findSqlTableOwnershipViolations } from './find-sql-table-ownership-viol
  * `persistence/sql/` (its repository is inline-query, per
  * `no-sql-outside-persistence`'s own scope), so `modules/graph/persistence/sql/
  * visible-people.sql` — M2.7 — is the *first* file this rule has anything to check,
- * and L2 is the lane that must ship it. Recorded as an AC ambiguity in this lane's
+ * and L2 ships it. Recorded as an AC ambiguity in this lane's
  * test-writing report: the lane brief assigns the rule's origin to "L1", but L1's
  * own scope (m2-lane-briefs.md §L1) never lists a `persistence/sql/` file, so this
  * suite treats "L1, extended per lane" as satisfied by shipping the rule here, where
@@ -76,14 +76,27 @@ describe('sql-table-ownership (m2-lane-briefs.md:311, blocking finding B-3)', ()
   });
 
   describe('against modules/graph/persistence/sql/ in the real tree', () => {
-    it('reports no violation once visible-people.sql exists and stays within the allowlist', () => {
-      // Vacuous today — `modules/graph/persistence/` does not exist yet
-      // (`visible-people-migration.integration.test.ts` proves the same thing one
-      // layer down, at the catalog level). `collectSqlFiles` walks an absent
-      // directory to `[]`, so this is a real, currently-empty assertion rather than
-      // a skip — it becomes load-bearing the moment `visible-people.sql` lands
-      // beside `modules/graph/persistence/`, mirroring
-      // `no-sql-outside-persistence.fitness.test.ts`'s "against the real tree" test.
+    it('holds visible-people.sql to the tables it was granted, and no others', () => {
+      // Load-bearing. `modules/graph/persistence/sql/visible-people.sql` ships in this
+      // commit and is the only checked-in `.sql` file in the tree, so this walks a
+      // real file with real `app.<table>` references — it is the rule's first and
+      // currently only production subject.
+      //
+      // What it protects: `app.visible_people` is the single definition of "who can
+      // this viewer reach" (ADR-0002 §6), and computing it legitimately requires three
+      // tables two other modules own — `app.connections`, `app.connection_trust`,
+      // `app.users`. Those are allowlisted by name in
+      // `sql-table-ownership-allowlist.json` so the cross-module grant is a reviewed
+      // decision rather than something inferred from what the file happens to
+      // reference today.
+      //
+      // A fourth table joined here — say `app.bulletins`, "just to filter authors
+      // while we are already in the CTE" — would re-derive reachability in a second
+      // place, which is R2, the plan's only Critical-severity risk. Nothing else in
+      // the build can see it: a `.sql` file has no import edge for
+      // dependency-cruiser and no TypeScript literal for `no-sql-outside-persistence`
+      // to parse. This assertion is the only thing standing there, which is why the
+      // violating fixture above proves it still bites.
       const violations = findSqlTableOwnershipViolations([graphSqlDirectory], {
         allowlist: loadAllowlist(),
       });
