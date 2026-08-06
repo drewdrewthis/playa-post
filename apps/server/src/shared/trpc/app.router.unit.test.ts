@@ -60,7 +60,10 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
     }),
     sync: createSyncRouter({ submitMutations: { submit: unreachable } }),
     views: createViewsRouter({ updateNotifyMeQuery: { update: unreachable } }),
-    notifications: createNotificationsRouter({ subscribeToPush: { subscribe: unreachable } }),
+    notifications: createNotificationsRouter({
+      subscribeToPush: { subscribe: unreachable },
+      listNotifications: { list: unreachable },
+    }),
   });
 
 describe('createAppRouter', () => {

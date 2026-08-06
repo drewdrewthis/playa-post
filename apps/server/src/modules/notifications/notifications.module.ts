@@ -7,6 +7,7 @@ import {
   createEvaluateNotifyMeHandler,
   type EvaluateNotifyMeHandler,
 } from './application/evaluate-notify-me.handler';
+import { createListNotificationsQuery } from './application/list-notifications.query';
 import {
   createSendGroupedPushHandler,
   type SendGroupedPushHandler,
@@ -14,6 +15,7 @@ import {
 import { createSubscribeToPushService } from './application/subscribe-to-push.service';
 import { SELF_DRAINED_EVENT_TYPES } from './domain/notification.events';
 import type { PushTransport } from './domain/push-transport';
+import { createPostgresDeliveredNotificationRepository } from './persistence/postgres-delivered-notification.repository';
 import { createPostgresNotifyMeMatchRepository } from './persistence/postgres-notify-me-match.repository';
 import { createPostgresPushSubscriptionRepository } from './persistence/postgres-push-subscription.repository';
 import {
@@ -104,10 +106,12 @@ export function createNotificationsModule(
 
   const matches = createPostgresNotifyMeMatchRepository({ database });
   const pushSubscriptions = createPostgresPushSubscriptionRepository({ database });
+  const deliveredNotifications = createPostgresDeliveredNotificationRepository({ database });
 
   return {
     router: createNotificationsRouter({
       subscribeToPush: createSubscribeToPushService({ pushSubscriptions }),
+      listNotifications: createListNotificationsQuery({ deliveredNotifications }),
     }),
     evaluateNotifyMe: createEvaluateNotifyMeHandler({
       notifyMeQueries: createNotifyMeQueryDirectory({ database }),
