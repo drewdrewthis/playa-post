@@ -17,7 +17,7 @@ later milestone must. ADR-0009 is the only one so far.
 | [0002](ADR-0002-authorization-and-visibility-enforcement.md) | Authorization and visibility enforcement strategy | Accepted (revised — core decision endorsed by stress test; bar is now B1–B18) |
 | [0003](ADR-0003-dependency-injection.md) | Dependency injection via explicit factory composition | proposed |
 | [0004](ADR-0004-graph-traversal-and-visibility-queries.md) | Graph traversal and visibility queries | proposed |
-| [0005](ADR-0005-offline-sync-protocol.md) | Offline sync protocol, idempotency, and conflict rules | proposed |
+| [0005](ADR-0005-offline-sync-protocol.md) | Offline sync protocol, idempotency, and conflict rules | proposed (amended — cross-module handlers write `mutation_results` in a separate transaction after the owning module's commit; accepted duplicate-effect window for non-idempotent handlers, tracked pending a cross-module unit-of-work seam) |
 | [0006](ADR-0006-outbox-and-queue-delivery.md) | Transactional outbox and asynchronous delivery | proposed |
 | [0007](ADR-0007-board-query-dsl.md) | Board query DSL — restricted validated grammar | proposed |
 | [0008](ADR-0008-identity-model.md) | Identity model — auth user ↔ internal ID | proposed (amended — the confusable-normalization algorithm named; `HANDLE_TOO_SHORT` beside `HANDLE_TOO_LONG`) |

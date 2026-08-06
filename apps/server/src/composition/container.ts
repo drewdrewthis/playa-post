@@ -1,20 +1,39 @@
 import { randomUUID } from 'node:crypto';
 
 import { createRemoteJWKSet } from 'jose';
+import { z } from 'zod';
 
 import { createDatabaseConnection, type DatabaseConnection } from '@playa-post/database';
 import { createLogger, DEFAULT_ALLOWED_LOG_FIELDS, type Logger } from '@playa-post/observability';
 
 import { createOutboxDrainer, type OutboxDrainer } from '../entrypoints/outbox-drainer/outbox-drainer';
 import { createAuditModule } from '../modules/audit/audit.module';
+import type { CreateBulletinService } from '../modules/bulletins/application/create-bulletin.service';
+import type { FindVisibleBulletinAuthor } from '../modules/bulletins/application/find-visible-bulletin-author.query';
 import { createBulletinsModule } from '../modules/bulletins/bulletins.module';
+import { presentBulletin } from '../modules/bulletins/transport/bulletin.presenter';
+import { createBulletinInput } from '../modules/bulletins/transport/create-bulletin.input';
 import { createConnectionsModule } from '../modules/connections/connections.module';
 import { createGraphModule } from '../modules/graph/graph.module';
 import { createIdentityModule } from '../modules/identity/identity.module';
+import {
+  createHiddenBulletins,
+  createModerationModule,
+} from '../modules/moderation/moderation.module';
 import type { SendGroupedPushHandler } from '../modules/notifications/application/send-grouped-push.handler';
 import { isPushDeliveryConfigured } from '../modules/notifications/domain/push-transport';
 import { unconfiguredPushTransport } from '../modules/notifications/infrastructure/unconfigured-push.transport';
 import { createNotificationsModule } from '../modules/notifications/notifications.module';
+import type {
+  MutationActorshipCheck,
+  MutationActorshipCheckRegistry,
+  MutationHandlerRegistry,
+} from '../modules/sync/domain/mutation-handler';
+import {
+  MutationActorshipError,
+  MutationPayloadInvalidError,
+} from '../modules/sync/domain/sync.errors';
+import { createSyncModule } from '../modules/sync/sync.module';
 import { createViewsModule } from '../modules/views/views.module';
 import type { AccessTokenVerifier } from '../shared/auth/access-token-verifier';
 import type { ActorResolver } from '../shared/auth/actor-resolver';
@@ -24,6 +43,118 @@ import { createAppRouter, type AppRouter } from '../shared/trpc/app.router';
 import type { Configuration } from './config';
 import { toDrainerConsumer } from './outbox-consumer.adapter';
 import { supabaseJwksUrl } from './supabase-jwks-url';
+
+/**
+ * The sync payload of every bulletin mutation that names an existing bulletin.
+ *
+ * Composition is where the mutation registry is assembled (ADR-0005), so composition is
+ * where an envelope's opaque `payload` is narrowed: `modules/sync` may not know a
+ * bulletin's shape, and `modules/bulletins` may not know an envelope's. This is the one
+ * seam that is allowed to know both.
+ */
+const bulletinTargetPayload = z.object({ bulletinId: z.uuid() });
+
+/**
+ * Narrow an envelope payload, or refuse the envelope.
+ *
+ * A `MutationPayloadInvalidError` rather than a thrown parse failure, so a malformed
+ * payload comes back as one refused envelope with a stable code instead of a 500 for
+ * the whole batch (ADR-0005: "never batch-fatal").
+ */
+function bulletinTargetOf(mutationType: string, payload: unknown): string {
+  const parsed = bulletinTargetPayload.safeParse(payload);
+
+  if (!parsed.success) {
+    throw new MutationPayloadInvalidError(mutationType);
+  }
+
+  return parsed.data.bulletinId;
+}
+
+/**
+ * ADR-0005 precedence rule 1 for the bulletin mutations, as a pre-dispatch check.
+ *
+ * ⚠ **It composes `modules/bulletins`' authorized read**, so an actor's relationship to
+ * a bulletin is decided by the same predicate `bulletins.getById` uses. Anything
+ * cheaper here would be a second answer to "may this actor touch that bulletin",
+ * reachable only through the offline path — which is precisely the write-path IDOR B13
+ * measures.
+ *
+ * @param asAuthor - `true` for a mutation only the author may make (`bulletin.archive`);
+ *   `false` for one any authorized viewer may make (`bulletin.report`,
+ *   `bulletin.dismiss`). The service behind each still enforces its own rules — an
+ *   author reporting their own bulletin is refused by
+ *   `ReportBulletinService`, not here — because this gate answers *actorship*, which
+ *   ADR-0005 requires to be settled before any handler runs.
+ */
+function requireBulletinActorship(
+  findVisibleBulletin: FindVisibleBulletinAuthor,
+  asAuthor: boolean,
+): MutationActorshipCheck {
+  return async ({ actorId, mutationType, payload }) => {
+    const target = await findVisibleBulletin(actorId, bulletinTargetOf(mutationType, payload));
+
+    if (target === null || (asAuthor && target.authorId !== actorId)) {
+      throw new MutationActorshipError();
+    }
+  };
+}
+
+/**
+ * The `MutationType → handler` registry — M2 wires exactly one replayable handler.
+ *
+ * `bulletin.create` needs no actorship check: the author is the acting actor, so there
+ * is no subject for them to be unrelated to (see `create-bulletin.service.ts`). Its
+ * result is `presentBulletin`'s, deliberately — a client must not be able to tell from
+ * the payload whether its change went through the tRPC procedure or the offline queue.
+ */
+function mutationHandlers(createBulletin: CreateBulletinService): MutationHandlerRegistry {
+  return {
+    'bulletin.create': {
+      async handle({ actorId, mutationType, payload }) {
+        const parsed = createBulletinInput.safeParse(payload);
+
+        if (!parsed.success) {
+          throw new MutationPayloadInvalidError(mutationType);
+        }
+
+        return {
+          result: presentBulletin(
+            await createBulletin.create({
+              // From the resolved actor, never from the payload (ADR-0002 §5a, B14) —
+              // the one line in the offline path where impersonation would live.
+              authorId: actorId,
+              type: parsed.data.type,
+              title: parsed.data.title,
+              body: parsed.data.body,
+            }),
+          ),
+        };
+      },
+    },
+  };
+}
+
+/**
+ * The `MutationType → pre-dispatch actorship check` registry.
+ *
+ * ⚠ **Incomplete, and the gap is named rather than hidden.** `connection.accept`,
+ * `trust.set`, and `notifyMe.update` are M2 mutations with no entry here, so an
+ * unrelated actor submitting one gets `UNSUPPORTED_MUTATION_TYPE` instead of
+ * `MUTATION_ACTOR_UNAUTHORIZED` — the vacuous-B13 shape blocking finding B-2 warns
+ * about. `modules/connections` exports no application interface to check against yet
+ * and `notifyMe.update` does not exist until lane L3b-notify (lane-brief C13 already
+ * records that join). Each owes an entry here as part of its own definition of done.
+ */
+function mutationActorshipChecks(
+  findVisibleBulletin: FindVisibleBulletinAuthor,
+): MutationActorshipCheckRegistry {
+  return {
+    'bulletin.archive': requireBulletinActorship(findVisibleBulletin, true),
+    'bulletin.report': requireBulletinActorship(findVisibleBulletin, false),
+    'bulletin.dismiss': requireBulletinActorship(findVisibleBulletin, false),
+  };
+}
 
 /**
  * The singleton-scoped object graph: everything built once per process and shared by
@@ -135,7 +266,18 @@ export function buildAppContainer(configuration: Configuration): AppContainer {
   // Bulletins consumes that same rule one layer lower — `app.visible_bulletins`
   // composes `app.visible_people` in SQL — so it needs nothing from `graph` here, and
   // the wiring order between the two carries no meaning.
-  const bulletins = createBulletinsModule({ database });
+  //
+  // Moderation and bulletins do need each other, and this is the order that unties it:
+  // the board exclusion is built first, on its own (`createHiddenBulletins`), so
+  // bulletins can be built complete, so moderation can be handed the authorized read it
+  // needs to decide whether an actor may moderate a bulletin at all. Nothing here is
+  // lazily captured; every line only names what is already built.
+  const hiddenBulletins = createHiddenBulletins({ database });
+  const bulletins = createBulletinsModule({ database, hiddenBulletins });
+  const moderation = createModerationModule({
+    database,
+    findVisibleBulletin: bulletins.findVisibleBulletin,
+  });
   // Views gained a table and a procedure with Notify Me (M2.10), so it is now built
   // rather than merely imported: its board grammar is still a pure function bulletins
   // imports directly (ADR-0013), but `app.notify_me_queries` and `views.notifyMe.update`
@@ -158,6 +300,15 @@ export function buildAppContainer(configuration: Configuration): AppContainer {
     database,
     visiblePeople: graph.visiblePeople,
     pushTransport,
+  });
+  // Sync is built last among the routed modules because its registries are adapters
+  // over everything above. It is the one module whose dependencies are other modules'
+  // use cases rather than the database — which is why the registries are assembled
+  // here and never inside it.
+  const sync = createSyncModule({
+    database,
+    handlers: mutationHandlers(bulletins.createBulletin),
+    actorshipChecks: mutationActorshipChecks(bulletins.findVisibleBulletin),
   });
   // Audit is built last: it has no router and no other consumer, so nothing else in
   // this function needs it — only the drainer wired immediately below.
@@ -212,6 +363,8 @@ export function buildAppContainer(configuration: Configuration): AppContainer {
       connections: connections.router,
       graph: graph.router,
       bulletins: bulletins.router,
+      moderation: moderation.router,
+      sync: sync.router,
       views: views.router,
       notifications: notifications.router,
     }),

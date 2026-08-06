@@ -6,7 +6,9 @@ import { createBulletinsRouter } from '../../modules/bulletins/transport/bulleti
 import { createConnectionsRouter } from '../../modules/connections/transport/connections.router';
 import { createGraphRouter } from '../../modules/graph/transport/graph.router';
 import { createIdentityRouter } from '../../modules/identity/transport/identity.router';
+import { createModerationRouter } from '../../modules/moderation/transport/moderation.router';
 import { createNotificationsRouter } from '../../modules/notifications/transport/notifications.router';
+import { createSyncRouter } from '../../modules/sync/transport/sync.router';
 import { createViewsRouter } from '../../modules/views/transport/views.router';
 import { readHealth } from '../health/read-health';
 
@@ -52,6 +54,11 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
       listMyBulletins: { list: unreachable },
       listBoard: { list: unreachable },
     }),
+    moderation: createModerationRouter({
+      reportBulletin: { report: unreachable },
+      dismissBulletin: { dismiss: unreachable },
+    }),
+    sync: createSyncRouter({ submitMutations: { submit: unreachable } }),
     views: createViewsRouter({ updateNotifyMeQuery: { update: unreachable } }),
     notifications: createNotificationsRouter({ subscribeToPush: { subscribe: unreachable } }),
   });

@@ -1,0 +1,44 @@
+/**
+ * The mutation types `sync.submitMutations` recognises in M2.
+ *
+ * These are the **seven write operations the M2 slice exposes**, which is the same
+ * seven M2-AC19's B13 matrix walks "whether submitted via tRPC or via
+ * `sync.submitMutations`". ADR-0005's v1 conflict matrix names more (`bulletin.update`,
+ * `connection.invite`, `connection.remove`, `block.create`, `view.save`,
+ * `intro.request`); each of those arrives with the milestone that builds the mutation,
+ * because a type listed here with nothing behind it is a type an actorship gate cannot
+ * check and a handler cannot serve.
+ *
+ * ⚠ **Recognised is not the same as implemented.** M2 wires exactly one *replayable*
+ * handler — `bulletin.create`. The other six are recognised so that the type-agnostic
+ * actorship gate has something to check *before* dispatch discovers there is no
+ * handler; without that, an unrelated actor submitting `bulletin.archive` would be
+ * refused for the wrong reason and B13's sync column would be vacuously green
+ * (`m2-lane-briefs.md` §"The sync half of B13 is not vacuously green").
+ */
+export const MUTATION_TYPES = [
+  'bulletin.create',
+  'bulletin.archive',
+  'bulletin.report',
+  'bulletin.dismiss',
+  'connection.accept',
+  'trust.set',
+  'notifyMe.update',
+] as const;
+
+/** One of {@link MUTATION_TYPES}. */
+export type MutationType = (typeof MUTATION_TYPES)[number];
+
+/**
+ * Is this wire string a mutation type this server recognises?
+ *
+ * The envelope's `mutationType` is a plain `string` on the wire on purpose: refusing an
+ * unknown one at the transport would make the tRPC input schema an oracle for which
+ * mutations this server has shipped, and would hand a client a generic `BAD_REQUEST`
+ * instead of the per-envelope `rejected` / `UNSUPPORTED_MUTATION_TYPE` ADR-0005's
+ * response shape requires (there is no `unsupported` outcome — ADR-0005:32 fixes the
+ * vocabulary at `applied | replayed | conflict | rejected | expired`).
+ */
+export function isMutationType(value: string): value is MutationType {
+  return (MUTATION_TYPES as readonly string[]).includes(value);
+}

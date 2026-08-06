@@ -2,7 +2,9 @@ import type { BulletinsRouter } from '../../modules/bulletins/transport/bulletin
 import type { ConnectionsRouter } from '../../modules/connections/transport/connections.router';
 import type { GraphRouter } from '../../modules/graph/transport/graph.router';
 import type { IdentityRouter } from '../../modules/identity/transport/identity.router';
+import type { ModerationRouter } from '../../modules/moderation/transport/moderation.router';
 import type { NotificationsRouter } from '../../modules/notifications/transport/notifications.router';
+import type { SyncRouter } from '../../modules/sync/transport/sync.router';
 import type { ViewsRouter } from '../../modules/views/transport/views.router';
 import { readHealth, type HealthResponse } from '../health/read-health';
 
@@ -22,6 +24,8 @@ export interface AppRouterModules {
   readonly connections: ConnectionsRouter;
   readonly graph: GraphRouter;
   readonly bulletins: BulletinsRouter;
+  readonly moderation: ModerationRouter;
+  readonly sync: SyncRouter;
   readonly views: ViewsRouter;
   readonly notifications: NotificationsRouter;
 }
@@ -69,6 +73,8 @@ export function createAppRouter(modules: AppRouterModules) {
     connections: modules.connections,
     graph: modules.graph,
     bulletins: modules.bulletins,
+    moderation: modules.moderation,
+    sync: modules.sync,
     views: modules.views,
     notifications: modules.notifications,
   });

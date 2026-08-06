@@ -36,6 +36,20 @@ export interface AppAuditEntries {
   source_event_id: string;
 }
 
+export interface AppBulletinDismissals {
+  bulletin_id: string;
+  created_at: Timestamp;
+  id: Generated<string>;
+  viewer_id: string;
+}
+
+export interface AppBulletinReports {
+  bulletin_id: string;
+  created_at: Timestamp;
+  id: Generated<string>;
+  reporter_id: string;
+}
+
 export interface AppBulletins {
   /**
    * NULL means live. Archived bulletins are absent from app.visible_bulletins for everyone, author included; the author keeps them through bulletins.listMine, which reads this table by author_id (M2-AC12).
@@ -92,6 +106,22 @@ export interface AppInvitations {
    */
   status: Generated<string>;
   token: string;
+}
+
+export interface AppMutationResults {
+  /**
+   * Namespaces every mutation_id lookup (ADR-0005): one actor can neither probe nor collide with another actor's mutation IDs, even though the primary key alone is global.
+   */
+  actor_id: string;
+  /**
+   * Has a default, unlike app.bulletins.created_at and app.invitations.created_at: ADR-0005's schema block specifies `default now()` for this column explicitly, and it is a bookkeeping timestamp for the 30-day retention window (ADR-0005), not a product fact a writer states.
+   */
+  created_at: Generated<Timestamp>;
+  mutation_id: string;
+  mutation_type: string;
+  outcome: string;
+  request_hash: string;
+  result: Json | null;
 }
 
 export interface AppNotifyMeQueries {
@@ -154,11 +184,14 @@ export interface AppUsers {
 
 export interface DB {
   "app.audit_entries": AppAuditEntries;
+  "app.bulletin_dismissals": AppBulletinDismissals;
+  "app.bulletin_reports": AppBulletinReports;
   "app.bulletins": AppBulletins;
   "app.connection_trust": AppConnectionTrust;
   "app.connections": AppConnections;
   "app.consumer_receipts": AppConsumerReceipts;
   "app.invitations": AppInvitations;
+  "app.mutation_results": AppMutationResults;
   "app.notify_me_queries": AppNotifyMeQueries;
   "app.outbox_events": AppOutboxEvents;
   "app.push_subscriptions": AppPushSubscriptions;
