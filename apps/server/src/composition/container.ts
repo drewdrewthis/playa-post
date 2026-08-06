@@ -3,6 +3,8 @@ import { createRemoteJWKSet } from 'jose';
 import { createDatabaseConnection, type DatabaseConnection } from '@playa-post/database';
 import { createLogger, DEFAULT_ALLOWED_LOG_FIELDS, type Logger } from '@playa-post/observability';
 
+import { createConnectionsModule } from '../modules/connections/connections.module';
+import { createGraphModule } from '../modules/graph/graph.module';
 import { createIdentityModule } from '../modules/identity/identity.module';
 import type { AccessTokenVerifier } from '../shared/auth/access-token-verifier';
 import type { ActorResolver } from '../shared/auth/actor-resolver';
@@ -87,6 +89,12 @@ export function buildAppContainer(configuration: Configuration): AppContainer {
   // procedures to mount and the `ActorResolver` every other module's authorization
   // depends on (ADR-0008 rule 8).
   const identity = createIdentityModule({ database });
+  const connections = createConnectionsModule({ database });
+  // Graph is built last of the three because it is the one other modules will consume:
+  // its `visiblePeople` projection is the single §6a person read (lane-brief C8), and
+  // a future module that needs a person card takes it from here rather than joining
+  // `app.users` itself.
+  const graph = createGraphModule({ database });
 
   return {
     configuration,
@@ -107,7 +115,11 @@ export function buildAppContainer(configuration: Configuration): AppContainer {
     // sitting beside the real one is one wiring mistake away from locking every user
     // out with a green test suite.
     actorResolver: identity.actorResolver,
-    router: createAppRouter({ identity: identity.router }),
+    router: createAppRouter({
+      identity: identity.router,
+      connections: connections.router,
+      graph: graph.router,
+    }),
     dispose: () => database.destroy(),
   };
 }

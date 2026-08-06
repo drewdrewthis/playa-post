@@ -9,7 +9,75 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
 
+export type Json = JsonValue;
+
+export type JsonArray = JsonValue[];
+
+export type JsonObject = {
+  [x: string]: JsonValue | undefined;
+};
+
+export type JsonPrimitive = boolean | number | string | null;
+
+export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
+
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
+
+export interface AppConnections {
+  /**
+   * What user A grants user B: full | limited. Consumed by app.visible_people, which fails closed — anything that is not exactly full is topology_only.
+   */
+  a_discloses_to_b_level: Generated<string>;
+  b_discloses_to_a_level: Generated<string>;
+  created_at: Timestamp;
+  id: Generated<string>;
+  status: string;
+  user_a_id: string;
+  user_b_id: string;
+}
+
+export interface AppConnectionTrust {
+  owner_id: string;
+  subject_id: string;
+  trust: number | null;
+  updated_at: Timestamp;
+}
+
+export interface AppConsumerReceipts {
+  consumer_name: string;
+  event_id: string;
+  processed_at: Timestamp;
+}
+
+export interface AppInvitations {
+  accepted_at: Timestamp | null;
+  accepted_by_id: string | null;
+  created_at: Timestamp;
+  id: Generated<string>;
+  inviter_id: string;
+  revoked_at: Timestamp | null;
+  /**
+   * pending | accepted | revoked. Deliberately no check constraint, matching app.users.status: an unrecognised value must fail CLOSED in the application (nothing but pending can be opened or accepted) rather than loudly in a constraint the reader has to go find.
+   */
+  status: Generated<string>;
+  token: string;
+}
+
+export interface AppOutboxEvents {
+  actor_id: string | null;
+  aggregate_id: string;
+  attempts: Generated<number>;
+  available_at: Generated<Timestamp>;
+  claimed_at: Timestamp | null;
+  claimed_by: string | null;
+  event_id: string;
+  event_type: string;
+  event_version: Generated<number>;
+  last_error: string | null;
+  occurred_at: Timestamp;
+  payload: Json;
+  status: Generated<string>;
+}
 
 export interface AppUsers {
   auth_user_id: string;
@@ -31,5 +99,10 @@ export interface AppUsers {
 }
 
 export interface DB {
+  "app.connection_trust": AppConnectionTrust;
+  "app.connections": AppConnections;
+  "app.consumer_receipts": AppConsumerReceipts;
+  "app.invitations": AppInvitations;
+  "app.outbox_events": AppOutboxEvents;
   "app.users": AppUsers;
 }

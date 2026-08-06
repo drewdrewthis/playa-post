@@ -107,6 +107,38 @@ describe('ADR-0002 security baseline', () => {
     }
   }
 
+  /**
+   * Probe every table in schema `app` as `role`, one at a time.
+   *
+   * ⚠ **Deliberately sequential, and a `Promise.all` here is a silent hole in this
+   * control.** `database.client` is a single `pg.Client`: node-postgres queues
+   * concurrent queries on one connection and runs them in submission order, so
+   * `Promise.all` over these probes issues every `begin` before the first `select`.
+   * The first `42501` then aborts the one real transaction and every later probe
+   * reports `25P02` (`in_failed_sql_transaction`) — its own SQLSTATE never observed.
+   *
+   * That is the failure mode this suite exists to prevent, pointed at itself: a
+   * genuine grant regression on the second table onward would be indistinguishable
+   * from the transaction-abort noise. It was invisible while schema `app` held one
+   * table (`Promise.all` over one element is serial), and became visible the moment
+   * lane L2 added five. Measured against PostgreSQL 17 with `pg` 8.22.0, which warns
+   * about the same thing: "Calling client.query() when the client is already
+   * executing a query is deprecated."
+   *
+   * `sqlstateOf` already wraps each probe in its own `begin`/`rollback`; it just has
+   * to be *given* the connection to itself.
+   */
+  async function sqlstateOfEveryTable(
+    role: string,
+    statementFor: (table: string) => string,
+  ): Promise<readonly { table: string; sqlstate: string }[]> {
+    const observed: { table: string; sqlstate: string }[] = [];
+    for (const table of appTables) {
+      observed.push({ table, sqlstate: await sqlstateOf(role, statementFor(table)) });
+    }
+    return observed;
+  }
+
   describe('B1 — anon and authenticated cannot read schema app', () => {
     it('enumerates at least one table, so the rows below cannot pass vacuously', () => {
       // A `for all tables` assertion over an empty set is green and worthless
@@ -119,11 +151,9 @@ describe('ADR-0002 security baseline', () => {
     it.each(POSTGREST_ROLES)(
       'denies %s with SQLSTATE 42501 on every table',
       async (role) => {
-        const observed = await Promise.all(
-          appTables.map(async (table) => ({
-            table,
-            sqlstate: await sqlstateOf(role, `select 1 from ${table} limit 1`),
-          })),
+        const observed = await sqlstateOfEveryTable(
+          role,
+          (table) => `select 1 from ${table} limit 1`,
         );
 
         expect(observed).toEqual(
@@ -133,12 +163,7 @@ describe('ADR-0002 security baseline', () => {
     );
 
     it('denies writes too, not only reads', async () => {
-      const observed = await Promise.all(
-        appTables.map(async (table) => ({
-          table,
-          sqlstate: await sqlstateOf('anon', `delete from ${table}`),
-        })),
-      );
+      const observed = await sqlstateOfEveryTable('anon', (table) => `delete from ${table}`);
 
       expect(observed).toEqual(appTables.map((table) => ({ table, sqlstate: '42501' })));
     });

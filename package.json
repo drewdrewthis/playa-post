@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playa-post/database": "workspace:*",
     "@playa-post/testing": "workspace:*",
     "@types/node": "26.1.2",
     "dependency-cruiser": "18.1.0",
