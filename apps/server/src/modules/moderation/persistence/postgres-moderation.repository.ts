@@ -1,0 +1,119 @@
+import type { DatabaseConnection } from '@playa-post/database';
+
+import type { HiddenBulletin } from '../domain/hidden-bulletin';
+import type { HideBulletinWrite, ModerationRepository } from '../domain/moderation.repository';
+
+/** Everything the repository needs, injected (addendum §12). */
+export interface PostgresModerationRepositoryDependencies {
+  /** Connected as `app_rw` and nothing else (ADR-0002 §2). */
+  readonly database: DatabaseConnection;
+}
+
+/**
+ * `app.bulletin_reports` and `app.bulletin_dismissals`, behind
+ * {@link ModerationRepository}.
+ *
+ * Every statement is schema-qualified per ADR-0002's pooler-safety rules: with
+ * `search_path` outside this file's control, an unqualified name is a silent
+ * cross-schema read waiting for a `public.bulletin_reports` to exist.
+ *
+ * ⚠ **Nothing here writes `app.outbox_events`**, unlike `modules/bulletins`' and
+ * `modules/connections`' repositories. That is not an omission — it is M2-AC10's
+ * notifications clause: zero outbox rows means no delivery exists for a future consumer
+ * to read the reporter's identity out of (B9). Adding an event here would break a
+ * privacy guarantee from a file no privacy test looks at.
+ *
+ * ⚠ **No statement here reads `app.bulletins` or `app.users`.** Whether the acting
+ * viewer may see the bulletin at all is decided *before* this layer, through
+ * `modules/bulletins`' authorized read
+ * ({@link import('../application/find-visible-bulletin').FindVisibleBulletin}). A join
+ * to either table here would be a second definition of "who can see what" that no gate
+ * can see (ADR-0002 §6, R2).
+ */
+export function createPostgresModerationRepository(
+  dependencies: PostgresModerationRepositoryDependencies,
+): ModerationRepository {
+  const { database } = dependencies;
+
+  return {
+    async report(write: HideBulletinWrite): Promise<HiddenBulletin> {
+      // `on conflict do nothing` rather than a read-then-write: ADR-0005's matrix makes
+      // a second report of the same bulletin by the same reporter a converging no-op,
+      // and expressing that as the unique constraint's own behaviour means two
+      // concurrent reports cannot both decide there is no row yet.
+      const inserted = await database
+        .insertInto('app.bulletin_reports')
+        .values({
+          bulletin_id: write.bulletinId,
+          reporter_id: write.viewerId,
+          created_at: write.occurredAt,
+        })
+        .onConflict((onConflict) =>
+          onConflict.columns(['bulletin_id', 'reporter_id']).doNothing(),
+        )
+        .returning('created_at')
+        .executeTakeFirst();
+
+      if (inserted !== undefined) {
+        return { bulletinId: write.bulletinId, viewerId: write.viewerId, hiddenAt: inserted.created_at };
+      }
+
+      // Conflicted, so the pair is already recorded. Answer with the *original*
+      // timestamp: idempotency means the second call returns the state the first one
+      // established, not a fresh one that would make a replay look like a new act.
+      const existing = await database
+        .selectFrom('app.bulletin_reports')
+        .select('created_at')
+        .where('bulletin_id', '=', write.bulletinId)
+        .where('reporter_id', '=', write.viewerId)
+        .executeTakeFirstOrThrow();
+
+      return { bulletinId: write.bulletinId, viewerId: write.viewerId, hiddenAt: existing.created_at };
+    },
+
+    async dismiss(write: HideBulletinWrite): Promise<HiddenBulletin> {
+      const inserted = await database
+        .insertInto('app.bulletin_dismissals')
+        .values({
+          bulletin_id: write.bulletinId,
+          viewer_id: write.viewerId,
+          created_at: write.occurredAt,
+        })
+        .onConflict((onConflict) => onConflict.columns(['bulletin_id', 'viewer_id']).doNothing())
+        .returning('created_at')
+        .executeTakeFirst();
+
+      if (inserted !== undefined) {
+        return { bulletinId: write.bulletinId, viewerId: write.viewerId, hiddenAt: inserted.created_at };
+      }
+
+      const existing = await database
+        .selectFrom('app.bulletin_dismissals')
+        .select('created_at')
+        .where('bulletin_id', '=', write.bulletinId)
+        .where('viewer_id', '=', write.viewerId)
+        .executeTakeFirstOrThrow();
+
+      return { bulletinId: write.bulletinId, viewerId: write.viewerId, hiddenAt: existing.created_at };
+    },
+
+    async findHiddenFor(viewerId: string): Promise<ReadonlySet<string>> {
+      // One statement over both tables rather than two round trips on the board's hot
+      // path. `union` (not `union all`) because a viewer may have both dismissed and
+      // later reported the same bulletin, and the caller's question is membership.
+      const rows = await database
+        .selectFrom('app.bulletin_reports')
+        .select('bulletin_id')
+        .where('reporter_id', '=', viewerId)
+        .union(
+          database
+            .selectFrom('app.bulletin_dismissals')
+            .select('bulletin_id')
+            .where('viewer_id', '=', viewerId),
+        )
+        .execute();
+
+      return new Set(rows.map((row) => row.bulletin_id));
+    },
+  };
+}

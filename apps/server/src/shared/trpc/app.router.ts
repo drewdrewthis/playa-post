@@ -2,6 +2,8 @@ import type { BulletinsRouter } from '../../modules/bulletins/transport/bulletin
 import type { ConnectionsRouter } from '../../modules/connections/transport/connections.router';
 import type { GraphRouter } from '../../modules/graph/transport/graph.router';
 import type { IdentityRouter } from '../../modules/identity/transport/identity.router';
+import type { ModerationRouter } from '../../modules/moderation/transport/moderation.router';
+import type { SyncRouter } from '../../modules/sync/transport/sync.router';
 import { readHealth, type HealthResponse } from '../health/read-health';
 
 import { publicProcedure, router } from './trpc';
@@ -20,6 +22,8 @@ export interface AppRouterModules {
   readonly connections: ConnectionsRouter;
   readonly graph: GraphRouter;
   readonly bulletins: BulletinsRouter;
+  readonly moderation: ModerationRouter;
+  readonly sync: SyncRouter;
 }
 
 /**
@@ -65,6 +69,8 @@ export function createAppRouter(modules: AppRouterModules) {
     connections: modules.connections,
     graph: modules.graph,
     bulletins: modules.bulletins,
+    moderation: modules.moderation,
+    sync: modules.sync,
   });
 }
 

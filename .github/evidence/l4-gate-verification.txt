@@ -1,0 +1,173 @@
+L4 gate verification — 2026-08-06T15:36:17Z — HEAD 24ecdcd520d609f351dfcf68a411f41232ee4c2a + working tree
+=== pnpm typecheck ===
+$ tsc --noEmit && pnpm --recursive typecheck
+Scope: 7 of 8 workspace projects
+apps/web typecheck$ tsc --noEmit
+packages/configuration typecheck$ tsc --noEmit
+packages/contracts typecheck$ tsc --noEmit
+packages/observability typecheck$ tsc --noEmit
+packages/contracts typecheck: Done
+packages/testing typecheck$ tsc --noEmit
+packages/configuration typecheck: Done
+packages/observability typecheck: Done
+packages/testing typecheck: Done
+apps/web typecheck: Done
+packages/database typecheck$ tsc --noEmit
+packages/database typecheck: Done
+apps/server typecheck$ tsc --noEmit
+apps/server typecheck: Done
+exit: 0
+=== pnpm lint ===
+$ eslint .
+exit: 0
+=== pnpm boundaries ===
+$ depcruise --config .dependency-cruiser.cjs apps packages
+
+✔ no dependency violations found (207 modules, 598 dependencies cruised)
+
+exit: 0
+=== pnpm test:unit ===
+$ vitest run --project unit
+
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post/.claude/worktrees/agent-a59fb638b44db7e75
+
+(node:761980) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:761980) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:761980) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:761980) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:761980) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:761980) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:761980) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+ ❯ |unit| tests/fitness/server-bundle-boot.fitness.test.ts (1 test | 1 failed) 4455ms
+     × boots the tsup-built ESM bundle to "Server listening" without a Dynamic require crash 4452ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |unit| tests/fitness/server-bundle-boot.fitness.test.ts > server bundle boot (build-passes-boot-fails gap) > boots the tsup-built ESM bundle to "Server listening" without a Dynamic require crash
+Error: bundle exited before boot (code=1, signal=null)
+--- stdout ---
+
+--- stderr ---
+node:internal/modules/cjs/loader:1424
+  throw err;
+  ^
+
+Error: Cannot find module '/home/ubuntu/Projects/playa-post/.claude/worktrees/agent-a59fb638b44db7e75/apps/server/dist/node/main.js'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1421:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1059:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1064:22)
+    at Module._load (node:internal/modules/cjs/loader:1227:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.13.0
+
+ ❯ tests/fitness/server-bundle-boot.fitness.test.ts:108:11
+    106|       finish(() =>
+    107|         rejectBoot(
+    108|           new Error(
+       |           ^
+    109|             `bundle exited before boot (code=${String(code)}, signal=$…
+    110|               `--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`,
+ ❯ finish tests/fitness/server-bundle-boot.fitness.test.ts:93:7
+ ❯ ChildProcess.onExit tests/fitness/server-bundle-boot.fitness.test.ts:106:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 34 passed (35)
+      Tests  1 failed | 204 passed | 1 skipped (206)
+   Start at  15:36:38
+   Duration  10.17s (transform 2.95s, setup 0ms, import 17.60s, tests 23.36s, environment 5ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+exit: 1
+NOTE: test:unit first run failed only server-bundle-boot.fitness (MODULE_NOT_FOUND: apps/server/dist/node/main.js absent — fresh worktree, bundle not yet built). Building both targets, then re-running test:unit.
+=== pnpm build:web ===
+$ pnpm --filter @playa-post/web build
+$ vite build
+vite v8.1.5 building client environment for production...
+[2Ktransforming...✓ 15 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/registerSW.js                0.13 kB
+dist/manifest.webmanifest         0.23 kB
+dist/index.html                   0.70 kB │ gzip:  0.40 kB
+dist/assets/index-CZKGtVXc.css    0.83 kB │ gzip:  0.45 kB
+dist/assets/index-DOPQMNg3.js   141.31 kB │ gzip: 46.03 kB │ map: 327.50 kB
+
+✓ built in 128ms
+
+PWA v1.3.0
+mode      generateSW
+precache  5 entries (139.62 KiB)
+files generated
+  dist/sw.js.map
+  dist/sw.js
+  dist/workbox-9c191d2f.js.map
+  dist/workbox-9c191d2f.js
+exit: 0
+=== pnpm build:server:node ===
+$ pnpm --filter @playa-post/server build
+$ tsup
+[NODE] CLI Building entry: {"main":"src/entrypoints/http/main.ts"}
+[NODE] CLI Using tsconfig: tsconfig.json
+[NODE] CLI tsup v8.5.1
+[NODE] CLI Using tsup config: /home/ubuntu/Projects/playa-post/.claude/worktrees/agent-a59fb638b44db7e75/apps/server/tsup.config.ts
+[NODE] CLI Target: node22
+[NODE] CLI Cleaning output folder
+[NODE] ESM Build start
+[NODE] ESM dist/node/main.js     849.39 KB
+[NODE] ESM dist/node/main.js.map 1.71 MB
+[NODE] ESM ⚡️ Build success in 359ms
+exit: 0
+=== pnpm test:unit (re-run after build) ===
+$ vitest run --project unit
+
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post/.claude/worktrees/agent-a59fb638b44db7e75
+
+(node:776350) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:776350) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:776350) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:776350) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:776350) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:776350) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:776350) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+
+ Test Files  35 passed (35)
+      Tests  205 passed | 1 skipped (206)
+   Start at  15:37:10
+   Duration  9.99s (transform 4.92s, setup 0ms, import 20.61s, tests 22.72s, environment 4ms)
+
+exit: 0
+=== pnpm test:integration ===
+$ vitest run --project integration
+
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post/.claude/worktrees/agent-a59fb638b44db7e75
+
+
+ Test Files  17 passed (17)
+      Tests  107 passed (107)
+   Start at  15:37:26
+   Duration  52.36s (transform 720ms, setup 0ms, import 10.51s, tests 39.24s, environment 2ms)
+
+exit: 0
+=== pnpm test:security ===
+$ vitest run --project security
+
+ RUN  v4.1.10 /home/ubuntu/Projects/playa-post/.claude/worktrees/agent-a59fb638b44db7e75
+
+
+ Test Files  8 passed (8)
+      Tests  78 passed (78)
+   Start at  15:38:23
+   Duration  24.43s (transform 316ms, setup 0ms, import 4.42s, tests 18.44s, environment 1ms)
+
+exit: 0
