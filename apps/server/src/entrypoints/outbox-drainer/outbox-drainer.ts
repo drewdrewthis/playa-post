@@ -134,6 +134,15 @@ async function claimBatch(
       .select('event_id')
       .where('status', 'in', CLAIMABLE_STATUSES)
       .where('available_at', '<=', now)
+      // SEAM for L3b-notify (unmerged, parallel lane): SendGroupedPushHandler reads
+      // NotifyMeMatched rows itself, via its own 60-second grouping-window flush — a
+      // separate scheduled reader, not a consumer this drainer dispatches to. Once
+      // that lane merges, this claim query needs to exclude the event type(s) it owns
+      // so the two scheduled readers never compete for the same rows, e.g.:
+      //   .where('event_type', 'not in', ['NotifyMeMatched'])
+      // here, before `.orderBy(...)`. Left unfiltered for M2: no `NotifyMeMatched`
+      // event type exists on this branch yet, and the exact exclusion list is that
+      // lane's rebase to resolve, not this one's.
       .orderBy('available_at')
       .limit(options.limit)
       .forUpdate()
