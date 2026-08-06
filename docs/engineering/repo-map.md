@@ -42,18 +42,21 @@ apps/server/     The modular monolith.
   composition/   The ONLY place that knows about the object graph, and the only place that reads
                  process.env (ADR-0003). config.ts · container.ts · request-scope.ts ·
                  supabase-jwks-url.ts; registrations.ts arrives with the first module.
-  entrypoints/   http/ · queue/ · cron/. The ONLY place that knows about the runtime (ADR-0009).
+  entrypoints/   http/ · outbox-drainer/ · notification-flush/ (ADR-0006 — two in-process pollers,
+                 no separate queue or cron facility; ADR-0009 retired the Cloudflare dual-target this
+                 line used to describe). The ONLY place that knows about the runtime (ADR-0009).
   modules/       identity · connections · graph · bulletins · views · notifications · moderation ·
                  sync · storage · audit. Each: transport/ application/ domain/ persistence/ tests/
                  plus a <name>.module.ts. (Addendum §4 — a module only grows the directories it needs:
                  modules/graph has no domain/, because ADR-0004 decision 7 makes the graph a read
-                 model rather than an aggregate; modules/views has only domain/ + tests/, because
-                 M2 ships the board grammar and nothing else — its <name>.module.ts is a pure-function
-                 barrel rather than a factory, and it gains a router with saved views in M5,
-                 ADR-0013.) A module MAY also grow an infrastructure/ for a non-persistence adapter —
-                 modules/connections/infrastructure/ holds the node:crypto CSPRNG behind the
-                 invite-token port, because domain/ and application/ may not import a Node builtin and
-                 persistence/ is the one directory domain/ may never import (ADR-0012). A module that
+                 model rather than an aggregate; modules/views was domain/ + tests/ alone while the
+                 board grammar was all it shipped, and gained application/ persistence/ transport/ with
+                 Notify Me in M2.10 — its <name>.module.ts is now a factory as well as a barrel, and
+                 saved views join it in M5, ADR-0013.) A module MAY also grow an infrastructure/ for a
+                 non-persistence adapter — modules/connections/infrastructure/ holds the node:crypto
+                 CSPRNG behind the invite-token port, and modules/notifications/infrastructure/ holds
+                 the Web Push transport, because domain/ and application/ may not import a Node builtin
+                 and persistence/ is the one directory domain/ may never import (ADR-0012). A module that
                  owns a database function checks its source in at persistence/sql/ and carries a
                  byte-identical copy in the migration that installs it — modules/graph's
                  visible-people.sql and modules/bulletins' visible-bulletins.sql, each pinned by a

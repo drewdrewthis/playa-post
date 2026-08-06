@@ -20,6 +20,39 @@ export interface ListVisibleGraphQuery {
   list(command: ListVisibleGraphCommand): Promise<VisibleGraph>;
 }
 
+/**
+ * The same §6a projection, for a person identified by **stored state** rather than by
+ * a request.
+ *
+ * ⚠ **This is the answer `shared/auth/viewer-id.ts` prescribes, not a way around it.**
+ * That file forbids a second `ViewerId` constructor and says what to do instead: "if a
+ * call site cannot reach an `Actor`, it is running outside the authenticated request
+ * scope and has no business performing a viewer-scoped read; give it its own
+ * non-viewer-scoped query instead." This is that query. It exists because ADR-0002
+ * §11 **requires** a delivery-time authorization re-check inside the notification send
+ * handler — a code path that runs on a cron, for a recipient nobody authenticated as,
+ * and therefore one no `ViewerId` can ever reach.
+ *
+ * The brand's purpose survives intact: R14 is a `viewerId` arriving **from request
+ * input**, and `userId` here comes from a row this system wrote (`owner_id` on a saved
+ * query, `recipient_id` on a computed match). A caller that passes a value it received
+ * from a client is the bug, and it is a bug no type can catch — which is why this
+ * method is named for its provenance and lives beside the branded one rather than
+ * quietly widening it.
+ *
+ * Consumed by `modules/notifications`; ratified decision (c) makes the §6a projection's
+ * signature explicitly changeable by a consuming lane, and this is L3b-notify's change.
+ */
+export interface VisiblePeopleDirectory {
+  /**
+   * Everyone this person is currently authorized to see.
+   *
+   * @param userId - An `app.users.id` read from stored state. **Never** a value that
+   *   arrived in a request payload.
+   */
+  listFor(userId: string): Promise<VisibleGraph>;
+}
+
 /** Collaborators, injected rather than resolved (addendum §12, ADR-0003). */
 export interface ListVisibleGraphDependencies {
   readonly visiblePeople: VisiblePeopleRepository;
@@ -41,10 +74,14 @@ export interface ListVisibleGraphDependencies {
  */
 export function createListVisibleGraphQuery(
   dependencies: ListVisibleGraphDependencies,
-): ListVisibleGraphQuery {
+): ListVisibleGraphQuery & VisiblePeopleDirectory {
   return {
     async list(command: ListVisibleGraphCommand): Promise<VisibleGraph> {
       return { people: await dependencies.visiblePeople.findVisiblePeople(command.viewerId) };
+    },
+
+    async listFor(userId: string): Promise<VisibleGraph> {
+      return { people: await dependencies.visiblePeople.findVisiblePeopleFor(userId) };
     },
   };
 }

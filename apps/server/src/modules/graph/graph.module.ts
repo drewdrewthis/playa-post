@@ -3,9 +3,21 @@ import type { DatabaseConnection } from '@playa-post/database';
 import {
   createListVisibleGraphQuery,
   type ListVisibleGraphQuery,
+  type VisiblePeopleDirectory,
 } from './application/list-visible-graph.query';
 import { createPostgresVisiblePeopleRepository } from './persistence/postgres-visible-people.repository';
 import { createGraphRouter, type GraphRouter } from './transport/graph.router';
+
+/**
+ * The §6a projection's public types.
+ *
+ * Re-exported here because {@link GraphModule.visiblePeople} is a cross-module export
+ * and a consumer must be able to name its shape without reaching into
+ * `modules/graph/application/` — that reach-in is what a `<name>.module.ts` barrel
+ * exists to prevent (addendum §19).
+ */
+export type { VisiblePeopleDirectory } from './application/list-visible-graph.query';
+export type { VisibleGraph, VisiblePerson } from './application/visible-person';
 
 /** What the composition root has to hand this module. */
 export interface GraphModuleDependencies {
@@ -32,9 +44,11 @@ export interface GraphModule {
    * **The signature is not frozen.** L2 designed it with one consumer in mind and will
    * have got it slightly wrong; the first consuming PR is explicitly allowed to change
    * it, which is cheaper than a consumer working around a bad fit and re-deriving what
-   * it needs.
+   * it needs. L3b-notify took that allowance: it added
+   * {@link VisiblePeopleDirectory}'s `listFor`, because ADR-0002 §11's delivery-time
+   * re-check runs on a cron where no `Actor`, and therefore no `ViewerId`, exists.
    */
-  readonly visiblePeople: ListVisibleGraphQuery;
+  readonly visiblePeople: ListVisibleGraphQuery & VisiblePeopleDirectory;
 }
 
 /**

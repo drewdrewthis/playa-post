@@ -7,7 +7,9 @@ import { createConnectionsRouter } from '../../modules/connections/transport/con
 import { createGraphRouter } from '../../modules/graph/transport/graph.router';
 import { createIdentityRouter } from '../../modules/identity/transport/identity.router';
 import { createModerationRouter } from '../../modules/moderation/transport/moderation.router';
+import { createNotificationsRouter } from '../../modules/notifications/transport/notifications.router';
 import { createSyncRouter } from '../../modules/sync/transport/sync.router';
+import { createViewsRouter } from '../../modules/views/transport/views.router';
 import { readHealth } from '../health/read-health';
 
 import { createAppRouter } from './app.router';
@@ -57,6 +59,8 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
       dismissBulletin: { dismiss: unreachable },
     }),
     sync: createSyncRouter({ submitMutations: { submit: unreachable } }),
+    views: createViewsRouter({ updateNotifyMeQuery: { update: unreachable } }),
+    notifications: createNotificationsRouter({ subscribeToPush: { subscribe: unreachable } }),
   });
 
 describe('createAppRouter', () => {

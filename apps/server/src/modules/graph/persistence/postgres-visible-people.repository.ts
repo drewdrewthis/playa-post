@@ -30,17 +30,29 @@ export function createPostgresVisiblePeopleRepository(
 ): VisiblePeopleRepository {
   const { database } = dependencies;
 
-  return {
-    async findVisiblePeople(viewerId: ViewerId): Promise<readonly VisiblePerson[]> {
-      // `viewerId` travels as a bound parameter, which is what ADR-0002 §5 means by
-      // "every viewer-scoped read passes viewer_id explicitly": no session GUC, no
-      // ambient state a transaction-mode pooler could hand to the wrong session.
-      const { rows } = await sql<VisiblePersonRow>`
-        select user_id, degree, disclosure, display_name, handle, trust
-          from app.visible_people(${viewerId})
-      `.execute(database);
+  /**
+   * The one statement, shared by both port methods.
+   *
+   * They differ only in what the compiler will let a caller *pass*: a branded
+   * {@link ViewerId} from the request scope, or a `string` read from stored state
+   * (ADR-0002 §11's delivery-time re-check). The database is handed the same bound
+   * parameter either way, so there is deliberately no second query here — two spellings
+   * of `app.visible_people` would be two things to keep in step.
+   */
+  async function project(personId: string): Promise<readonly VisiblePerson[]> {
+    // The identifier travels as a bound parameter, which is what ADR-0002 §5 means by
+    // "every viewer-scoped read passes viewer_id explicitly": no session GUC, no
+    // ambient state a transaction-mode pooler could hand to the wrong session.
+    const { rows } = await sql<VisiblePersonRow>`
+      select user_id, degree, disclosure, display_name, handle, trust
+        from app.visible_people(${personId})
+    `.execute(database);
 
-      return rows.map(toVisiblePerson);
-    },
+    return rows.map(toVisiblePerson);
+  }
+
+  return {
+    findVisiblePeople: (viewerId: ViewerId): Promise<readonly VisiblePerson[]> => project(viewerId),
+    findVisiblePeopleFor: (userId: string): Promise<readonly VisiblePerson[]> => project(userId),
   };
 }
