@@ -20,6 +20,10 @@ import {
   createHiddenBulletins,
   createModerationModule,
 } from '../modules/moderation/moderation.module';
+import type { SendGroupedPushHandler } from '../modules/notifications/application/send-grouped-push.handler';
+import { isPushDeliveryConfigured } from '../modules/notifications/domain/push-transport';
+import { unconfiguredPushTransport } from '../modules/notifications/infrastructure/unconfigured-push.transport';
+import { createNotificationsModule } from '../modules/notifications/notifications.module';
 import type {
   MutationActorshipCheck,
   MutationActorshipCheckRegistry,
@@ -30,12 +34,14 @@ import {
   MutationPayloadInvalidError,
 } from '../modules/sync/domain/sync.errors';
 import { createSyncModule } from '../modules/sync/sync.module';
+import { createViewsModule } from '../modules/views/views.module';
 import type { AccessTokenVerifier } from '../shared/auth/access-token-verifier';
 import type { ActorResolver } from '../shared/auth/actor-resolver';
 import { createSupabaseJwtVerifier } from '../shared/auth/supabase-jwt-verifier';
 import { createAppRouter, type AppRouter } from '../shared/trpc/app.router';
 
 import type { Configuration } from './config';
+import { toDrainerConsumer } from './outbox-consumer.adapter';
 import { supabaseJwksUrl } from './supabase-jwks-url';
 
 /**
@@ -185,6 +191,24 @@ export interface AppContainer {
    */
   readonly outboxDrainer: OutboxDrainer;
   /**
+   * `flush({ now })` delivers every notification grouping window that has elapsed
+   * (M2.11), or **`null` when the wired push transport cannot deliver** — which is M2's
+   * state, because no VAPID key pair is configured.
+   *
+   * Exposed unstarted for the same reason {@link outboxDrainer} is: *when* it runs is
+   * `entrypoints/notification-flush/start-notification-flush-poller.ts`'s job. A second
+   * scheduled task rather than a drainer consumer, because the 60-second window is a
+   * decision about elapsed time and only a clock can make it — which is also why the
+   * drainer is given `excludedEventTypes` so it never claims the rows this reads.
+   *
+   * ⚠ **`null` is the schedule-or-not decision, expressed in the type** rather than as
+   * a boolean an entrypoint could read and ignore: there is no way to start a flush
+   * loop that can only throw. `null` costs nothing — the drainer and
+   * `EvaluateNotifyMeHandler` keep running, so matches accumulate as `pending` rows and
+   * the first flush after a real transport lands delivers them.
+   */
+  readonly notificationFlush: SendGroupedPushHandler | null;
+  /**
    * Release every long-lived resource. Idempotent is not promised — call it once,
    * from the entrypoint's shutdown path.
    */
@@ -241,9 +265,7 @@ export function buildAppContainer(configuration: Configuration): AppContainer {
   const graph = createGraphModule({ database });
   // Bulletins consumes that same rule one layer lower — `app.visible_bulletins`
   // composes `app.visible_people` in SQL — so it needs nothing from `graph` here, and
-  // the wiring order between the two carries no meaning. `modules/views` is not built
-  // at all: its board grammar is a pure function bulletins imports directly (ADR-0013),
-  // and there is nothing to construct until saved views gain a table (M5).
+  // the wiring order between the two carries no meaning.
   //
   // Moderation and bulletins do need each other, and this is the order that unties it:
   // the board exclusion is built first, on its own (`createHiddenBulletins`), so
@@ -255,6 +277,29 @@ export function buildAppContainer(configuration: Configuration): AppContainer {
   const moderation = createModerationModule({
     database,
     findVisibleBulletin: bulletins.findVisibleBulletin,
+  });
+  // Views gained a table and a procedure with Notify Me (M2.10), so it is now built
+  // rather than merely imported: its board grammar is still a pure function bulletins
+  // imports directly (ADR-0013), but `app.notify_me_queries` and `views.notifyMe.update`
+  // are state and transport, and both need wiring.
+  const views = createViewsModule({ database });
+  // Notifications is built after graph because it consumes the §6a projection for the
+  // delivery-time authorization re-check (ADR-0002 §11). Its saved-query reader is
+  // composed inside its own factory from `modules/views`' public directory — see that
+  // module's note on why the read does not come through this container.
+  // Held in a local because two decisions read it: what the module delivers through,
+  // and — via `isPushDeliveryConfigured` below — whether `main.ts` is given a flush to
+  // schedule at all. Swapping this one line for a real adapter turns the flush loop on;
+  // there is no second switch to remember.
+  //
+  // ⚠ Refuses every dispatch, on purpose. M2 configures no VAPID key pair, and a
+  // silently-dropping transport would mark windows delivered while nobody received
+  // anything — see the adapter's own docstring for what replacing it costs.
+  const pushTransport = unconfiguredPushTransport;
+  const notifications = createNotificationsModule({
+    database,
+    visiblePeople: graph.visiblePeople,
+    pushTransport,
   });
   // Sync is built last among the routed modules because its registries are adapters
   // over everything above. It is the one module whose dependencies are other modules'
@@ -270,7 +315,21 @@ export function buildAppContainer(configuration: Configuration): AppContainer {
   const audit = createAuditModule({ database });
   const outboxDrainer = createOutboxDrainer({
     database,
-    consumers: [audit.recordAuditEntryConsumer],
+    consumers: [
+      audit.recordAuditEntryConsumer,
+      // Adapted rather than passed straight through: this consumer is declared in
+      // `modules/notifications/application/`, which `no-domain-to-infrastructure`
+      // forbids from importing the entrypoint whose port it implements, so the two
+      // ports are stated separately and reconciled here. `outbox-consumer.adapter.ts`
+      // is the whole of that reconciliation.
+      toDrainerConsumer(notifications.evaluateNotifyMe),
+    ],
+    // ⚠ The other half of the notifications wiring, and the half whose absence is
+    // silent: these rows are read by the grouping-window flush started in `main.ts`,
+    // so a drainer that also claimed them would publish them undelivered. Sourced from
+    // the module rather than written here so the list cannot drift from the reader
+    // that depends on it.
+    excludedEventTypes: notifications.selfDrainedEventTypes,
     // One id per process incarnation, not a stable literal: `claimed_by` is a
     // debugging aid rather than a lookup key, so either would be correct today, but a
     // fresh id per boot is also what a second, concurrently-running instance would
@@ -306,8 +365,13 @@ export function buildAppContainer(configuration: Configuration): AppContainer {
       bulletins: bulletins.router,
       moderation: moderation.router,
       sync: sync.router,
+      views: views.router,
+      notifications: notifications.router,
     }),
     outboxDrainer,
+    // The flush is always *built* — the module wires it either way, so nothing about it
+    // rots while push is unconfigured. Only its schedulability is conditional.
+    notificationFlush: isPushDeliveryConfigured(pushTransport) ? notifications.sendGroupedPush : null,
     dispose: () => database.destroy(),
   };
 }

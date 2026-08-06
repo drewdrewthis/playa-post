@@ -22,7 +22,8 @@ first caller.
 
 `tests/security/board-query-narrowing.security.test.ts`,
 `bulletin-indistinguishability.security.test.ts`, and
-`write-path-idor-bulletins.security.test.ts` carry the B10, B17, and B13 (bulletins
-half) proofs over the same application seam — kept in `tests/security/` rather than here
-because a B-row must be provable from that tree alone
+`write-path-idor-bulletins.security.test.ts` carry the B10, B17, and B13 (bulletin.
+create / bulletin.archive, extended by L3b-notify with notifyMe.update) proofs over the
+same application seam — kept in `tests/security/` rather than here because a B-row
+must be provable from that tree alone
 (`tests/security/baseline-catalog.security.test.ts`'s own discipline).

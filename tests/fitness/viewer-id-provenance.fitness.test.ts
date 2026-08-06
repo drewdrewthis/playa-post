@@ -6,7 +6,9 @@ import { createConnectionsRouter } from '../../apps/server/src/modules/connectio
 import { createGraphRouter } from '../../apps/server/src/modules/graph/transport/graph.router';
 import { createIdentityRouter } from '../../apps/server/src/modules/identity/transport/identity.router';
 import { createModerationRouter } from '../../apps/server/src/modules/moderation/transport/moderation.router';
+import { createNotificationsRouter } from '../../apps/server/src/modules/notifications/transport/notifications.router';
 import { createSyncRouter } from '../../apps/server/src/modules/sync/transport/sync.router';
+import { createViewsRouter } from '../../apps/server/src/modules/views/transport/views.router';
 import { createAppRouter } from '../../apps/server/src/shared/trpc/app.router';
 import {
   authenticatedProcedure,
@@ -82,6 +84,8 @@ function appRouter(): ReturnType<typeof createAppRouter> {
       dismissBulletin: { dismiss: unreachable },
     }),
     sync: createSyncRouter({ submitMutations: { submit: unreachable } }),
+    views: createViewsRouter({ updateNotifyMeQuery: { update: unreachable } }),
+    notifications: createNotificationsRouter({ subscribeToPush: { subscribe: unreachable } }),
   });
 }
 

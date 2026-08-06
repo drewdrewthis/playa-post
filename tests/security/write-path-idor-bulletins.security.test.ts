@@ -9,22 +9,30 @@ import { startPostgresTestDatabase, type PostgresTestDatabase } from '@playa-pos
 import { createArchiveBulletinService } from '../../apps/server/src/modules/bulletins/application/archive-bulletin.service';
 import { createCreateBulletinService } from '../../apps/server/src/modules/bulletins/application/create-bulletin.service';
 import { createPostgresBulletinRepository } from '../../apps/server/src/modules/bulletins/persistence/postgres-bulletin.repository';
+import { createUpdateNotifyMeQueryService } from '../../apps/server/src/modules/views/application/update-notify-me-query.service';
+import { createPostgresNotifyMeQueryRepository } from '../../apps/server/src/modules/views/persistence/postgres-notify-me-query.repository';
 
 /**
  * ADR-0002 **B13** — "Write-path IDOR matrix": "For every mutation type in
  * ADR-0005's conflict matrix, an unrelated actor gets a structured failure with zero
  * state change and zero outbox rows."
  *
- * **This is the `bulletin.create` / `bulletin.archive` half only**, mirroring
- * `visibility-matrix.security.test.ts`'s own precedent for B5: the manifest flips
- * B13 to `live` in this PR because the row cannot be sharded across two states in
- * its schema, with the partial-coverage caveat recorded here rather than in the
- * manifest text (same discipline that file's header comment establishes for B5).
- * The full seven-mutation-type matrix (M2-AC19: `bulletin.create`, `bulletin.
- * archive`, `bulletin.report`, `bulletin.dismiss`, `connection.accept`, `trust.set`,
- * `notifyMe.update`) completes once every M2 lane lands; L5's confirmation pass
- * (m2-lane-briefs.md:789) is the natural place to assert the whole set together, per
- * the AC ambiguity `visibility-matrix.security.test.ts` already recorded for B5.
+ * **This is the `bulletin.create` / `bulletin.archive` / `notifyMe.update` subset**,
+ * mirroring `visibility-matrix.security.test.ts`'s own precedent for B5: the manifest
+ * keeps B13 `live` with this file as `provenBy` because the row cannot be sharded
+ * across two states in its schema, with the partial-coverage caveat recorded here
+ * rather than in the manifest text (same discipline that file's header comment
+ * establishes for B5) — extended by lane L3b-notify to add `notifyMe.update` beside
+ * the `bulletin.*` coverage L3a shipped. The full seven-mutation-type matrix
+ * (M2-AC19: `bulletin.create`, `bulletin.archive`, `bulletin.report`,
+ * `bulletin.dismiss`, `connection.accept`, `trust.set`, `notifyMe.update`) still
+ * completes once every M2 lane lands; L5's confirmation pass (m2-lane-briefs.md:789)
+ * is the natural place to assert the whole set together, per the AC ambiguity
+ * `visibility-matrix.security.test.ts` already recorded for B5. `connection.accept`
+ * and `trust.set` remain owed to L4/L5 — `directional-trust.integration.test.ts`
+ * proves `trust.set`'s unrelated-actor case at the module level today, the same way
+ * `bulletin-request-lifecycle.integration.test.ts` proved `bulletin.archive`'s before
+ * this file duplicated it into `tests/security/`.
  *
  * `bulletin.create` has no unrelated-actor case to construct: `CreateBulletinCommand`
  * takes `authorId` only from the resolved `Actor` (never request input, per B14 / the
@@ -33,8 +41,21 @@ import { createPostgresBulletinRepository } from '../../apps/server/src/modules/
  * `bulletin.create` is fail-closed by construction, not by a runtime check this test
  * could exercise. Duplicated from `bulletin-request-lifecycle.integration.test.ts`'s
  * identical scenario.
+ *
+ * `notifyMe.update` has the same "fail-closed by construction" shape for a different
+ * reason: `app.notify_me_queries` is keyed on `owner_id` alone (D1, ADR-0007:79), so
+ * there is no query-identifying field an unrelated actor could name — B14 forbids a
+ * client-suppliable `ownerId`, and `UpdateNotifyMeQueryCommand` takes `actorId` from
+ * the resolved `Actor` only. `update-notify-me-query.service.ts`'s own doc comment
+ * states the resulting property: an actor supplying somebody else's
+ * `expectedVersion` mismatches their **own** absent row and is refused before a
+ * column of anybody else's row is read (`NotifyMeQueryConflictError`, which carries
+ * no `currentVersion`/`currentState` — ADR-0005 precedence rule 1's "the conflict
+ * envelope is a leak channel" enforced by the error's own shape, not by an
+ * application-level redaction step). Duplicated from
+ * `notify-me-query.integration.test.ts`'s identical scenario.
  */
-describe('B13 (bulletins half) — bulletin.archive fails closed for an unrelated actor', () => {
+describe('B13 — write-path IDOR matrix (bulletin.archive, notifyMe.update)', () => {
   let testDatabase: PostgresTestDatabase;
   let database: DatabaseConnection;
 
@@ -75,32 +96,95 @@ describe('B13 (bulletins half) — bulletin.archive fails closed for an unrelate
     return Number(rows[0]?.count ?? '0');
   }
 
-  it('rejects actor C with zero state change and zero outbox rows on bulletin.archive', async () => {
-    const userA = await seedOnboardedUser('b13_bulletins_a');
-    const actorC = await seedOnboardedUser('b13_bulletins_c');
+  describe('bulletin.archive', () => {
+    it('rejects actor C with zero state change and zero outbox rows', async () => {
+      const userA = await seedOnboardedUser('b13_bulletins_a');
+      const actorC = await seedOnboardedUser('b13_bulletins_c');
 
-    const bulletins = createPostgresBulletinRepository({ database });
-    const createBulletin = createCreateBulletinService({ bulletins });
-    const archiveBulletin = createArchiveBulletinService({ bulletins });
+      const bulletins = createPostgresBulletinRepository({ database });
+      const createBulletin = createCreateBulletinService({ bulletins });
+      const archiveBulletin = createArchiveBulletinService({ bulletins });
 
-    const created = await createBulletin.create({
-      authorId: userA,
-      type: 'request',
-      title: "User A's bulletin",
-      body: 'Actor C has no relationship to this at all.',
+      const created = await createBulletin.create({
+        authorId: userA,
+        type: 'request',
+        title: "User A's bulletin",
+        body: 'Actor C has no relationship to this at all.',
+      });
+      const outboxAfterCreate = await outboxRowCount();
+
+      await expect(
+        archiveBulletin.archive({ actorId: actorC, bulletinId: created.id }),
+      ).rejects.toBeInstanceOf(Error);
+
+      const { rows } = await testDatabase.client.query<{ archived_at: Date | null }>(
+        `select archived_at from app.bulletins where id = $1`,
+        [created.id],
+      );
+      expect(rows[0]?.archived_at).toBeNull();
+      expect(await outboxRowCount()).toBe(outboxAfterCreate);
     });
-    const outboxAfterCreate = await outboxRowCount();
+  });
 
-    await expect(
-      archiveBulletin.archive({ actorId: actorC, bulletinId: created.id }),
-    ).rejects.toBeInstanceOf(Error);
+  describe('notifyMe.update', () => {
+    async function seedNotifyMeQuery(
+      ownerId: string,
+      options: { readonly sourceText: string; readonly version: number },
+    ): Promise<void> {
+      await testDatabase.client.query(
+        `insert into app.notify_me_queries (owner_id, source_text, ast, ast_version, version, updated_at)
+         values ($1, $2, $3::jsonb, 1, $4, now())`,
+        [ownerId, options.sourceText, JSON.stringify({ types: ['request'], text: [] }), options.version],
+      );
+    }
 
-    const { rows } = await testDatabase.client.query<{ archived_at: Date | null }>(
-      `select archived_at from app.bulletins where id = $1`,
-      [created.id],
+    async function queryRowFor(
+      ownerId: string,
+    ): Promise<{ source_text: string; version: number } | undefined> {
+      const { rows } = await testDatabase.client.query<{ source_text: string; version: number }>(
+        `select source_text, version from app.notify_me_queries where owner_id = $1`,
+        [ownerId],
+      );
+      return rows[0];
+    }
+
+    it(
+      "rejects actor C with zero state change on user A's row, zero outbox rows, and no " +
+        "conflict-envelope leak of A's state",
+      async () => {
+        const userA = await seedOnboardedUser('b13_notifyme_a');
+        const actorC = await seedOnboardedUser('b13_notifyme_c');
+
+        // A has a saved query. C has no relationship to A or to A's query — there is
+        // no `connections` row between them, and there is no field on the mutation
+        // through which C could name A's query at all (D1, B14). C's only possible
+        // attack is guessing/observing A's `expectedVersion` and submitting it as
+        // their own, hoping it is treated as a match against somebody else's row.
+        await seedNotifyMeQuery(userA, { sourceText: 'type:request tag:kitchen', version: 3 });
+        const outboxBeforeUpdate = await outboxRowCount();
+
+        const notifyMeQueries = createPostgresNotifyMeQueryRepository({ database });
+        const updateNotifyMeQuery = createUpdateNotifyMeQueryService({ notifyMeQueries });
+
+        const rejection = await updateNotifyMeQuery
+          .update({ actorId: actorC, sourceText: 'type:request', expectedVersion: 3 })
+          .catch((error: unknown) => error);
+
+        expect(rejection).toBeInstanceOf(Error);
+
+        // ADR-0005: "the conflict envelope is a leak channel" — C's rejection must
+        // not carry A's saved query text, and must carry no version/state field at
+        // all (NotifyMeQueryConflictError's own contract).
+        const serialized = JSON.stringify(rejection, Object.getOwnPropertyNames(rejection as object));
+        expect(serialized).not.toMatch(/kitchen/);
+        expect(serialized).not.toMatch(/currentState/);
+        expect(serialized).not.toMatch(/currentVersion/);
+
+        expect(await queryRowFor(userA)).toEqual({ source_text: 'type:request tag:kitchen', version: 3 });
+        expect(await queryRowFor(actorC)).toBeUndefined();
+        expect(await outboxRowCount()).toBe(outboxBeforeUpdate);
+      },
     );
-    expect(rows[0]?.archived_at).toBeNull();
-    expect(await outboxRowCount()).toBe(outboxAfterCreate);
   });
 });
 

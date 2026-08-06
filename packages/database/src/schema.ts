@@ -23,18 +23,17 @@ export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
-export interface AppBulletinDismissals {
-  bulletin_id: string;
-  created_at: Timestamp;
-  id: Generated<string>;
-  viewer_id: string;
-}
-
-export interface AppBulletinReports {
-  bulletin_id: string;
-  created_at: Timestamp;
-  id: Generated<string>;
-  reporter_id: string;
+export interface AppAuditEntries {
+  actor_id: string | null;
+  aggregate_id: string;
+  entry_id: Generated<string>;
+  event_type: string;
+  occurred_at: Timestamp;
+  recorded_at: Generated<Timestamp>;
+  /**
+   * app.outbox_events.event_id at write time. Not a foreign key: outbox rows are pruned after fourteen days (ADR-0006) and this table must outlive that prune.
+   */
+  source_event_id: string;
 }
 
 export interface AppBulletins {
@@ -95,20 +94,19 @@ export interface AppInvitations {
   token: string;
 }
 
-export interface AppMutationResults {
+export interface AppNotifyMeQueries {
   /**
-   * Namespaces every mutation_id lookup (ADR-0005): one actor can neither probe nor collide with another actor's mutation IDs, even though the primary key alone is global.
+   * The validated AST, ADR-0007's restricted filter grammar compiled by modules/views. Never raw SQL, never a second grammar — same shape the board and saved views use.
    */
-  actor_id: string;
+  ast: Json;
+  ast_version: number;
+  owner_id: string;
+  source_text: string;
+  updated_at: Timestamp;
   /**
-   * Has a default, unlike app.bulletins.created_at and app.invitations.created_at: ADR-0005's schema block specifies `default now()` for this column explicitly, and it is a bookkeeping timestamp for the 30-day retention window (ADR-0005), not a product fact a writer states.
+   * ADR-0005 optimistic-concurrency version. notifyMe.update is expectedVersion: yes — mismatch is a conflict, never a silent overwrite of a deliberate change.
    */
-  created_at: Generated<Timestamp>;
-  mutation_id: string;
-  mutation_type: string;
-  outcome: string;
-  request_hash: string;
-  result: Json | null;
+  version: Generated<number>;
 }
 
 export interface AppOutboxEvents {
@@ -125,6 +123,14 @@ export interface AppOutboxEvents {
   occurred_at: Timestamp;
   payload: Json;
   status: Generated<string>;
+}
+
+export interface AppPushSubscriptions {
+  auth_key: string;
+  created_at: Timestamp;
+  endpoint: string;
+  owner_id: string;
+  p256dh_key: string;
 }
 
 export interface AppUsers {
@@ -147,14 +153,14 @@ export interface AppUsers {
 }
 
 export interface DB {
-  "app.bulletin_dismissals": AppBulletinDismissals;
-  "app.bulletin_reports": AppBulletinReports;
+  "app.audit_entries": AppAuditEntries;
   "app.bulletins": AppBulletins;
   "app.connection_trust": AppConnectionTrust;
   "app.connections": AppConnections;
   "app.consumer_receipts": AppConsumerReceipts;
   "app.invitations": AppInvitations;
-  "app.mutation_results": AppMutationResults;
+  "app.notify_me_queries": AppNotifyMeQueries;
   "app.outbox_events": AppOutboxEvents;
+  "app.push_subscriptions": AppPushSubscriptions;
   "app.users": AppUsers;
 }

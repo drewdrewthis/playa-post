@@ -107,7 +107,7 @@
     {
       "id": "B13",
       "title": "Write-path IDOR matrix",
-      "assertion": "For every mutation type in ADR-0005's conflict matrix, an unrelated actor gets a structured failure with zero state change and zero outbox rows.",
+      "assertion": "For every mutation type in ADR-0005's conflict matrix, an unrelated actor gets a structured failure with zero state change and zero outbox rows. Proven here for bulletin.archive and notifyMe.update (bulletin.create is fail-closed by construction, asserted alongside them); connection.accept, trust.set, bulletin.report, bulletin.dismiss, and view.save remain owed to their owning lanes, completing at L5's confirmation pass (m2-lane-briefs.md:789), the same partial-coverage discipline B5's row already records.",
       "status": "live",
       "provenBy": "tests/security/write-path-idor-bulletins.security.test.ts"
     },

@@ -3,7 +3,9 @@ import type { ConnectionsRouter } from '../../modules/connections/transport/conn
 import type { GraphRouter } from '../../modules/graph/transport/graph.router';
 import type { IdentityRouter } from '../../modules/identity/transport/identity.router';
 import type { ModerationRouter } from '../../modules/moderation/transport/moderation.router';
+import type { NotificationsRouter } from '../../modules/notifications/transport/notifications.router';
 import type { SyncRouter } from '../../modules/sync/transport/sync.router';
+import type { ViewsRouter } from '../../modules/views/transport/views.router';
 import { readHealth, type HealthResponse } from '../health/read-health';
 
 import { publicProcedure, router } from './trpc';
@@ -12,10 +14,10 @@ import { publicProcedure, router } from './trpc';
  * The module routers the root router mounts. One entry per lane, added with that
  * lane's first procedure.
  *
- * `modules/views` is deliberately absent: it owns the board grammar and no procedure.
- * Its grammar reaches clients through `bulletins.board`'s `query` argument, and a
- * router mounted with nothing on it is the placeholder addendum §4 forbids. It gains an
- * entry here with saved views and Notify Me (M5).
+ * `modules/views` arrived here with Notify Me (M2.10), which is the procedure it did
+ * not have while it owned only the board grammar — that grammar still reaches clients
+ * through `bulletins.board`'s `query` argument rather than through a procedure, because
+ * a router mounted with nothing on it is the placeholder addendum §4 forbids.
  */
 export interface AppRouterModules {
   readonly identity: IdentityRouter;
@@ -24,6 +26,8 @@ export interface AppRouterModules {
   readonly bulletins: BulletinsRouter;
   readonly moderation: ModerationRouter;
   readonly sync: SyncRouter;
+  readonly views: ViewsRouter;
+  readonly notifications: NotificationsRouter;
 }
 
 /**
@@ -71,6 +75,8 @@ export function createAppRouter(modules: AppRouterModules) {
     bulletins: modules.bulletins,
     moderation: modules.moderation,
     sync: modules.sync,
+    views: modules.views,
+    notifications: modules.notifications,
   });
 }
 
