@@ -42,6 +42,13 @@ export default tseslint.config(
       // evidence, not production code (docs/engineering/repo-map.md) — it is
       // read for intent and never edited, so linting it is pure noise.
       'design/**',
+      // Playwright's own generated output (L5, vertical-slice-e2e): bundled,
+      // minified trace-viewer JS under `playwright-report/trace/`. Same trap as
+      // `supabase/.temp/**` above — gitignored, invisible until someone runs
+      // `pnpm test:e2e`, at which point `pnpm lint` reports thousands of errors in
+      // a file nobody wrote.
+      'playwright-report/**',
+      'test-results/**',
     ],
   },
 

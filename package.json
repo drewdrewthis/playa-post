@@ -25,12 +25,14 @@
     "test:unit": "vitest run --project unit",
     "test:unit:changed": "vitest --changed --project unit",
     "test:integration": "vitest run --project integration",
-    "test:security": "vitest run --project security"
+    "test:security": "vitest run --project security",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@playa-post/database": "workspace:*",
     "@playa-post/testing": "workspace:*",
+    "@playwright/test": "1.62.1",
     "@types/node": "26.1.2",
     "dependency-cruiser": "18.1.0",
     "eslint": "10.8.0",
