@@ -1,15 +1,19 @@
 import { loadServerConfiguration } from '../../composition/config';
 import { buildAppContainer } from '../../composition/container';
+import { startOutboxDrainerPoller } from '../outbox-drainer/start-outbox-drainer-poller';
 
 import { createHttpServer } from './http-server';
 
 /**
  * Process entrypoint for the HTTP runtime.
  *
- * Composition root → container → server → listen. Nothing else belongs in this file;
- * when the outbox drainer entrypoint lands (M2.14) it gets its own `main.ts` beside
- * this one and shares the same composition root, which is the whole reason the graph
- * is built by a function rather than assembled here.
+ * Composition root → container → server → listen, plus the outbox-drainer poll loop
+ * (M2.14). ADR-0006 names "an in-process poller … no cron variant, no second service"
+ * for the Node target, so the drainer starts and stops alongside the HTTP server in
+ * this same file's own startup sequence rather than in a second `main.ts` — the
+ * composition root is still built by a function rather than assembled here, which is
+ * what let this file gain a second long-lived task without becoming the place that
+ * builds one.
  *
  * This is the process Render starts — `node apps/server/dist/node/main.js`, the bundle
  * `pnpm build:server:node` writes (ADR-0009). It binds `HOST`/`PORT` from
@@ -19,11 +23,17 @@ import { createHttpServer } from './http-server';
  * Configuration is loaded and the container is built **before** the signal handlers
  * are registered, so a missing `DATABASE_URL` or `SUPABASE_URL` exits non-zero within
  * milliseconds, naming the key and never its value (M1-AC10). Neither step opens a
- * socket, so nothing is half-started when it fails.
+ * socket, so nothing is half-started when it fails. Starting the poller does not
+ * change that: it only arms a timer (`start-outbox-drainer-poller.ts`) and the first
+ * round fires no earlier than the poll interval after this line runs.
  */
 const configuration = loadServerConfiguration();
 const container = buildAppContainer(configuration);
 const server = createHttpServer(container);
+const outboxDrainerPoller = startOutboxDrainerPoller({
+  drainer: container.outboxDrainer,
+  onError: (error) => server.log.error({ err: error }, 'outbox drain round failed'),
+});
 
 /**
  * Stop accepting connections, let in-flight requests finish, release the pool, exit.
@@ -33,10 +43,12 @@ const server = createHttpServer(container);
  * Without it the runtime is killed mid-request and the client sees a reset connection
  * rather than a response.
  *
- * `server.close()` first, then `container.dispose()`: draining the pool while a
- * request is still using it turns a clean shutdown into failed queries. The order is
- * the reverse of construction, which is the only ordering discipline ADR-0003's
- * two-scope design needs.
+ * `outboxDrainerPoller.stop()` first: it stops scheduling further poll rounds and
+ * waits for any in-flight `drainOnce()` to settle before anything downstream touches
+ * the pool it reads through. `server.close()` next, then `container.dispose()`:
+ * draining the pool while a request — or a drain round — is still using it turns a
+ * clean shutdown into failed queries. The order is the reverse of construction, which
+ * is the only ordering discipline ADR-0003's two-scope design needs.
  *
  * `once`, not `on`: a second signal during shutdown means "stop harder", and
  * re-entering `close()` would hang instead. Render escalates to `SIGKILL` on its own
@@ -46,6 +58,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   server.log.info({ signal }, 'shutting down');
 
   try {
+    await outboxDrainerPoller.stop();
     await server.close();
     await container.dispose();
     process.exit(0);

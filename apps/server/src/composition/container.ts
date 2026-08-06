@@ -1,8 +1,12 @@
+import { randomUUID } from 'node:crypto';
+
 import { createRemoteJWKSet } from 'jose';
 
 import { createDatabaseConnection, type DatabaseConnection } from '@playa-post/database';
 import { createLogger, DEFAULT_ALLOWED_LOG_FIELDS, type Logger } from '@playa-post/observability';
 
+import { createOutboxDrainer, type OutboxDrainer } from '../entrypoints/outbox-drainer/outbox-drainer';
+import { createAuditModule } from '../modules/audit/audit.module';
 import { createBulletinsModule } from '../modules/bulletins/bulletins.module';
 import { createConnectionsModule } from '../modules/connections/connections.module';
 import { createGraphModule } from '../modules/graph/graph.module';
@@ -41,6 +45,14 @@ export interface AppContainer {
   readonly actorResolver: ActorResolver;
   /** The assembled tRPC router this process serves. */
   readonly router: AppRouter;
+  /**
+   * `drainOnce()` claims and dispatches one round of `app.outbox_events`. Exposed
+   * here, unstarted — this container never calls it. *When* it runs is
+   * `entrypoints/outbox-drainer/start-outbox-drainer-poller.ts`'s job, started from
+   * `entrypoints/http/main.ts` alongside the HTTP server (ADR-0006: in-process, no
+   * separate service).
+   */
+  readonly outboxDrainer: OutboxDrainer;
   /**
    * Release every long-lived resource. Idempotent is not promised — call it once,
    * from the entrypoint's shutdown path.
@@ -102,6 +114,20 @@ export function buildAppContainer(configuration: Configuration): AppContainer {
   // at all: its board grammar is a pure function bulletins imports directly (ADR-0013),
   // and there is nothing to construct until saved views gain a table (M5).
   const bulletins = createBulletinsModule({ database });
+  // Audit is built last: it has no router and no other consumer, so nothing else in
+  // this function needs it — only the drainer wired immediately below.
+  const audit = createAuditModule({ database });
+  const outboxDrainer = createOutboxDrainer({
+    database,
+    consumers: [audit.recordAuditEntryConsumer],
+    // One id per process incarnation, not a stable literal: `claimed_by` is a
+    // debugging aid rather than a lookup key, so either would be correct today, but a
+    // fresh id per boot is also what a second, concurrently-running instance would
+    // need — M2-AC24's topology, unobservable on today's single-instance
+    // `render.yaml` (m2-lane-briefs.md §L3b-infra's own note) — so there is nothing to
+    // revisit if that changes later.
+    drainerId: randomUUID(),
+  });
 
   return {
     configuration,
@@ -128,6 +154,7 @@ export function buildAppContainer(configuration: Configuration): AppContainer {
       graph: graph.router,
       bulletins: bulletins.router,
     }),
+    outboxDrainer,
     dispose: () => database.destroy(),
   };
 }

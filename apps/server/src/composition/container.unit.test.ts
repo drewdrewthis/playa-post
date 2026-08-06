@@ -116,6 +116,15 @@ describe('buildAppContainer', () => {
     return container.dispose();
   });
 
+  it('wires the outbox drainer, so the poller started in main.ts has something to call', () => {
+    const container = buildAppContainer(configuration);
+
+    expect(container.outboxDrainer).toBeDefined();
+    expect(typeof container.outboxDrainer.drainOnce).toBe('function');
+
+    return container.dispose();
+  });
+
   it('releases the pool on dispose, so a SIGTERM does not leak a connection', async () => {
     const container = buildAppContainer(configuration);
 

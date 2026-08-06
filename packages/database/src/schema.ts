@@ -23,6 +23,19 @@ export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export interface AppAuditEntries {
+  actor_id: string | null;
+  aggregate_id: string;
+  entry_id: Generated<string>;
+  event_type: string;
+  occurred_at: Timestamp;
+  recorded_at: Generated<Timestamp>;
+  /**
+   * app.outbox_events.event_id at write time. Not a foreign key: outbox rows are pruned after fourteen days (ADR-0006) and this table must outlive that prune.
+   */
+  source_event_id: string;
+}
+
 export interface AppBulletins {
   /**
    * NULL means live. Archived bulletins are absent from app.visible_bulletins for everyone, author included; the author keeps them through bulletins.listMine, which reads this table by author_id (M2-AC12).
@@ -117,6 +130,7 @@ export interface AppUsers {
 }
 
 export interface DB {
+  "app.audit_entries": AppAuditEntries;
   "app.bulletins": AppBulletins;
   "app.connection_trust": AppConnectionTrust;
   "app.connections": AppConnections;
