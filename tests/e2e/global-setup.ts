@@ -30,12 +30,22 @@ import { startMockSupabaseJwtIssuer, type MockSupabaseJwtIssuer } from './suppor
  * *onboarded* `app.users` rows behind it, through the real `identity.completeOnboarding`
  * procedure, is the part worth doing exactly once).
  *
- * ⚠ **Not wired into this file: `modules/moderation` and `modules/sync`.** Neither has
- * merged into this branch's base (`git log` shows L1–L3a and L3b-infra only) — steps
- * 10 and 11 of the eleven-step flow have no application code to call yet, and that is
- * the correct, legible reason the spec's later steps cannot pass today. Extending this
- * file to wire them in is the coder's job once those modules exist, not a hole in this
- * harness.
+ * ⚠ **`buildAppContainer` is the whole wiring, and that is deliberate.** Three of the
+ * eight modules cannot be constructed from `{ database }` alone — `notifications` needs
+ * the graph's §6a projection and a push transport, `moderation` needs `bulletins`'
+ * authorized read, and `sync` needs the mutation-handler and actorship registries that
+ * the composition root assembles and exports from nowhere else. Hand-wiring them here
+ * would put a second copy of composition in the harness, and the second copy is the one
+ * that drifts: the router this e2e drives would stop being the router production
+ * serves. When a lane mounts a ninth module, this file needs no edit.
+ *
+ * ⚠ **No `notifications` reader exists on the router.** `modules/notifications` has a
+ * grouped-push *writer* (`sendGroupedPush`, driven by the flush scheduler) and no
+ * procedure that returns a viewer's notifications, so step 9 of the eleven-step flow
+ * has no data source a browser can render. `startMockWebPushTransport` is unused for
+ * the same reason: `buildAppContainer` hardcodes `unconfiguredPushTransport`, so there
+ * is no seam to hand a recording transport to either. Both are cross-lane gaps, stated
+ * in the L5 PR body rather than papered over here.
  */
 export default async function globalSetup(_config: FullConfig): Promise<() => Promise<void>> {
   const testDatabase: PostgresTestDatabase = await startPostgresTestDatabase();

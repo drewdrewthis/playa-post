@@ -3,7 +3,6 @@ import { Writable } from 'node:stream';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import { createDatabaseConnection, type DatabaseConnection } from '@playa-post/database';
 import { createLogger, DEFAULT_ALLOWED_LOG_FIELDS, type Logger } from '@playa-post/observability';
 import {
   generateSupabaseSigningKeyPair,
@@ -13,56 +12,63 @@ import {
   type SupabaseSigningKeyPair,
 } from '@playa-post/testing';
 
-import { createBulletinsModule } from '../src/modules/bulletins/bulletins.module';
-import { createConnectionsModule } from '../src/modules/connections/connections.module';
-import { createGraphModule } from '../src/modules/graph/graph.module';
-import { createIdentityModule } from '../src/modules/identity/identity.module';
-// None of these three exist yet. `git log` on this branch's base shows L1 (identity),
-// L2 (connections, graph), L3a (bulletins, views) and L3b-infra (audit, outbox) merged
-// — L3b-notify (notifications/Notify Me) and L4 (moderation's dismiss/report, sync's
-// offline mutation replay) have not. That is the correct, legible reason this file
-// cannot collect today: M2-AC16's evidence clause is "the full e2e flow", and there is
-// no full flow — steps 9, 10, and 11 of the eleven-step slice have no application code
-// behind them yet. Same seam, same convention as
-// `apps/server/src/modules/bulletins/tests/integration/bulletin-request-lifecycle.
-// integration.test.ts` importing services ahead of L3a landing.
-import { createModerationModule } from '../src/modules/moderation/moderation.module';
-import { createNotificationsModule } from '../src/modules/notifications/notifications.module';
-import { createSyncModule } from '../src/modules/sync/sync.module';
-import { authenticateRequest } from '../src/shared/auth/authenticate-request';
-import { createSupabaseJwtVerifier } from '../src/shared/auth/supabase-jwt-verifier';
-import type { RequestContext } from '../src/shared/trpc/request-context';
-import { createCallerFactory, router } from '../src/shared/trpc/trpc';
+import type { Configuration } from '../../apps/server/src/composition/config';
+import { buildAppContainer, type AppContainer } from '../../apps/server/src/composition/container';
+import { authenticateRequest } from '../../apps/server/src/shared/auth/authenticate-request';
+import { createSupabaseJwtVerifier } from '../../apps/server/src/shared/auth/supabase-jwt-verifier';
+import type { RequestContext } from '../../apps/server/src/shared/trpc/request-context';
+import { createCallerFactory } from '../../apps/server/src/shared/trpc/trpc';
 
 /**
  * `specs/features/vertical-slice-e2e.feature` › "The captured logs from a full slice
  * run contain no sensitive data" (M2-AC16). Cheapest honest shape for this evidence
- * clause: drive the real slice through real module factories and a real Postgres
- * (exactly what every other `*.integration.test.ts` in this repo does), with the
- * container's own logger — same `createLogger` factory, same field allowlist
+ * clause: drive the real slice through the **real composition root** and a real
+ * Postgres (exactly what every other `*.integration.test.ts` in this repo does), with
+ * the container's own logger — same `createLogger` factory, same field allowlist
  * `apps/server/src/composition/container.ts` uses — pointed at an in-memory capturing
  * destination instead of stdout. Not a fabricated log fixture: every line this test
- * greps is a line the real logger actually emitted while the real router actually
- * ran.
+ * greps is a line the real logger actually emitted while the real router actually ran.
  *
- * Lives at `apps/server/tests/` rather than under any one module's `tests/`: this
- * scenario is not owned by identity, connections, graph, or bulletins — it is L5's,
- * and it exercises all of them plus the three modules still missing (see the import
- * comment above). `vitest.config.ts`'s `integration` project includes
- * `apps/**\/*.integration.test.ts` at any depth, so no config change is needed to run
- * it once the coder lands the missing modules.
+ * ⚠ **`buildAppContainer`, not eight hand-wired module factories.** Three of the eight
+ * modules cannot be built from `{ database }` alone — `notifications` needs the graph's
+ * §6a projection and a push transport, `moderation` needs `bulletins`' authorized read,
+ * and `sync` needs the mutation-handler and actorship registries that are *assembled by
+ * the composition root* and exported from nowhere else. Reconstructing those here would
+ * be a second copy of composition, and a second copy is the one that drifts: the
+ * mutation registry this test exercised would stop being the one production serves.
+ * `tests/e2e/global-setup.ts` boots the same way, for the same reason.
+ *
+ * Lives at `tests/integration/` rather than under any one module's `tests/`: this
+ * scenario is not owned by identity, connections, graph, or bulletins — it is L5's, and
+ * it exercises all eight. `vitest.config.ts`'s `integration` project includes this
+ * location by glob.
  */
 describe('The captured logs from a full slice run contain no sensitive data (vertical-slice-e2e.feature, M2-AC16)', () => {
   let testDatabase: PostgresTestDatabase;
-  let database: DatabaseConnection;
+  let container: AppContainer;
   let signingKey: SupabaseSigningKeyPair;
 
   beforeAll(async () => {
     testDatabase = await startPostgresTestDatabase();
     await testDatabase.client.query(`alter role app_rw with password 'log_hygiene_app_rw_password'`);
-    database = createDatabaseConnection({
-      connectionString: withRole(testDatabase.connectionString, 'app_rw', 'log_hygiene_app_rw_password'),
-    });
+
+    const configuration: Configuration = {
+      nodeEnv: 'test',
+      host: '127.0.0.1',
+      port: 0,
+      logLevel: 'silent',
+      databaseUrl: withRole(
+        testDatabase.connectionString,
+        'app_rw',
+        'log_hygiene_app_rw_password',
+      ),
+      // Never fetched: every caller below is built with the verifier under `dependencies`,
+      // which reads the locally generated key pair. The container still needs the value
+      // to build its own, and building it opens no socket.
+      supabaseUrl: 'http://127.0.0.1:1/unused-by-this-suite',
+    };
+
+    container = buildAppContainer(configuration);
     signingKey = await generateSupabaseSigningKeyPair();
   }, 300_000);
 
@@ -71,7 +77,7 @@ describe('The captured logs from a full slice run contain no sensitive data (ver
   });
 
   afterAll(async () => {
-    await database?.destroy();
+    await container?.dispose();
     await testDatabase?.stop();
   });
 
@@ -89,28 +95,11 @@ describe('The captured logs from a full slice run contain no sensitive data (ver
       destination,
     );
 
-    const identity = createIdentityModule({ database });
-    const connections = createConnectionsModule({ database });
-    const graph = createGraphModule({ database });
-    const bulletins = createBulletinsModule({ database });
-    const notifications = createNotificationsModule({ database });
-    const moderation = createModerationModule({ database });
-    const sync = createSyncModule({ database });
-
-    const appRouter = router({
-      identity: identity.router,
-      connections: connections.router,
-      graph: graph.router,
-      bulletins: bulletins.router,
-      notifications: notifications.router,
-      moderation: moderation.router,
-      sync: sync.router,
-    });
-    const createCaller = createCallerFactory(appRouter);
+    const createCaller = createCallerFactory(container.router);
 
     const dependencies = {
       accessTokenVerifier: createSupabaseJwtVerifier({ keySource: signingKey.publicKey }),
-      actorResolver: identity.actorResolver,
+      actorResolver: container.actorResolver,
     };
     const callerFor = (bearerToken: string): ReturnType<typeof createCaller> =>
       createCaller(contextFor(`Bearer ${bearerToken}`, dependencies, logger));
@@ -133,19 +122,29 @@ describe('The captured logs from a full slice run contain no sensitive data (ver
       role: 'authenticated',
       subject: randomUUID(),
     });
-    const callerA = callerFor(tokenA);
-    const callerB = callerFor(tokenB);
-
     // 1. User A signs in / User B signs in (onboarding stands in for "already signed
     //    in and onboarded", same as every other integration suite's seeding step).
-    await callerA.identity.completeOnboarding({
+    //
+    // ⚠ **Onboarding runs on its own caller, and the flow below gets fresh ones.**
+    //    `RequestContext.authentication()` memoises its outcome for the life of the
+    //    context — deliberately, because one HTTP request is one context and resolving
+    //    the actor twice per request would mean two `app.users` reads. Onboarding is a
+    //    `signedInProcedure`, which *accepts* `not-onboarded` and therefore caches
+    //    exactly that; every later `authenticatedProcedure` call sharing that context
+    //    replays the stale outcome and fails `ONBOARDING_REQUIRED`. A caller per phase
+    //    is what production already does — onboarding genuinely is a different request
+    //    from everything that follows it.
+    await callerFor(tokenA).identity.completeOnboarding({
       handle: 'dusty_log_hygiene_a',
       displayName: emailAddressCanary,
     });
-    const userB = await callerB.identity.completeOnboarding({
+    const userB = await callerFor(tokenB).identity.completeOnboarding({
       handle: 'dusty_log_hygiene_b',
       displayName: 'User B',
     });
+
+    const callerA = callerFor(tokenA);
+    const callerB = callerFor(tokenB);
 
     // 2. User A creates an invite.
     const invite = await callerA.connections.invitations.create();
@@ -174,7 +173,9 @@ describe('The captured logs from a full slice run contain no sensitive data (ver
     await callerB.bulletins.board({});
 
     // 9. Notify Me produces a grouped notification for a matching viewer.
-    await callerB.notifications.notifyMe.update({ query: 'type:request' });
+    //    `views.notifyMe.update`, not `notifications.*`: `app.notify_me_queries` is
+    //    `modules/views`' table and its procedure lives with it (ADR-0007).
+    await callerB.views.notifyMe.update({ sourceText: 'type:request' });
 
     // 10. User B dismisses or privately reports the bulletin.
     await callerB.moderation.dismiss({ bulletinId: bulletin.id });
@@ -184,8 +185,9 @@ describe('The captured logs from a full slice run contain no sensitive data (ver
     await callerA.sync.submitMutations({
       mutations: [
         {
-          clientMutationId: randomUUID(),
-          type: 'bulletin.archive',
+          mutationId: randomUUID(),
+          mutationType: 'bulletin.archive',
+          clientCreatedAt: new Date().toISOString(),
           payload: { bulletinId: bulletin.id },
         },
       ],
