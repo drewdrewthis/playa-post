@@ -1,27 +1,51 @@
 import type { JSX } from 'react';
+import { NavLink, Outlet } from 'react-router';
+
+import { useSession } from '../auth/session-provider';
+import { NotificationsPanel } from '../notifications/notifications-panel';
+import { OfflinePendingBadge } from '../offline/pending-badge';
 
 import './app-shell.css';
 
 /**
  * The application shell: the frame that persists across every route.
  *
- * A placeholder in M1 — it renders enough to prove the PWA builds, mounts, and
- * serves. The router, providers, and feature surfaces land in M2; per addendum §4
- * the `router/` and `providers/` directories are not created until there is
- * something real to put in them.
+ * Three things live here because they are true everywhere and nowhere in particular —
+ * navigation, the notifications bell, and the offline queue badge. The badge in
+ * particular has to be outside any one screen: a write queued on the board must stay
+ * visible after navigating to the graph, or the user loses track of it.
  */
 export function AppShell(): JSX.Element {
+  const { signOut } = useSession();
+
   return (
-    <main className="app-shell">
-      <p className="app-shell__eyebrow">Playa Post</p>
-      <h1 className="app-shell__title">Scaffold is live</h1>
-      <p className="app-shell__body">
-        M1 shipped the workspace, the boundary rules, and CI. The graph, the board, and the
-        trust model arrive in M2.
-      </p>
-      <p className="app-shell__footnote">
-        Start at <code>docs/engineering/repo-map.md</code>.
-      </p>
-    </main>
+    <div className="app-shell">
+      <header className="app-shell__header">
+        <p className="app-shell__brand">Playa Post</p>
+
+        <nav className="app-shell__nav">
+          <NavLink to="/graph">Graph</NavLink>
+          <NavLink to="/board">Board</NavLink>
+        </nav>
+
+        <div className="app-shell__status">
+          <OfflinePendingBadge />
+          <NotificationsPanel />
+          <button
+            className="button button--quiet"
+            type="button"
+            onClick={() => {
+              void signOut();
+            }}
+          >
+            Sign out
+          </button>
+        </div>
+      </header>
+
+      <main className="app-shell__main">
+        <Outlet />
+      </main>
+    </div>
   );
 }

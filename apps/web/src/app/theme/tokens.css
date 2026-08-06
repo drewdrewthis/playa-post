@@ -1,0 +1,79 @@
+/*
+ * Light theme only — M2's scope is "Light theme only. No service worker yet."
+ * (`m2-lane-briefs.md` §L5). There is deliberately no `prefers-color-scheme` block:
+ * a half-built dark theme is worse than none, and `playwright.config.ts` pins
+ * `colorScheme: 'light'` so CI and a developer's machine render the same thing.
+ *
+ * Values are read from the settled UX prototype (`design/Playa Post.dc.html`), never
+ * copied structurally — the prototype is product evidence, not production code
+ * (`docs/engineering/repo-map.md`).
+ */
+
+:root {
+  color-scheme: light;
+
+  --pp-sand: #f6efe2;
+  --pp-surface: #fffdf6;
+  --pp-surface-sunken: #f8f2e4;
+  --pp-ink: #2e2418;
+  --pp-ink-muted: #8a755a;
+  --pp-border: #e0d3b8;
+  --pp-border-strong: #cdbfa6;
+  --pp-accent: #b45336;
+  --pp-accent-bright: #ff6a3d;
+  --pp-accent-contrast: #fffdf6;
+  --pp-warn: #c58a2a;
+  --pp-warn-soft: #ffc466;
+  --pp-danger: #9c5a68;
+  --pp-calm: #5f7d7b;
+
+  --pp-space-1: 0.25rem;
+  --pp-space-2: 0.5rem;
+  --pp-space-3: 0.75rem;
+  --pp-space-4: 1rem;
+  --pp-space-5: 1.5rem;
+  --pp-space-6: 2rem;
+
+  --pp-radius: 0.75rem;
+  --pp-radius-pill: 999px;
+
+  --pp-font-body:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --pp-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --pp-text-sm: 0.8125rem;
+  --pp-text-base: 1rem;
+  --pp-text-lg: 1.25rem;
+  --pp-text-xl: 1.75rem;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--pp-sand);
+  color: var(--pp-ink);
+  font-family: var(--pp-font-body);
+  font-size: var(--pp-text-base);
+  line-height: 1.5;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--pp-accent);
+}
