@@ -42,7 +42,9 @@ apps/server/     The modular monolith.
   composition/   The ONLY place that knows about the object graph, and the only place that reads
                  process.env (ADR-0003). config.ts · container.ts · request-scope.ts ·
                  supabase-jwks-url.ts; registrations.ts arrives with the first module.
-  entrypoints/   http/ · queue/ · cron/. The ONLY place that knows about the runtime (ADR-0009).
+  entrypoints/   http/ · outbox-drainer/ (ADR-0006 — in-process poller, no separate queue or cron
+                 facility; ADR-0009 retired the Cloudflare dual-target this line used to describe).
+                 The ONLY place that knows about the runtime (ADR-0009).
   modules/       identity · connections · graph · bulletins · views · notifications · moderation ·
                  sync · storage · audit. Each: transport/ application/ domain/ persistence/ tests/
                  plus a <name>.module.ts. (Addendum §4 — a module only grows the directories it needs:
