@@ -6,6 +6,8 @@ import { createBulletinsRouter } from '../../modules/bulletins/transport/bulleti
 import { createConnectionsRouter } from '../../modules/connections/transport/connections.router';
 import { createGraphRouter } from '../../modules/graph/transport/graph.router';
 import { createIdentityRouter } from '../../modules/identity/transport/identity.router';
+import { createNotificationsRouter } from '../../modules/notifications/transport/notifications.router';
+import { createViewsRouter } from '../../modules/views/transport/views.router';
 import { readHealth } from '../health/read-health';
 
 import { createAppRouter } from './app.router';
@@ -50,6 +52,8 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
       listMyBulletins: { list: unreachable },
       listBoard: { list: unreachable },
     }),
+    views: createViewsRouter({ updateNotifyMeQuery: { update: unreachable } }),
+    notifications: createNotificationsRouter({ subscribeToPush: { subscribe: unreachable } }),
   });
 
 describe('createAppRouter', () => {

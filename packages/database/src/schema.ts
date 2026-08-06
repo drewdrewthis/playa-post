@@ -94,6 +94,21 @@ export interface AppInvitations {
   token: string;
 }
 
+export interface AppNotifyMeQueries {
+  /**
+   * The validated AST, ADR-0007's restricted filter grammar compiled by modules/views. Never raw SQL, never a second grammar — same shape the board and saved views use.
+   */
+  ast: Json;
+  ast_version: number;
+  owner_id: string;
+  source_text: string;
+  updated_at: Timestamp;
+  /**
+   * ADR-0005 optimistic-concurrency version. notifyMe.update is expectedVersion: yes — mismatch is a conflict, never a silent overwrite of a deliberate change.
+   */
+  version: Generated<number>;
+}
+
 export interface AppOutboxEvents {
   actor_id: string | null;
   aggregate_id: string;
@@ -108,6 +123,14 @@ export interface AppOutboxEvents {
   occurred_at: Timestamp;
   payload: Json;
   status: Generated<string>;
+}
+
+export interface AppPushSubscriptions {
+  auth_key: string;
+  created_at: Timestamp;
+  endpoint: string;
+  owner_id: string;
+  p256dh_key: string;
 }
 
 export interface AppUsers {
@@ -136,6 +159,8 @@ export interface DB {
   "app.connections": AppConnections;
   "app.consumer_receipts": AppConsumerReceipts;
   "app.invitations": AppInvitations;
+  "app.notify_me_queries": AppNotifyMeQueries;
   "app.outbox_events": AppOutboxEvents;
+  "app.push_subscriptions": AppPushSubscriptions;
   "app.users": AppUsers;
 }

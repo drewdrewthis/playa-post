@@ -23,4 +23,19 @@ export interface VisiblePeopleRepository {
    *   viewer: a person with no connections still sees themselves.
    */
   findVisiblePeople(viewerId: ViewerId): Promise<readonly VisiblePerson[]>;
+
+  /**
+   * The same projection, for a person identified by **stored state**.
+   *
+   * Backs {@link import('./list-visible-graph.query').VisiblePeopleDirectory}, which
+   * carries the full argument: ADR-0002 §11's delivery-time authorization re-check runs
+   * on a cron for a recipient nobody authenticated as, so no `ViewerId` can reach it.
+   *
+   * ⚠ A separate method rather than a widened parameter on `findVisiblePeople`. Making
+   * the branded method also accept a `string` would delete the brand's only effect —
+   * that a value out of a request body is *unassignable* — everywhere at once.
+   *
+   * @param userId - An `app.users.id` read from a row this system wrote.
+   */
+  findVisiblePeopleFor(userId: string): Promise<readonly VisiblePerson[]>;
 }

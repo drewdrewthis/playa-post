@@ -47,6 +47,24 @@ export interface CreateOutboxDrainerDependencies {
   readonly consumers: readonly OutboxConsumer[];
   /** `app.outbox_events.claimed_by` — identifies which drainer instance claimed a row. */
   readonly drainerId: string;
+  /**
+   * `app.outbox_events.event_type` values this drainer must never claim, because some
+   * other scheduled reader already owns them.
+   *
+   * ⚠ **Omitting a type that a module drains itself starves that module's reader**:
+   * both would race for the same rows, and whichever claimed first would mark them
+   * `claimed` — invisible to the other's `status='pending'` sweep — and then publish
+   * them without performing the effect. The concrete instance is `NotifyMeMatched`,
+   * which `modules/notifications`' grouping-window flush reads on its own 60-second
+   * schedule (ADR-0006 §"Scheduled (cron) work"); that module declares the list beside
+   * the event constant and the composition root passes it here.
+   *
+   * Injected rather than named in this file so the generic drainer keeps knowing
+   * nothing about any module — the composition root is the one place that already
+   * knows both halves. Omitted → nothing is excluded, which is the correct default for
+   * a system whose event types are all drained here.
+   */
+  readonly excludedEventTypes?: readonly string[] | undefined;
 }
 
 export interface DrainOnceOptions {
@@ -102,11 +120,12 @@ export function createOutboxDrainer(
   dependencies: CreateOutboxDrainerDependencies,
 ): OutboxDrainer {
   const { database, consumers, drainerId } = dependencies;
+  const excludedEventTypes = dependencies.excludedEventTypes ?? [];
 
   return {
     async drainOnce(options: DrainOnceOptions = {}): Promise<DrainOnceResult> {
       const limit = options.limit ?? DEFAULT_CLAIM_LIMIT;
-      const claimedEvents = await claimBatch(database, { drainerId, limit });
+      const claimedEvents = await claimBatch(database, { drainerId, limit, excludedEventTypes });
 
       for (const event of claimedEvents) {
         await dispatchAndRecordOutcome(database, consumers, event);
@@ -124,8 +143,14 @@ export function createOutboxDrainer(
  */
 async function claimBatch(
   database: DatabaseConnection,
-  options: { readonly drainerId: string; readonly limit: number },
+  options: {
+    readonly drainerId: string;
+    readonly limit: number;
+    readonly excludedEventTypes: readonly string[];
+  },
 ): Promise<OutboxEventRecord[]> {
+  const excluded = options.excludedEventTypes;
+
   return database.transaction().execute(async (transaction) => {
     const now = new Date();
 
@@ -134,15 +159,20 @@ async function claimBatch(
       .select('event_id')
       .where('status', 'in', CLAIMABLE_STATUSES)
       .where('available_at', '<=', now)
-      // SEAM for L3b-notify (unmerged, parallel lane): SendGroupedPushHandler reads
-      // NotifyMeMatched rows itself, via its own 60-second grouping-window flush — a
-      // separate scheduled reader, not a consumer this drainer dispatches to. Once
-      // that lane merges, this claim query needs to exclude the event type(s) it owns
-      // so the two scheduled readers never compete for the same rows, e.g.:
-      //   .where('event_type', 'not in', ['NotifyMeMatched'])
-      // here, before `.orderBy(...)`. Left unfiltered for M2: no `NotifyMeMatched`
-      // event type exists on this branch yet, and the exact exclusion list is that
-      // lane's rebase to resolve, not this one's.
+      // The seam L3b-infra left for L3b-notify, now filled. `SendGroupedPushHandler`
+      // reads `NotifyMeMatched` rows itself, on its own 60-second grouping-window
+      // schedule — a second scheduled reader, not a consumer this drainer dispatches
+      // to — so claiming one here would take it out from under that flush: `claimed`
+      // fails the flush's `status='pending'` sweep, and this drainer would then mark
+      // it `published` having delivered nothing. Which types those are is
+      // `excludedEventTypes`' docstring; the list itself belongs to the module that
+      // owns the second reader.
+      //
+      // `$if` rather than an unconditional `.where(...)`: Kysely renders an empty
+      // `in` list as `event_type not in ()`, which is a syntax error in PostgreSQL —
+      // so the default (nothing excluded) has to add no predicate at all rather than
+      // an empty one.
+      .$if(excluded.length > 0, (query) => query.where('event_type', 'not in', excluded))
       .orderBy('available_at')
       .limit(options.limit)
       .forUpdate()
