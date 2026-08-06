@@ -1,7 +1,9 @@
 # ADR-0005 — Offline sync protocol, idempotency, and conflict rules
 
 - **Status:** proposed
-- **Date:** 2026-07-30
+- **Date:** 2026-07-30 — **amended 2026-08-06**, cross-module mutation handlers relaxed off the
+  same-transaction rule. See [Amendment](#amendment--2026-08-06--cross-module-handlers-cannot-share-the-mutation_results-transaction);
+  the original invariant is recorded there rather than deleted.
 - **Drivers:** addendum §14, §13, §21; PDF §4 "Offline", §5 "Blocking", principle 8
 
 ## Context
@@ -49,6 +51,8 @@ app.mutation_results (
 
 - The row is written **inside the same transaction** as the effect and the outbox event. One commit:
   state + outbox + idempotency record. This is the whole mechanism — there is no second bookkeeping path.
+  **Relaxed for cross-module handlers as of 2026-08-06** — see the
+  [Amendment](#amendment--2026-08-06--cross-module-handlers-cannot-share-the-mutation_results-transaction).
 - Replay with the same `mutation_id` **and** matching `request_hash` → return the stored result with
   `outcome: 'replayed'`. Same ID, **different** hash → `rejected` / `IDEMPOTENCY_KEY_REUSE`
   (a client bug or an attack; never silently apply the second one).
@@ -134,3 +138,46 @@ erased subjects are purged from all caches before rendering (PDF §5).
 `accepted` when the M2 slice replays one mutation successfully (same ID twice → one effect,
 second returns `replayed`), and the M5 conflict matrix has one integration test per row above. Every
 mutation type in the conflict matrix carries a B13 row (ADR-0002).
+
+## Amendment — 2026-08-06 — cross-module handlers cannot share the `mutation_results` transaction
+
+**What changed.** The Idempotency section's original invariant —
+
+> The row is written **inside the same transaction** as the effect and the outbox event. One commit:
+> state + outbox + idempotency record. This is the whole mechanism — there is no second bookkeeping path.
+
+— does not hold for a mutation handler that dispatches into another module's public application
+interface, which M2's `bulletin.create` handler is the first of. `mutation_results` is now written
+in **its own transaction**, opened after the owning module's handler call has already committed. Two
+commits, not one.
+
+**Why.** A single shared transaction across the commit in step (3) above would require `modules/sync`
+to hold a transaction handle opened by `modules/bulletins` — either `sync` reaching into
+`modules/bulletins/persistence/` directly, which `no-cross-module-persistence` forbids, or
+`modules/bulletins`'s application service accepting an externally-supplied transaction/connection
+argument, which would leak a persistence concern across the application/domain boundary `no-domain-
+to-infrastructure` and `no-application-to-transport` exist to keep sealed (addendum §19). `m2-lane-
+briefs.md` §L4 forbids this lane from touching `modules/bulletins/persistence/` explicitly, so the
+"reach in" branch was never available. Closing this gap for real needs a cross-module unit-of-work
+seam — a mechanism neither module has today — and building one is out of scope for a lane brief that
+forbids the exact reach-in such a seam would require. That is future, deliberately-scoped work, not a
+local fix inside `submit-mutations.service.ts`.
+
+**The residual window, verified against the current handler.** Between the owning module's commit and
+the `mutation_results.save` call, a crash leaves no idempotency row behind. `apps/server/src/modules/
+bulletins/application/create-bulletin.service.ts` — the one handler M2 wires — is deliberately **not**
+idempotent on `mutationId` itself; its own doc comment says so: "there is deliberately no ...
+`mutationId` idempotency: replay idempotency is the sync envelope's job." So a replay of the same
+envelope after such a crash finds no stored result, re-runs the handler, and **creates a second
+bulletin** — this is a duplicate-effect window, not a safe no-op, for every handler wired as of M2.
+`offline-replay.integration.test.ts` covers the ordinary replay path (crash-free, one bulletin) and the
+`IDEMPOTENCY_KEY_REUSE` path; it does not and cannot exercise the mid-window crash from a single
+process, so the gap is accepted rather than demonstrated closed.
+
+**What is accepted, and what is tracked.** For M2, this window is accepted: it requires the server
+process to crash in the narrow gap between two commits on the same request, and its blast radius is
+one duplicate low-stakes record (a bulletin), not a security or authorization defect — the actorship
+and precedence gates in this ADR run unchanged before either commit. It is **not** silently deferred:
+closing it is a cross-module unit-of-work seam, named here as the shape the fix must take, and any
+mutation type added after M2 whose handler is not independently idempotent inherits the same window
+until that seam exists.

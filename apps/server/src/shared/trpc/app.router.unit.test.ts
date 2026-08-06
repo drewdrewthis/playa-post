@@ -6,6 +6,8 @@ import { createBulletinsRouter } from '../../modules/bulletins/transport/bulleti
 import { createConnectionsRouter } from '../../modules/connections/transport/connections.router';
 import { createGraphRouter } from '../../modules/graph/transport/graph.router';
 import { createIdentityRouter } from '../../modules/identity/transport/identity.router';
+import { createModerationRouter } from '../../modules/moderation/transport/moderation.router';
+import { createSyncRouter } from '../../modules/sync/transport/sync.router';
 import { readHealth } from '../health/read-health';
 
 import { createAppRouter } from './app.router';
@@ -50,6 +52,11 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
       listMyBulletins: { list: unreachable },
       listBoard: { list: unreachable },
     }),
+    moderation: createModerationRouter({
+      reportBulletin: { report: unreachable },
+      dismissBulletin: { dismiss: unreachable },
+    }),
+    sync: createSyncRouter({ submitMutations: { submit: unreachable } }),
   });
 
 describe('createAppRouter', () => {
