@@ -29,13 +29,13 @@ import { expect, test, type Page } from '@playwright/test';
  * | `graph-connection-node-<handle>` | graph home | One connected person's node, clickable to open their person sheet |
  * | `person-sheet-save-trust-button` | person sheet | Persists the trust slider's value |
  * | `graph-connection-edge-<handle>` | graph home | Visible edge/row proving the connection rendered for this viewer |
- * | `compose-bulletin-button` | graph home / board | Opens the compose form |
+ * | `compose-bulletin-button` | app shell (the compose FAB) | Opens the compose form. Present on every authenticated screen since the design wave (#51) replaced the per-screen buttons with one FAB in the tab bar |
  * | `compose-bulletin-type-select` | compose form | `<select>` with an accessible name "Type"; values include `request` |
  * | `compose-bulletin-title-input` | compose form | Title field |
  * | `compose-bulletin-body-input` | compose form | Body field |
  * | `compose-bulletin-submit-button` | compose form | Posts the bulletin |
  * | `board-bulletin-card-<bulletinId>` | board | One bulletin's card. Carries `data-archived="true"` once archived |
- * | `notifications-bell-button` | app shell | Opens the notifications panel |
+ * | `notifications-bell-button` | app shell | Opens the notifications panel (a full-column takeover since #51, not a dropdown) |
  * | `notification-grouped-item` | notifications panel | One grouped Notify Me notification |
  * | `bulletin-dismiss-button` | inside a `board-bulletin-card-*` | Privately dismiss this bulletin for the viewer |
  * | `bulletin-report-button` | inside a `board-bulletin-card-*` | Privately report this bulletin (alternative to dismiss, step 10 accepts either) |
@@ -169,6 +169,12 @@ test.describe('The M2 vertical slice, end to end (vertical-slice-e2e.feature, M2
       });
 
       await test.step('10. User B dismisses or privately reports the bulletin', async () => {
+        // The notifications panel is a full-column takeover since the design wave
+        // (#51), not the dropdown it used to be, so the board is genuinely behind it
+        // until it is closed — which is what a user has to do too. Closing here rather
+        // than reaching around it keeps this step a description of real behaviour.
+        await pageB.getByRole('button', { name: 'Close notifications' }).click();
+
         const card = pageB.getByTestId(`board-bulletin-card-${bulletinId}`);
         await card.getByTestId('bulletin-dismiss-button').click();
         await expect(card).toBeHidden();

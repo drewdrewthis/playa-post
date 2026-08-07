@@ -1,103 +1,233 @@
 /*
- * The shell's own chrome. Tokens live in `app/theme/tokens.css`; everything a screen
- * is built from lives in `app/theme/screens.css`.
+ * The shell's own chrome: the header cluster, the scrolling middle, the bottom tab bar
+ * with its compose FAB, the offline strip, and the notifications overlay.
+ *
+ * Tokens live in `app/theme/tokens.css`; the column this all sits inside, and everything
+ * a screen is built from, live in `app/theme/screens.css`.
+ *
+ * ⚠ The comp's vertical paddings include an iOS bezel allowance (60px above the
+ * wordmark, 28px below the tabs) that belongs to `design/ios-frame.jsx`, not to a web
+ * app. Those two are replaced here by a normal spacing step plus `env(safe-area-inset-*)`,
+ * which is the real version of what the bezel was standing in for.
  */
 
-.app-shell {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  min-height: 100dvh;
-}
+/* Header ------------------------------------------------------------------ */
 
-.app-shell__header {
+.app-chrome {
+  flex: none;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: var(--pp-space-4);
-  padding: var(--pp-space-3) var(--pp-space-5);
-  background: var(--pp-card);
-  border-bottom: 1px solid var(--pp-card-border);
+  padding: calc(var(--pp-space-5) + env(safe-area-inset-top)) var(--pp-space-5) var(--pp-space-2);
 }
 
-.app-shell__nav {
+.app-chrome__actions {
   display: flex;
-  gap: var(--pp-space-3);
+  gap: var(--pp-space-2);
+  margin-top: var(--pp-space-1);
 }
 
-.app-shell__nav a {
-  color: var(--pp-sub);
-  text-decoration: none;
-}
-
-.app-shell__nav a.active {
-  color: var(--pp-ink);
-  text-decoration: underline;
-}
-
-.app-shell__status {
-  margin-left: auto;
+/** A round 38px control: the notifications bell and the theme toggle. */
+.icon-button {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--pp-space-3);
+  justify-content: center;
+  flex: none;
+  width: 2.375rem;
+  height: 2.375rem;
+  padding: 0;
+  border: 1px solid var(--pp-card-border);
+  border-radius: 50%;
+  background: var(--pp-card);
+  color: var(--pp-ink);
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform 0.15s ease;
 }
 
+.icon-button:hover {
+  transform: scale(1.08);
+}
+
+.icon-button__count {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0 3px;
+  border-radius: var(--pp-radius-pill);
+  background: var(--pp-fab-bg);
+  color: var(--pp-fab-fg);
+  font-weight: 700;
+  font-size: 0.625rem;
+  line-height: 1rem;
+  text-align: center;
+}
+
+/* The screen in the middle ------------------------------------------------ */
+
+/*
+ * The only scrolling region. The column itself clips, so the chrome and the tab bar
+ * stay put while a long board moves under them — and `overscroll-behavior` keeps a
+ * flick at the end of that list from scrolling the page behind the app.
+ */
 .app-shell__main {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Bottom tab bar ---------------------------------------------------------- */
+
+.tab-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--pp-space-3) 1.625rem calc(var(--pp-space-4) + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--pp-tab-border);
+  background: var(--pp-tab-bg);
+}
+
+.tab-bar__link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 3.25rem;
+  padding: var(--pp-space-1) var(--pp-space-2);
+  color: var(--pp-tab-off);
+  text-decoration: none;
+}
+
+/*
+ * Selected state keys off `aria-current`, which the tab already sets for assistive
+ * technology. One source of truth: a tab cannot look active while announcing that it
+ * is not.
+ */
+.tab-bar__link[aria-current='page'] {
+  color: var(--pp-tab-on);
+}
+
+.tab-bar__glyph {
+  font-size: 1.0625rem;
+  line-height: 1;
+}
+
+.tab-bar__label {
+  font-weight: 600;
+  font-size: var(--pp-text-2xs);
+}
+
+/** The compose button, breaking the tab bar's top edge. */
+.compose-fab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 3.125rem;
+  height: 3.125rem;
+  margin-top: -0.875rem;
+  border-radius: 50%;
+  background: var(--pp-fab-bg);
+  box-shadow: var(--pp-fab-glow);
+  color: var(--pp-fab-fg);
+  font-weight: 300;
+  font-size: 1.6875rem;
+  line-height: 1;
+  text-decoration: none;
+  transition: transform 0.15s ease;
+}
+
+.compose-fab:hover {
+  transform: scale(1.06);
 }
 
 /* Offline queue ----------------------------------------------------------- */
 
 /*
- * One visible affordance per non-`synced` state. They differ by colour *and* by the
+ * The comp's offline strip, immediately under the header, carrying the queue state.
+ * One visible affordance per non-`synced` state: they differ by colour *and* by the
  * label the component renders, because colour alone is not an affordance for everyone.
  */
 .pending-badge {
-  padding: var(--pp-space-1) var(--pp-space-3);
-  border: 1px solid var(--pp-card-border);
-  border-radius: var(--pp-radius-pill);
-  background: var(--pp-card);
-  font-weight: 600;
-  font-size: var(--pp-text-2xs);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.pending-badge--pending,
-.pending-badge--inflight {
-  border-color: var(--pp-warn);
+  flex: none;
+  margin: var(--pp-space-2) var(--pp-space-5) 0;
+  padding: var(--pp-space-2) var(--pp-space-3);
+  border: 1px dashed var(--pp-warn);
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-warn-bg);
   color: var(--pp-warn);
+  font-weight: 600;
+  font-size: var(--pp-text-xs);
+  letter-spacing: 0.05em;
 }
 
-.pending-badge--failed {
+.pending-badge--failed,
+.pending-badge--conflicted {
   border-color: var(--pp-danger-border);
+  background: transparent;
   color: var(--pp-danger);
 }
 
 .pending-badge--conflicted {
-  border-color: var(--pp-danger);
-  color: var(--pp-danger);
   font-weight: 700;
 }
 
 /* Notifications ----------------------------------------------------------- */
 
+/*
+ * A takeover of the whole column, tab bar included — `inset: 0` against `.app-column`,
+ * which is the positioned ancestor. It is rendered after the tab bar in the shell so
+ * the stacking order needs no z-index race to win.
+ */
 .notifications {
-  position: relative;
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  background: var(--pp-bg);
 }
 
-.notifications__panel {
-  position: absolute;
-  right: 0;
-  top: calc(100% + var(--pp-space-2));
-  min-width: 16rem;
-  padding: var(--pp-space-3);
-  border: 1px solid var(--pp-sheet-border);
-  border-radius: var(--pp-radius);
-  background: var(--pp-sheet-bg);
-  box-shadow: var(--pp-sheet-shadow);
-  z-index: 10;
+.notifications__header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--pp-space-2);
+  padding: calc(var(--pp-space-5) + env(safe-area-inset-top)) var(--pp-space-4) var(--pp-space-3);
+  border-bottom: 1px solid var(--pp-card-border);
+}
+
+.notifications__back {
+  flex: none;
+  padding: var(--pp-space-1) var(--pp-space-2);
+  border: none;
+  background: none;
+  color: var(--pp-ink);
+  font-size: var(--pp-text-xl);
+  line-height: 1;
+}
+
+.notifications__title {
+  flex: 1;
+  margin: 0;
+  font-family: var(--pp-font-display);
+  font-weight: 400;
+  font-size: var(--pp-text-xl);
+  color: var(--pp-ink);
+}
+
+.notifications__body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-3);
+  padding: var(--pp-space-4) var(--pp-space-5) var(--pp-space-6);
 }
 
 .notifications__list {
@@ -109,8 +239,14 @@
   gap: var(--pp-space-3);
 }
 
-.notifications__empty {
-  margin: 0;
-  font-size: var(--pp-text-sm);
-  color: var(--pp-sub);
+.notifications__item {
+  padding: 0.8125rem 0.875rem;
+  border: 1px solid var(--pp-card-border);
+  border-radius: var(--pp-radius);
+  background: var(--pp-card);
+  font-family: var(--pp-font-display);
+  font-weight: 400;
+  font-size: var(--pp-text-base);
+  line-height: 1.35;
+  color: var(--pp-ink);
 }

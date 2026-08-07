@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useState, type JSX } from 'react';
-import { useNavigate } from 'react-router';
 
 import type { BulletinAuthor } from '@playa-post/contracts';
 
@@ -42,7 +41,6 @@ interface BoardCardView {
  */
 export function BoardRoute(): JSX.Element {
   const api = useApi();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { database, syncRunner } = useOffline();
   const [hidden, setHidden] = useState<readonly string[]>([]);
@@ -145,18 +143,9 @@ export function BoardRoute(): JSX.Element {
 
   return (
     <section className="screen" data-testid="board">
+      {/* Composing is the shell's FAB now, on every screen — see `tab-bar.tsx`. */}
       <header className="screen__header">
         <h1 className="screen__title">The board</h1>
-        <button
-          className="button button--primary"
-          data-testid="compose-bulletin-button"
-          type="button"
-          onClick={() => {
-            void navigate('/board/new');
-          }}
-        >
-          Post a bulletin
-        </button>
       </header>
 
       {visible.length === 0 ? (
@@ -165,12 +154,15 @@ export function BoardRoute(): JSX.Element {
         <ul className="board-list">
           {visible.map((card) => (
             <li key={card.id}>
+              {/*
+                `data-type` drives the per-type tint in `screens.css`. A type with no
+                rule of its own still renders a tag, in the accent, rather than an
+                untinted one.
+              */}
               <article
                 className="bulletin-card"
                 data-testid={`board-bulletin-card-${card.id}`}
                 data-archived={card.archived ? 'true' : 'false'}
-                // Drives the per-type tint in `screens.css`; an unknown type still
-                // renders a tag, in the accent, rather than an untinted one.
                 data-type={card.type}
               >
                 <p className="bulletin-card__type">{card.type}</p>

@@ -1,51 +1,68 @@
-import type { JSX } from 'react';
-import { NavLink, Outlet } from 'react-router';
+import { useState, type JSX } from 'react';
+import { Outlet } from 'react-router';
 
-import { useSession } from '../auth/session-provider';
+import { NotificationsBell } from '../notifications/notifications-bell';
 import { NotificationsPanel } from '../notifications/notifications-panel';
 import { OfflinePendingBadge } from '../offline/pending-badge';
+import { ThemeToggle } from '../theme/theme-toggle';
+
+import { TabBar } from './tab-bar';
 
 import './app-shell.css';
 
 /**
- * The application shell: the frame that persists across every route.
+ * The application shell: the frame that persists across every authenticated screen.
  *
- * Three things live here because they are true everywhere and nowhere in particular —
- * navigation, the notifications bell, and the offline queue badge. The badge in
- * particular has to be outside any one screen: a write queued on the board must stay
- * visible after navigating to the graph, or the user loses track of it.
+ * The comp's chrome, in three pieces — the wordmark and the icon cluster on top, the
+ * screen in the middle, the tab bar and compose FAB on the bottom. Everything here is
+ * true everywhere and nowhere in particular: navigation, the theme choice, the
+ * notifications bell, and the offline queue strip. The strip in particular has to be
+ * outside any one screen — a write queued on the board must stay visible after
+ * navigating to the graph, or the user loses track of it.
+ *
+ * The notifications overlay's open state lives here rather than inside the bell,
+ * because the overlay is a sibling of the tab bar and the bell is not: `inset: 0` has
+ * to resolve against the column so the panel covers the tabs, the way the comp draws
+ * it.
+ *
+ * Mobile-first and one column wide at every viewport. On a desktop it is centred with
+ * the desk colour around it — the comp's phone width without the comp's phone (see
+ * `screens.css`).
  */
 export function AppShell(): JSX.Element {
-  const { signOut } = useSession();
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   return (
-    <div className="app-shell">
-      <header className="app-shell__header">
-        <p className="wordmark">The Playa Post</p>
+    <div className="app-frame">
+      <div className="app-column">
+        <header className="app-chrome">
+          <p className="wordmark">The Playa Post</p>
 
-        <nav className="app-shell__nav">
-          <NavLink to="/graph">Graph</NavLink>
-          <NavLink to="/board">Board</NavLink>
-        </nav>
+          <div className="app-chrome__actions">
+            <NotificationsBell
+              open={notificationsOpen}
+              onToggle={() => setNotificationsOpen((previous) => !previous)}
+            />
+            <ThemeToggle />
+          </div>
+        </header>
 
-        <div className="app-shell__status">
-          <OfflinePendingBadge />
-          <NotificationsPanel />
-          <button
-            className="button button--quiet"
-            type="button"
-            onClick={() => {
-              void signOut();
+        <OfflinePendingBadge />
+
+        <main className="app-shell__main">
+          <Outlet />
+        </main>
+
+        <TabBar />
+
+        {notificationsOpen ? (
+          <NotificationsPanel
+            onClose={() => {
+              setNotificationsOpen(false);
             }}
-          >
-            Sign out
-          </button>
-        </div>
-      </header>
-
-      <main className="app-shell__main">
-        <Outlet />
-      </main>
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

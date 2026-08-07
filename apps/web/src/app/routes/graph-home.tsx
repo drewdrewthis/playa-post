@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import type { JSX } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link } from 'react-router';
 
 import type { Person } from '@playa-post/contracts';
 
@@ -19,7 +19,6 @@ const FIRST_DEGREE = 1;
  */
 export function GraphHomeRoute(): JSX.Element {
   const api = useApi();
-  const navigate = useNavigate();
 
   const graph = useQuery({
     queryKey: ['graph', 'list'],
@@ -36,6 +35,7 @@ export function GraphHomeRoute(): JSX.Element {
     <section className="screen" data-testid="graph-home">
       <header className="screen__header">
         <h1 className="screen__title">Your graph</h1>
+        {/* Composing is the shell's FAB now, on every screen — see `tab-bar.tsx`. */}
         <div className="screen__actions">
           <button
             className="button button--primary"
@@ -45,16 +45,6 @@ export function GraphHomeRoute(): JSX.Element {
             disabled={invite.isPending}
           >
             Create an invite
-          </button>
-          <button
-            className="button"
-            data-testid="compose-bulletin-button"
-            type="button"
-            onClick={() => {
-              void navigate('/board/new');
-            }}
-          >
-            Post a bulletin
           </button>
         </div>
       </header>
