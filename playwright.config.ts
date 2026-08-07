@@ -50,6 +50,10 @@ export default defineConfig({
     // 180s, not the 60s default-ish value shipped first: CI run 31133839942 timed out
     // at 60s waiting for a cold pnpm/vite start that warm local runs never see.
     timeout: 180_000,
+    // Forward Vite's own output into the runner log: that run's 12-line log could not
+    // distinguish a slow start from a failed one (crash, env, port already bound).
+    stdout: 'pipe',
+    stderr: 'pipe',
     env: {
       // Fixed, not discovered at runtime — see `tests/e2e/support/e2e-ports.ts`'s
       // doc comment for why `global-setup.ts` cannot hand this value to this file.
