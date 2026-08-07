@@ -43,16 +43,24 @@ describe('notification.events.ts SELF_DRAINED_EVENT_TYPES', () => {
 
 describe('buildAppContainer notificationFlush wiring', () => {
   it('is null when the composed transport is the unconfigured one', async () => {
-    // The positive direction — a configured transport producing a non-null flush —
-    // is unreachable through this function by design: `composition/container.ts`
-    // hardcodes `unconfiguredPushTransport` for M2 (no VAPID key pair configured),
-    // and there is no configuration knob that swaps it. Proving the positive
-    // direction belongs to `isPushDeliveryConfigured`'s own unit coverage
-    // (`push-transport.unit.test.ts`), which exercises the pure decision directly
-    // rather than through this container's fixed wiring.
+    // The default path: no override means `unconfiguredPushTransport`, so the flush
+    // must not be schedulable. This is the wiring production runs — the seam below
+    // exists for harnesses and must change nothing when it is not used.
     const container = buildAppContainer(configuration);
 
     expect(container.notificationFlush).toBeNull();
+
+    await container.dispose();
+  });
+
+  it('is the grouped-push flush when a configured transport is injected through the seam', async () => {
+    // The issue #31 option-2 seam: a composition-layer override, taken by the e2e
+    // harness (`tests/e2e/global-setup.ts`) so step 9's flush can actually run.
+    const container = buildAppContainer(configuration, {
+      pushTransport: { send: async () => undefined },
+    });
+
+    expect(container.notificationFlush).not.toBeNull();
 
     await container.dispose();
   });

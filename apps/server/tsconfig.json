@@ -4,5 +4,5 @@
     "types": ["node"],
     "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
   },
-  "include": ["src/**/*.ts", "tsup.config.ts"]
+  "include": ["src/**/*.ts", "tsup.config.ts", "tests/**/*.ts"]
 }

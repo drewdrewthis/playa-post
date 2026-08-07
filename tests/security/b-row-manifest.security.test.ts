@@ -70,7 +70,37 @@ describe('ADR-0002 B-row manifest', () => {
     // The live list is pinned; the pending count is *derived*, so promoting a row is a
     // one-line diff here rather than two edits that can disagree. Pinning both would
     // let a promotion land with the count still reading 15 and nothing complaining.
-    expect(live).toEqual(['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B10', 'B13', 'B17']);
+    expect(live).toEqual([
+      'B1',
+      'B2',
+      'B3',
+      'B4',
+      'B5',
+      'B6',
+      'B9',
+      'B10',
+      'B12',
+      'B13',
+      'B14',
+      'B17',
+    ]);
     expect(pending).toHaveLength(B_ROW_IDS.length - live.length);
+  });
+
+  /**
+   * The M2 exit clause, as an assertion rather than a promise
+   * (`m2-lane-briefs.md` §L5 Gate: *"No row may remain `"status": "pending"` with
+   * `"pendingUntil": "M2"`"*).
+   *
+   * A row is allowed to still be pending — B11, B15, B16 and B18 are, honestly, at
+   * later milestones. What is not allowed is a row still claiming M2 will finish it
+   * after M2 has shipped: that is a milestone quietly failing to close.
+   */
+  it('leaves no row claiming a milestone that has already shipped', () => {
+    const stillOwedToM2 = manifest.filter(
+      (row) => row.status === 'pending' && row.pendingUntil === 'M2',
+    );
+
+    expect(stillOwedToM2.map((row) => row.id)).toEqual([]);
   });
 });

@@ -4,7 +4,7 @@
     "types": ["node"],
     "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
   },
-  "include": ["tests/**/*.ts", "vitest.config.ts"],
+  "include": ["tests/**/*.ts", "vitest.config.ts", "playwright.config.ts"],
   // Deliberately-violating architecture fixtures, in three roots because they answer
   // to three different tools: `__fixtures__/` is dependency-cruiser's (and
   // `boundaries.fitness.test.ts` asserts every directory in it is named after a

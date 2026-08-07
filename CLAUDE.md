@@ -34,6 +34,7 @@ pnpm test:unit          # no infrastructure; fast enough to run on save
 pnpm test:unit:changed  # unit tests touched by uncommitted changes; local iteration only, not in CI
 pnpm test:integration   # Testcontainers Postgres; needs a running docker daemon
 pnpm test:security      # ADR-0002 bypass suite; needs a running docker daemon
+pnpm test:e2e           # Playwright browser e2e; run `pnpm exec playwright install chromium` once
 ```
 
 There is **one** boundary script, `pnpm boundaries` — no `lint:boundaries` alias,
@@ -69,6 +70,11 @@ CI (`.github/workflows/ci.yml`) runs **nine parallel jobs**, named exactly:
 `needs:` anything else, so each failure names itself. Those nine strings are the
 checks branch protection requires — **renaming a job silently un-requires its
 check**, so change one only deliberately and update the protection rule with it.
+
+A tenth job, `test:e2e`, runs the Playwright browser e2e. It is **advisory in
+M2**, deliberately **not** in branch protection — the nine required names above
+are unchanged — because adding it there is a repo-settings change out of any
+lane's scope (see `docs/engineering/l5-plan.md`, decision D2).
 Shared Node/pnpm/install lives in one composite action,
 [`.github/actions/setup-workspace`](.github/actions/setup-workspace/action.yml).
 **Run the same commands locally before you push.** A red PR is a broken promise,

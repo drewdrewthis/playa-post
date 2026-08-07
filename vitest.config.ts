@@ -19,8 +19,11 @@ import { defineConfig } from 'vitest/config';
  * `unit` and `integration` select on the suffix alone, so a test's cost is visible in
  * its filename and a new module needs no config change. `security` is scoped to
  * `tests/security/**` as well, deliberately: the suite is a checked-in control with a
- * manifest, not a pattern any package may opt into. ⚠ The cost of that choice is that
- * a `*.security.test.ts` written under `apps/` or `packages/` never runs — if that
+ * manifest, not a pattern any package may opt into. `tests/integration/**` is included
+ * in the integration project to hold L5 cross-module tests (e.g. vertical-slice tests
+ * that import `composition/container.ts`, which is forbidden in app/package tests by
+ * the `no-container-outside-composition` boundary rule). ⚠ The cost of that choice is
+ * that a `*.security.test.ts` written under `apps/` or `packages/` never runs — if that
  * ever becomes a real place to put one, widen the include rather than assuming the
  * suffix was enough.
  */
@@ -43,7 +46,7 @@ export default defineConfig({
         test: {
           name: 'integration',
           environment: 'node',
-          include: ['apps/**/*.integration.test.ts', 'packages/**/*.integration.test.ts'],
+          include: ['apps/**/*.integration.test.ts', 'packages/**/*.integration.test.ts', 'tests/integration/**/*.integration.test.ts'],
           exclude: ['**/node_modules/**', '**/dist/**'],
           // Pulling and booting a Postgres image on a cold CI runner is slow, and a
           // flaky timeout here reads as a broken migration. Be generous.
