@@ -47,7 +47,9 @@ export default defineConfig({
     command: `pnpm --filter @playa-post/web exec vite --port ${WEB_PORT} --strictPort`,
     url: `http://127.0.0.1:${WEB_PORT}`,
     reuseExistingServer: !process.env['CI'],
-    timeout: 60_000,
+    // 180s, not the 60s default-ish value shipped first: CI run 31133839942 timed out
+    // at 60s waiting for a cold pnpm/vite start that warm local runs never see.
+    timeout: 180_000,
     env: {
       // Fixed, not discovered at runtime — see `tests/e2e/support/e2e-ports.ts`'s
       // doc comment for why `global-setup.ts` cannot hand this value to this file.
