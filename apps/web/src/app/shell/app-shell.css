@@ -122,12 +122,21 @@
   font-size: var(--pp-text-2xs);
 }
 
-/** The compose button, breaking the tab bar's top edge. */
+/*
+ * The compose button, breaking the tab bar's top edge.
+ *
+ * ⚠ `align-self: flex-start` is what makes the lift deterministic. Under the bar's
+ * `align-items: center` the FAB is centred against whichever item is tallest, so the
+ * comp's -14px measured from a moving baseline and the button ended up *inside* the
+ * bar — 3px below its own top border instead of 2px above it. Anchored to the top of
+ * the line, -14px means -14px.
+ */
 .compose-fab {
   display: flex;
   align-items: center;
   justify-content: center;
   flex: none;
+  align-self: flex-start;
   width: 3.125rem;
   height: 3.125rem;
   margin-top: -0.875rem;
