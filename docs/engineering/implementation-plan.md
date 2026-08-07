@@ -10,6 +10,9 @@
 > the backend deploys as the Node server build to Render's free plan. M3 changes from a Cloudflare
 > runtime spike to that deploy, the CI job list drops from ten to nine, and risks R1 and R9 close. Every
 > edit made for this carries an inline amendment note; nothing else in the plan moved.
+> **Amended 2026-08-07, owner directive:** design conformance is now a required lane gating the
+> testable-product milestone — see "Design-conformance lane" below and issue
+> [#42](https://github.com/drewdrewthis/playa-post/issues/42).
 > Governed by `docs/engineering/architecture-addendum.md` (normative), then
 > `docs/Burner_Trust_Network_Final_Handoff.pdf`, then `docs/product/decisions.md`.
 > ADRs live in `docs/adr/`. New here? Read `docs/engineering/repo-map.md` first.
@@ -830,6 +833,30 @@ Infrastructure gates first, then the six launch-DoD clauses.
 
 **Done means:** all six launch-DoD clauses are verified with captured evidence, QA has signed off
 independently, and real invited people are using the product.
+
+---
+
+## Design-conformance lane (added 2026-08-07, owner directive)
+
+> Owner directive, 2026-08-07: design conformance is a **required lane** gating the testable-product
+> milestone. Full definition, inventory method, and audit findings: issue
+> [#42](https://github.com/drewdrewthis/playa-post/issues/42).
+
+- **Gate**: the testable-product milestone (M6-AC13's visual-correctness clause) is not done while
+  issue #42 has open sub-issues. The initial audit filed ten — #43–#52 — one per material divergence
+  from `design/Playa Post.dc.html` found so far: dark theme, graph visualization, board search/query
+  language/chips, card badges/timestamps, bulletin detail sheet, compose, the You/profile screen,
+  notifications popover, app shell/tab bar/FAB, and typography/visual language.
+- **Verification standard**: the same standard M6-AC13 already states — a screenshot comparison
+  against the comp, per screen and per state, in **both** the warm-desert light and neon-night dark
+  themes — applied per sub-issue as it closes rather than only once at M6. Each fix's PR body carries
+  the before/after comparison as evidence.
+- **Findings live on**: issue #42 (parent) and its sub-issues, labeled `design-conformance`. A
+  divergence found after the initial audit is filed the same way — one issue per divergence, labeled
+  `design-conformance`, linked to #42 — not folded into an existing sub-issue.
+
+This lane does not replace M6-AC13; it is what makes M6-AC13 provable incrementally, issue by issue,
+instead of discovered whole at M6.
 
 ---
 
