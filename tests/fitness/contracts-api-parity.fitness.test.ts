@@ -112,6 +112,7 @@ const inputParity: InputParity = {
   'sync.submitMutations': true,
   'views.notifyMe.update': true,
   'notifications.list': true,
+  'notifications.dismiss': true,
   'notifications.push.subscribe': true,
 };
 
@@ -134,6 +135,7 @@ const outputParity: OutputParity = {
   'sync.submitMutations': true,
   'views.notifyMe.update': true,
   'notifications.list': true,
+  'notifications.dismiss': true,
   'notifications.push.subscribe': true,
 };
 

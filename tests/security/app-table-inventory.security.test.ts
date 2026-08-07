@@ -34,6 +34,10 @@ const INVENTORY = [
   // Notify Me and push (L3b-notify)
   'notify_me_queries',
   'push_subscriptions',
+  // Per-recipient panel state — a dismissal is the one durable fact behind
+  // `notifications.list`'s `unread` flag. Its own table rather than a column on
+  // `consumer_receipts`, which is ADR-0006 infrastructure this module does not own.
+  'notification_dismissals',
   // moderation and sync (L4)
   'bulletin_dismissals',
   'bulletin_reports',
@@ -51,7 +55,7 @@ describe('schema app holds exactly the tables M2 declared (m2-lane-briefs.md rat
     await testDatabase?.stop();
   });
 
-  it('matches the thirteen-name inventory as a set, and in count', async () => {
+  it('matches the fourteen-name inventory as a set, and in count', async () => {
     const { rows } = await testDatabase.client.query<{ tablename: string }>(
       `select tablename from pg_tables where schemaname = 'app' order by tablename`,
     );

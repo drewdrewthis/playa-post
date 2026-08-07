@@ -62,4 +62,25 @@ export interface DeliveredNotificationRepository {
     viewerId: ViewerId,
     bulletinIds: readonly string[],
   ): Promise<readonly string[]>;
+
+  /**
+   * Whether `notificationId` names a flushed match belonging to this recipient.
+   *
+   * The pre-write check behind `notifications.dismiss` — see
+   * {@link import('../domain/notification.errors').NotificationUnavailableError} for why
+   * dismissing without one is an unbounded write surface.
+   *
+   * ⚠ **It answers "is this the caller's own delivered match", not "is this a window
+   * opener".** Proving the latter would mean regrouping the caller's whole history on
+   * every dismissal, to refuse a case whose worst outcome is a dismissal row that
+   * matches no notification — a harmless orphan, indistinguishable from one whose window
+   * has since aged out. The check that is cheap is the one that closes the abuse
+   * surface; the one that is expensive buys tidiness.
+   *
+   * @param recipientId - An `app.users.id` from the resolved actor. Taken as a `string`
+   *   rather than a {@link ViewerId} because the write path's command carries the actor
+   *   the way every other module's does — and because it is a `WHERE` on the caller's
+   *   own rows, not a viewer-scoped visibility read.
+   */
+  hasDeliveredMatch(recipientId: string, notificationId: string): Promise<boolean>;
 }

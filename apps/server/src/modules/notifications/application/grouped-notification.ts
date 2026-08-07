@@ -34,4 +34,24 @@ export interface GroupedNotification {
    * an empty notification.
    */
   readonly bulletinIds: readonly string[];
+  /**
+   * `false` once this recipient has dismissed it; `true` until then.
+   *
+   * **Derived from the absence of a dismissal, not stored.** There is one durable fact —
+   * the dismissal — and this is its negation, so "unread" and "dismissed" can never
+   * disagree the way two columns eventually would.
+   *
+   * ⚠ **A dismissed notification stays in the list.** Two reasons, and the second is the
+   * load-bearing one. The badge counts unread while the panel can still show history, so
+   * one read serves both. And a dismissal stays *observable*: a client confirms the
+   * write landed by seeing the item return with `unread: false`, rather than inferring
+   * it from an absence — which would be ambiguous here, because a notification also
+   * disappears when its bulletins stop being visible (ADR-0002 §11's read-time
+   * re-check). Subtracting instead would also make this field a constant, which is the
+   * shape `modules/bulletins`' `VisibleBulletin` refuses `archivedAt` for.
+   *
+   * Growth is bounded by ADR-0006's fourteen-day outbox retention, the same bound that
+   * lets this read take no page size.
+   */
+  readonly unread: boolean;
 }
