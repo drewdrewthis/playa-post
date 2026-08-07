@@ -40,45 +40,49 @@ export function SignInRoute(): JSX.Element {
   }
 
   return (
-    <main className="screen screen--centred" data-testid="sign-in">
-      <h1 className="screen__title">Playa Post</h1>
-      <p className="screen__lede">A private, opt-in community trust network.</p>
+    <div className="app-frame">
+      <main className="app-column" data-testid="sign-in">
+        <div className="screen screen--fill screen--centred">
+          <h1 className="wordmark wordmark--hero">The Playa Post</h1>
+          <p className="screen__lede">A private, opt-in community trust network.</p>
 
-      {sent ? (
-        <p className="screen__notice" data-testid="sign-in-link-sent">
-          Check your email for a sign-in link.
-        </p>
-      ) : (
-        <form
-          className="form"
-          onSubmit={(event) => {
-            void onSubmit(event);
-          }}
-        >
-          <label className="form__field">
-            <span className="form__label">Email</span>
-            <input
-              className="form__input"
-              type="email"
-              name="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </label>
+          {sent ? (
+            <p className="screen__notice" data-testid="sign-in-link-sent">
+              Check your email for a sign-in link.
+            </p>
+          ) : (
+            <form
+              className="form"
+              onSubmit={(event) => {
+                void onSubmit(event);
+              }}
+            >
+              <label className="form__field">
+                <span className="form__label">Email</span>
+                <input
+                  className="form__input"
+                  type="email"
+                  name="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </label>
 
-          <button className="button button--primary" type="submit">
-            Send me a sign-in link
-          </button>
-        </form>
-      )}
+              <button className="button button--primary" type="submit">
+                Send me a sign-in link
+              </button>
+            </form>
+          )}
 
-      {failure === null ? null : (
-        <p className="form__error" role="alert">
-          {failure}
-        </p>
-      )}
-    </main>
+          {failure === null ? null : (
+            <p className="form__error" role="alert">
+              {failure}
+            </p>
+          )}
+        </div>
+      </main>
+    </div>
   );
 }

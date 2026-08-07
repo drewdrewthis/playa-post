@@ -61,7 +61,7 @@ export function GraphHomeRoute(): JSX.Element {
 
       {invite.data === undefined ? null : (
         <p className="invite-token">
-          <span className="invite-token__label">Share this invite:</span>
+          <span className="invite-token__label">Share this invite</span>
           <code className="invite-token__value" data-testid="invite-token-display">
             {invite.data.token}
           </code>
@@ -69,7 +69,7 @@ export function GraphHomeRoute(): JSX.Element {
       )}
 
       {people.length === 0 ? (
-        <p className="screen__notice">
+        <p className="screen__empty">
           Nobody yet. Create an invite and send it to someone you know.
         </p>
       ) : (

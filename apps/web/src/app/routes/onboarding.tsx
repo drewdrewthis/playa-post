@@ -64,53 +64,62 @@ export function OnboardingRoute(): JSX.Element {
   }
 
   return (
-    <main className="screen" data-testid="onboarding">
-      <h1 className="screen__title">Pick your handle</h1>
-      <p className="screen__lede">
-        Your handle is how people find you. Your display name is what they see.
-      </p>
+    <div className="app-frame">
+      <main className="app-column" data-testid="onboarding">
+        <div className="screen screen--fill screen--centred">
+          <h1 className="screen__title screen__title--hero">Pick your handle</h1>
+          <p className="screen__lede">
+            Your handle is how people find you. Your display name is what they see.
+          </p>
 
-      <form className="form" onSubmit={onSubmit}>
-        <label className="form__field">
-          <span className="form__label">Handle</span>
-          <input
-            className="form__input"
-            data-testid="onboarding-handle-input"
-            name="handle"
-            required
-            value={handle}
-            onChange={(event) => setHandle(event.target.value)}
-          />
-        </label>
+          <form className="form" onSubmit={onSubmit}>
+            <label className="form__field">
+              <span className="form__label">Handle</span>
+              <input
+                className="form__input"
+                data-testid="onboarding-handle-input"
+                name="handle"
+                required
+                value={handle}
+                onChange={(event) => setHandle(event.target.value)}
+              />
+            </label>
 
-        <label className="form__field">
-          <span className="form__label">Display name</span>
-          <input
-            className="form__input"
-            data-testid="onboarding-display-name-input"
-            name="displayName"
-            required
-            maxLength={DISPLAY_NAME_MAX_LENGTH}
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-          />
-        </label>
+            <label className="form__field">
+              <span className="form__label">Display name</span>
+              <input
+                className="form__input"
+                data-testid="onboarding-display-name-input"
+                name="displayName"
+                required
+                maxLength={DISPLAY_NAME_MAX_LENGTH}
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+              />
+            </label>
 
-        <button
-          className="button button--primary"
-          data-testid="onboarding-submit-button"
-          type="submit"
-          disabled={onboarding.isPending}
-        >
-          Continue
-        </button>
-      </form>
+            <button
+              className="button button--primary"
+              data-testid="onboarding-submit-button"
+              type="submit"
+              disabled={onboarding.isPending}
+            >
+              Continue
+            </button>
+          </form>
 
-      {failure === null ? null : (
-        <p className="form__error" role="alert" data-testid="onboarding-handle-error" data-code={failureCode ?? 'UNKNOWN'}>
-          {failure}
-        </p>
-      )}
-    </main>
+          {failure === null ? null : (
+            <p
+              className="form__error"
+              role="alert"
+              data-testid="onboarding-handle-error"
+              data-code={failureCode ?? 'UNKNOWN'}
+            >
+              {failure}
+            </p>
+          )}
+        </div>
+      </main>
+    </div>
   );
 }

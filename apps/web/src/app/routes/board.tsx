@@ -160,7 +160,7 @@ export function BoardRoute(): JSX.Element {
       </header>
 
       {visible.length === 0 ? (
-        <p className="screen__notice">Nothing on your board yet.</p>
+        <p className="screen__empty">Nothing on your board yet. Quiet playa.</p>
       ) : (
         <ul className="board-list">
           {visible.map((card) => (
@@ -169,6 +169,9 @@ export function BoardRoute(): JSX.Element {
                 className="bulletin-card"
                 data-testid={`board-bulletin-card-${card.id}`}
                 data-archived={card.archived ? 'true' : 'false'}
+                // Drives the per-type tint in `screens.css`; an unknown type still
+                // renders a tag, in the accent, rather than an untinted one.
+                data-type={card.type}
               >
                 <p className="bulletin-card__type">{card.type}</p>
                 <h2 className="bulletin-card__title">{card.title}</h2>

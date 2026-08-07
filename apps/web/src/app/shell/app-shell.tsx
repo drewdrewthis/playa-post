@@ -21,7 +21,7 @@ export function AppShell(): JSX.Element {
   return (
     <div className="app-shell">
       <header className="app-shell__header">
-        <p className="app-shell__brand">Playa Post</p>
+        <p className="wordmark">The Playa Post</p>
 
         <nav className="app-shell__nav">
           <NavLink to="/graph">Graph</NavLink>

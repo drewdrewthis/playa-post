@@ -1,0 +1,515 @@
+/*
+ * Everything a screen is built from: the column it lives in, its headings, its
+ * controls, and the content components screens share.
+ *
+ * Loaded from `entry.tsx`, not from the shell, because two screens render *outside*
+ * the shell — sign-in (no session) and onboarding (a full-screen takeover, exactly as
+ * the comp draws it). The shell's own chrome lives in `app/shell/app-shell.css`.
+ *
+ * Sizes and weights follow `design/Playa Post.dc.html`: Instrument Serif for anything
+ * that is a title or prose, Karla for anything that is a label or a control, IBM Plex
+ * Mono for anything a person has to read or retype character by character.
+ */
+
+/* The frame and the column ----------------------------------------------- */
+
+/*
+ * One column, centred, with the desk showing around it — the comp's phone width
+ * without the comp's phone. `design/ios-frame.jsx` is a presentation device for the
+ * prototype and deliberately has no counterpart here: a browser already has chrome,
+ * and a second fake one is a bezel a user cannot dismiss.
+ */
+.app-frame {
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--pp-desk);
+}
+
+/*
+ * A fixed-height column that clips, so the bottom tab bar stays on the bottom edge and
+ * only the screen between the chrome scrolls. `dvh` rather than `vh` because on mobile
+ * `100vh` is taller than the visible viewport while the browser's URL bar is showing,
+ * which parks the tab bar just off-screen.
+ */
+.app-column {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--pp-column-width);
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--pp-bg);
+}
+
+/*
+ * The wordmark, wherever it appears — the chrome's header and the sign-in screen.
+ * Italic Instrument Serif with a glow that is `none` in light and a warm halo in dark;
+ * both come from the token, so this rule is theme-agnostic.
+ */
+.wordmark {
+  margin: 0;
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: var(--pp-text-wordmark);
+  line-height: 1.05;
+  color: var(--pp-wordmark);
+  text-shadow: var(--pp-wordmark-glow);
+}
+
+.wordmark--hero {
+  font-size: 2.5rem;
+}
+
+/* Screens ----------------------------------------------------------------- */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-4);
+  padding: var(--pp-space-4) var(--pp-space-5) var(--pp-space-6);
+}
+
+/** For a screen that *is* the scrolling region — i.e. one rendered outside the shell. */
+.screen--fill {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.screen--centred {
+  justify-content: center;
+}
+
+.screen__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--pp-space-3);
+}
+
+.screen__actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--pp-space-2);
+}
+
+.screen__title {
+  margin: 0;
+  font-family: var(--pp-font-display);
+  font-size: var(--pp-text-xl);
+  font-weight: 400;
+  line-height: 1.15;
+  color: var(--pp-ink);
+}
+
+/** The front-door treatment: sign-in and onboarding, where the type carries the brand. */
+.screen__title--hero {
+  font-size: 2rem;
+  font-style: italic;
+}
+
+.screen__lede {
+  margin: 0;
+  font-weight: 500;
+  font-size: var(--pp-text-sm);
+  line-height: 1.6;
+  color: var(--pp-sub);
+}
+
+.screen__notice {
+  margin: 0;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-sub);
+}
+
+/** An empty state. Italic serif and centred, per the comp's "Quiet playa." treatment. */
+.screen__empty {
+  margin: 0;
+  padding: var(--pp-space-6) var(--pp-space-4);
+  text-align: center;
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-size: var(--pp-text-lg);
+  color: var(--pp-faint);
+}
+
+/** The small print under a section — the comp's 11px explanatory lines. */
+.screen__aside {
+  margin: 0;
+  font-size: var(--pp-text-xs);
+  line-height: 1.5;
+  color: var(--pp-faint);
+}
+
+/* Controls ---------------------------------------------------------------- */
+
+/*
+ * The comp sets `outline:none` on every control it draws. That is right for a
+ * prototype and wrong for a product: a keyboard user with no focus ring cannot tell
+ * where they are. `:focus-visible` keeps the ring off mouse clicks, which is what the
+ * comp was actually reaching for.
+ */
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--pp-accent);
+  outline-offset: 2px;
+}
+
+/** Secondary: an outlined pill. */
+.button {
+  padding: var(--pp-space-3) var(--pp-space-5);
+  border: 1px solid var(--pp-card-border);
+  border-radius: var(--pp-radius-pill);
+  background: transparent;
+  color: var(--pp-sub);
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  text-align: center;
+}
+
+/** Primary: the FAB's fill, so "the orange thing" means one thing everywhere. */
+.button--primary {
+  border-color: transparent;
+  background: var(--pp-fab-bg);
+  color: var(--pp-fab-fg);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+/** Tertiary: the comp's dashed accent pill, for row-level actions. */
+.button--quiet {
+  padding: var(--pp-space-1) var(--pp-space-3);
+  border: 1px dashed var(--pp-accent);
+  background: transparent;
+  color: var(--pp-accent);
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.button--danger {
+  border-color: var(--pp-danger-border);
+  color: var(--pp-danger);
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-4);
+  align-items: stretch;
+}
+
+.form__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+  width: 100%;
+}
+
+.form__label {
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-faint);
+}
+
+.form__input {
+  width: 100%;
+  padding: 0.6875rem 0.75rem;
+  border: 1px solid var(--pp-card-border);
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-input-bg);
+  color: var(--pp-ink);
+  font-family: var(--pp-font-body);
+  font-weight: 500;
+  font-size: var(--pp-text-sm);
+}
+
+/** Prose the user is writing gets the reading typeface, per the comp's compose sheet. */
+.form__input--prose {
+  font-family: var(--pp-font-display);
+  font-weight: 400;
+  font-size: var(--pp-text-base);
+  line-height: 1.45;
+}
+
+.form__input--multiline {
+  resize: vertical;
+}
+
+/** A pill `select`, so a native control still reads as part of the design. */
+.form__input--pill {
+  border-radius: var(--pp-radius-pill);
+  padding-inline: var(--pp-space-4);
+}
+
+/*
+ * The comp's slider: a hairline track and a large white thumb ringed in the accent.
+ * `#fff` is the comp's own value in *both* themes, and stays literal here — the thumb
+ * is the grabbable target, so it is the one element that should not recede in dark.
+ */
+.form__slider {
+  width: 100%;
+  height: 4px;
+  margin: var(--pp-space-2) 0;
+  appearance: none;
+  border-radius: 2px;
+  background: var(--pp-track);
+  color: var(--pp-accent);
+  cursor: pointer;
+}
+
+.form__slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border: 3px solid currentcolor;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 35%);
+  cursor: pointer;
+}
+
+.form__slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border: 3px solid currentcolor;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 35%);
+  cursor: pointer;
+}
+
+.form__error {
+  margin: 0;
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-danger);
+}
+
+.banner {
+  margin: 0;
+  padding: var(--pp-space-3) var(--pp-space-4);
+  border: 1px solid var(--pp-card-border);
+  border-radius: var(--pp-radius);
+  background: var(--pp-card);
+  font-size: var(--pp-text-sm);
+}
+
+.banner--good {
+  border-color: var(--pp-ok);
+  background: var(--pp-ok-bg);
+  color: var(--pp-ok);
+}
+
+/* Lists ------------------------------------------------------------------- */
+
+.person-list,
+.board-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-3);
+}
+
+.person-list__item {
+  display: flex;
+  align-items: center;
+  gap: var(--pp-space-3);
+  padding: var(--pp-space-3) var(--pp-space-4);
+  border: 1px solid var(--pp-card-border);
+  border-radius: var(--pp-radius);
+  background: var(--pp-card);
+}
+
+.person-list__link {
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+.person-list__trust {
+  margin-left: auto;
+  white-space: nowrap;
+  font-family: var(--pp-font-mono);
+  font-weight: 500;
+  font-size: var(--pp-text-xs);
+  color: var(--pp-accent);
+}
+
+/* People ------------------------------------------------------------------ */
+
+.person-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pp-space-2);
+}
+
+.person-identity__avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--pp-radius-pill);
+  object-fit: cover;
+}
+
+.person-identity__name {
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-ink);
+}
+
+.person-identity__handle {
+  font-weight: 500;
+  font-size: var(--pp-text-xs);
+  color: var(--pp-faint);
+}
+
+/* The private treatment carries no name, no handle, and no derived placeholder. */
+.person-identity--private .person-identity__private-mark {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--pp-radius-pill);
+  background: repeating-linear-gradient(
+    45deg,
+    var(--pp-card-border) 0,
+    var(--pp-card-border) 4px,
+    var(--pp-input-bg) 4px,
+    var(--pp-input-bg) 8px
+  );
+}
+
+.person-identity--private .person-identity__private-label {
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-faint);
+}
+
+.person-sheet__trust-value {
+  margin: 0;
+  font-family: var(--pp-font-mono);
+  font-weight: 600;
+  font-size: var(--pp-text-lg);
+  color: var(--pp-accent);
+}
+
+/* Bulletins --------------------------------------------------------------- */
+
+.bulletin-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4375rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--pp-card-border);
+  border-radius: var(--pp-radius);
+  background: var(--pp-card);
+}
+
+.bulletin-card[data-archived='true'] {
+  border-style: dashed;
+  opacity: 0.72;
+}
+
+/*
+ * The type label is a tinted dashed tag, tinted per bulletin type. The default is the
+ * accent so an unrecognised type still renders as a tag rather than as nothing; each
+ * known type overrides it below.
+ */
+.bulletin-card__type {
+  align-self: flex-start;
+  margin: 0;
+  padding: 3px 7px;
+  border: 1px dashed var(--pp-bulletin-tint, var(--pp-accent));
+  border-radius: 3px;
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-bulletin-tint, var(--pp-accent));
+}
+
+.bulletin-card[data-type='request'] {
+  --pp-bulletin-tint: var(--pp-tint-request);
+}
+
+.bulletin-card__title {
+  margin: 0;
+  font-family: var(--pp-font-display);
+  font-weight: 400;
+  font-size: var(--pp-text-lg);
+  line-height: 1.35;
+  color: var(--pp-ink);
+}
+
+.bulletin-card__body {
+  margin: 0;
+  font-family: var(--pp-font-display);
+  font-weight: 400;
+  font-size: var(--pp-text-base);
+  line-height: 1.5;
+  color: var(--pp-ink);
+}
+
+.bulletin-card__author {
+  margin: 0;
+  font-weight: 600;
+  font-size: var(--pp-text-xs);
+  color: var(--pp-sub);
+}
+
+.bulletin-card__archived {
+  margin: 0;
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pp-faint);
+}
+
+.bulletin-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pp-space-2);
+  margin-top: var(--pp-space-1);
+}
+
+/* Codes ------------------------------------------------------------------- */
+
+/** An invite token is retyped by hand, so it is monospaced and boxed to be selectable. */
+.invite-token {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+}
+
+.invite-token__label {
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-faint);
+}
+
+.invite-token__value {
+  padding: var(--pp-space-2) var(--pp-space-3);
+  border: 1px dashed var(--pp-accent);
+  border-radius: var(--pp-radius-sm);
+  font-family: var(--pp-font-mono);
+  font-weight: 500;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-accent);
+  word-break: break-all;
+}
