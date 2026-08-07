@@ -4,7 +4,12 @@ import type { Graph } from './graph';
 import type { Health } from './health';
 import type { CompleteOnboardingRequest, OnboardedUser } from './identity';
 import type { HiddenBulletin, ModerationTargetRequest } from './moderation';
-import type { GroupedNotification, SubscribeToPushRequest } from './notifications';
+import type {
+  GroupedNotification,
+  NotificationDismissal,
+  NotificationIdRequest,
+  SubscribeToPushRequest,
+} from './notifications';
 import type { MutationBatch, SubmitMutationsRequest } from './sync';
 import type { NotifyMeQuery, UpdateNotifyMeQueryRequest } from './views';
 
@@ -78,6 +83,7 @@ export interface PlayaPostApi {
   'views.notifyMe.update': MutationSpec<UpdateNotifyMeQueryRequest, NotifyMeQuery>;
 
   'notifications.list': QuerySpec<void, readonly GroupedNotification[]>;
+  'notifications.dismiss': MutationSpec<NotificationIdRequest, NotificationDismissal>;
   'notifications.push.subscribe': MutationSpec<SubscribeToPushRequest, void>;
 }
 

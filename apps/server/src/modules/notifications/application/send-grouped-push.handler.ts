@@ -85,7 +85,7 @@ export function createSendGroupedPushHandler(
    */
   async function deliver(recipientId: string, claimed: readonly NotifyMeMatch[]): Promise<void> {
     const audience = await dependencies.visiblePeople.listFor(recipientId);
-    const reachable = new Set(audience.people.map((person) => person.userId));
+    const reachable = new Set(audience.map((person) => person.userId));
     const deliverable = claimed.filter((match) => reachable.has(match.authorId));
 
     if (deliverable.length === 0) {

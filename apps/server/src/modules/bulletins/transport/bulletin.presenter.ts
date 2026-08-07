@@ -22,6 +22,10 @@ export interface PresentedBulletin {
   readonly title: string;
   readonly body: string;
   readonly createdAt: string;
+  /** Free-text place. `null` when the bulletin names none. */
+  readonly loc: string | null;
+  /** ISO-8601, or `null` when the bulletin never expires. May already have passed here. */
+  readonly expiresAt: string | null;
   /** `null` while live. */
   readonly archivedAt: string | null;
   readonly version: number;
@@ -62,6 +66,15 @@ export interface PresentedVisibleBulletin {
   readonly title: string;
   readonly body: string;
   readonly createdAt: string;
+  /** Free-text place. `null` when the bulletin names none. */
+  readonly loc: string | null;
+  /**
+   * ISO-8601, or `null` when the bulletin never expires.
+   *
+   * Always in the future here, unlike on {@link PresentedBulletin}: a viewer only ever
+   * receives unexpired bulletins, while an author's own list keeps the expired ones.
+   */
+  readonly expiresAt: string | null;
   readonly version: number;
   readonly author: PresentedBulletinAuthor;
 }
@@ -79,6 +92,8 @@ export function presentBulletin(bulletin: Bulletin): PresentedBulletin {
     title: bulletin.title,
     body: bulletin.body,
     createdAt: bulletin.createdAt.toISOString(),
+    loc: bulletin.loc,
+    expiresAt: bulletin.expiresAt === null ? null : bulletin.expiresAt.toISOString(),
     archivedAt: bulletin.archivedAt === null ? null : bulletin.archivedAt.toISOString(),
     version: bulletin.version,
   };
@@ -110,6 +125,8 @@ export function presentVisibleBulletin(bulletin: VisibleBulletin): PresentedVisi
     title: bulletin.title,
     body: bulletin.body,
     createdAt: bulletin.createdAt.toISOString(),
+    loc: bulletin.loc,
+    expiresAt: bulletin.expiresAt === null ? null : bulletin.expiresAt.toISOString(),
     version: bulletin.version,
     author: presentAuthor(bulletin.author),
   };

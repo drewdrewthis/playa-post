@@ -5,6 +5,7 @@ import {
   type ListVisibleGraphQuery,
   type VisiblePeopleDirectory,
 } from './application/list-visible-graph.query';
+import { createPostgresVisibleEdgesRepository } from './persistence/postgres-visible-edges.repository';
 import { createPostgresVisiblePeopleRepository } from './persistence/postgres-visible-people.repository';
 import { createGraphRouter, type GraphRouter } from './transport/graph.router';
 
@@ -17,6 +18,7 @@ import { createGraphRouter, type GraphRouter } from './transport/graph.router';
  * exists to prevent (addendum §19).
  */
 export type { VisiblePeopleDirectory } from './application/list-visible-graph.query';
+export type { VisibleEdge } from './application/visible-edge';
 export type { VisibleGraph, VisiblePerson } from './application/visible-person';
 
 /** What the composition root has to hand this module. */
@@ -65,6 +67,10 @@ export interface GraphModule {
 export function createGraphModule(dependencies: GraphModuleDependencies): GraphModule {
   const visiblePeople = createListVisibleGraphQuery({
     visiblePeople: createPostgresVisiblePeopleRepository({ database: dependencies.database }),
+    // Two repositories over one connection pool, because they are two questions over two
+    // SQL functions — not one repository with a convenience method, which is how a
+    // consumer that only wants people ends up able to ask for edges.
+    visibleEdges: createPostgresVisibleEdgesRepository({ database: dependencies.database }),
   });
 
   return {

@@ -47,7 +47,7 @@ export class BulletinGoneError extends ApplicationError {
  * of the stable code M2-AC18 requires, and the `sync.submitMutations` path (M2.13)
  * would then have to restate it a third time.
  *
- * @param field - Which of the two was refused, so the client can put the message
+ * @param field - Which of the three was refused, so the client can put the message
  *   beside the right input. Naming a field the caller sent discloses nothing.
  * @param maxLength - The bound that was exceeded, passed in rather than imported:
  *   `bulletin-content.policy.ts` already imports this class, and importing its
@@ -56,13 +56,43 @@ export class BulletinGoneError extends ApplicationError {
 export class BulletinContentInvalidError extends ApplicationError {
   static readonly code = 'BULLETIN_CONTENT_INVALID';
 
-  constructor(field: 'title' | 'body', maxLength: number) {
-    super(
-      BulletinContentInvalidError.code,
-      field === 'title'
-        ? `A bulletin needs a title of 1 to ${String(maxLength)} characters.`
-        : `A bulletin body may be at most ${String(maxLength)} characters.`,
-    );
+  constructor(field: 'title' | 'body' | 'loc', maxLength: number) {
+    super(BulletinContentInvalidError.code, messageFor(field, maxLength));
     this.name = 'BulletinContentInvalidError';
+  }
+}
+
+/** The one sentence each refused field gets. Separate so the constructor stays a line. */
+function messageFor(field: 'title' | 'body' | 'loc', maxLength: number): string {
+  switch (field) {
+    case 'title':
+      return `A bulletin needs a title of 1 to ${String(maxLength)} characters.`;
+    case 'body':
+      return `A bulletin body may be at most ${String(maxLength)} characters.`;
+    case 'loc':
+      return `A bulletin location may be at most ${String(maxLength)} characters.`;
+  }
+}
+
+/**
+ * The submitted expiry has already passed.
+ *
+ * Its own code rather than a fourth `field` on {@link BulletinContentInvalidError}:
+ * that error's contract is "a length bound was exceeded", and its `maxLength` argument
+ * has no meaning for a moment in time. A client shows this beside the expiry control
+ * and the length message beside a text input, which is only possible if the two are
+ * distinguishable without parsing prose.
+ *
+ * Discloses nothing: the caller sent the value being refused.
+ */
+export class BulletinExpiryInvalidError extends ApplicationError {
+  static readonly code = 'BULLETIN_EXPIRY_INVALID';
+
+  constructor() {
+    super(
+      BulletinExpiryInvalidError.code,
+      'A bulletin can only be set to expire at a moment that has not yet passed.',
+    );
+    this.name = 'BulletinExpiryInvalidError';
   }
 }

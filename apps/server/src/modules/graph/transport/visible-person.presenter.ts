@@ -1,3 +1,4 @@
+import type { VisibleEdge } from '../application/visible-edge';
 import type { VisibleGraph, VisiblePerson } from '../application/visible-person';
 
 /**
@@ -33,9 +34,26 @@ export interface PresentedPerson {
   readonly trust: number | null;
 }
 
+/**
+ * One edge as this API renders one.
+ *
+ * The same shape as the {@link VisibleEdge} read model, restated here for the reason
+ * {@link PresentedPerson} is: the wire is a contract and the read model is an
+ * implementation the first consuming lane is allowed to change.
+ *
+ * ⚠ Two identifiers and nothing else. See {@link VisibleEdge} for why an edge carries no
+ * weight, and why nothing here may grow one.
+ */
+export interface PresentedEdge {
+  readonly personAId: string;
+  readonly personBId: string;
+}
+
 /** The viewer's graph, as this API renders it. */
 export interface PresentedGraph {
   readonly people: readonly PresentedPerson[];
+  /** Lines between {@link people}. Never names anybody absent from it. */
+  readonly edges: readonly PresentedEdge[];
 }
 
 /**
@@ -58,7 +76,18 @@ function presentPerson(person: VisiblePerson): PresentedPerson {
   };
 }
 
+/**
+ * Project one edge onto the wire.
+ *
+ * A field-by-field copy for the same reason {@link presentPerson} is one: a spread would
+ * carry whatever the read model grows next into every client payload without anyone
+ * deciding it should be there — and the field an edge must never grow is a weight.
+ */
+function presentEdge(edge: VisibleEdge): PresentedEdge {
+  return { personAId: edge.personAId, personBId: edge.personBId };
+}
+
 /** Project the viewer's graph. */
 export function presentGraph(graph: VisibleGraph): PresentedGraph {
-  return { people: graph.people.map(presentPerson) };
+  return { people: graph.people.map(presentPerson), edges: graph.edges.map(presentEdge) };
 }

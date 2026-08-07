@@ -26,6 +26,11 @@ interface VisibleBulletinIdRow {
   readonly bulletin_id: string;
 }
 
+/** Existence probe for one recipient's flushed match. */
+interface DeliveredMatchExistsRow {
+  readonly exists: boolean;
+}
+
 /**
  * The read side of this module's outbox rows, behind
  * {@link DeliveredNotificationRepository}.
@@ -105,6 +110,29 @@ export function createPostgresDeliveredNotificationRepository(
       `.execute(database);
 
       return rows.map((row) => row.bulletin_id);
+    },
+
+    async hasDeliveredMatch(recipientId: string, notificationId: string): Promise<boolean> {
+      // The same three predicates `findDeliveredMatches` uses — the event type, the
+      // recipient in the payload, and the flush receipt — narrowed to one identifier.
+      // Written as `exists` rather than as a `findDeliveredMatches(…).some(…)` in the
+      // service, so a caller cannot accidentally pay for the whole history to answer a
+      // yes/no, and so the two spellings of "is this a delivered match" stay one
+      // statement's worth of SQL apart rather than one layer's.
+      const { rows } = await sql<DeliveredMatchExistsRow>`
+        select exists (
+          select 1
+            from app.outbox_events as matched
+            join app.consumer_receipts as receipt
+              on receipt.event_id = matched.event_id
+             and receipt.consumer_name = ${SEND_GROUPED_PUSH_CONSUMER}
+           where matched.event_id = ${notificationId}
+             and matched.event_type = ${NOTIFY_ME_MATCHED}
+             and matched.payload ->> 'recipientId' = ${recipientId}
+        ) as exists
+      `.execute(database);
+
+      return rows[0]?.exists ?? false;
     },
   };
 }

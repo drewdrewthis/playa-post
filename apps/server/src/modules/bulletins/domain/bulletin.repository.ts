@@ -8,6 +8,12 @@ export interface NewBulletin extends BulletinContent {
   readonly authorId: string;
   readonly type: string;
   readonly createdAt: Date;
+  /**
+   * `null` when the bulletin never expires — already through
+   * {@link import('./bulletin-expiry.policy').validateBulletinExpiry}, so it is either
+   * absent or in the future relative to `createdAt`.
+   */
+  readonly expiresAt: Date | null;
 }
 
 /** What archiving is given. */

@@ -459,7 +459,7 @@ describe('notifications.list (issue #31, vertical-slice step 9)', () => {
   });
 
   describe('Scenario: The listed notification carries identifiers only (M2-AC5, M2-AC10)', () => {
-    it('exposes exactly { notificationId, occurredAt, bulletinIds } and no author or content', async () => {
+    it('exposes exactly { notificationId, occurredAt, bulletinIds, unread } and no author or content', async () => {
       const occurredAt = new Date('2026-08-01T12:00:00.000Z');
       const { author, notifications, recipient } = await seedFlushedNotification({
         authorHandle: 'dusty_minimal_a',
@@ -476,10 +476,15 @@ describe('notifications.list (issue #31, vertical-slice step 9)', () => {
       // A full key-set equality rather than a subset match, so an accidentally-added
       // field fails this test rather than passing silently — the same discipline
       // M2-AC21's payload assertion uses on the push side.
+      // `unread` is a boolean derived from the caller's own dismissals, so it says
+      // nothing about anybody else — but it is still a field, and this assertion is a
+      // full key-set equality precisely so that adding one is a decision rather than a
+      // drift.
       expect(Object.keys(notification as object).sort()).toEqual([
         'bulletinIds',
         'notificationId',
         'occurredAt',
+        'unread',
       ]);
 
       const serialized = JSON.stringify(listed);

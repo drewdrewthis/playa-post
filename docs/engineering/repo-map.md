@@ -65,8 +65,11 @@ apps/server/     The modular monolith.
                  and persistence/ is the one directory domain/ may never import (ADR-0012). A module that
                  owns a database function checks its source in at persistence/sql/ and carries a
                  byte-identical copy in the migration that installs it — modules/graph's
-                 visible-people.sql and modules/bulletins' visible-bulletins.sql, each pinned by a
-                 verbatim-containment assertion (ADR-0004:73-74).
+                 visible-people.sql and visible-edges.sql, and modules/bulletins'
+                 visible-bulletins.sql, each pinned by a verbatim-containment assertion
+                 (ADR-0004:73-74). Re-installing one is a NEW migration carrying the new text,
+                 never an edit to the old one; a function whose `returns table` shape changed has
+                 to be DROPped there first, because `create or replace` refuses it.
   shared/        auth (Actor, branded ViewerId, JWT verification — ADR-0011) · trpc (initTRPC, the
                  root router, the request context) · errors · health. events/logging/transactions
                  arrive with the code that needs them.

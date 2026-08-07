@@ -1,4 +1,5 @@
 import type { GroupedNotification } from '../application/grouped-notification';
+import type { NotificationDismissal } from '../domain/notification-dismissal';
 
 /**
  * One notification as this API renders it.
@@ -17,6 +18,21 @@ export interface PresentedNotification {
   readonly notificationId: string;
   readonly occurredAt: string;
   readonly bulletinIds: readonly string[];
+  /** `false` once this recipient has dismissed it. The badge counts the `true`s. */
+  readonly unread: boolean;
+}
+
+/**
+ * What comes back when a recipient dismisses a notification.
+ *
+ * Two fields and no echo of the notification's contents: the caller already has them,
+ * and a mutation that answered with a payload would invite a client to render from the
+ * response instead of refetching the list the dismissal just changed.
+ */
+export interface PresentedNotificationDismissal {
+  readonly notificationId: string;
+  /** ISO-8601. Unchanged by a repeated dismissal — the first one is the answer. */
+  readonly dismissedAt: string;
 }
 
 /**
@@ -33,5 +49,16 @@ export function presentNotification(notification: GroupedNotification): Presente
     notificationId: notification.notificationId,
     occurredAt: notification.occurredAt.toISOString(),
     bulletinIds: [...notification.bulletinIds],
+    unread: notification.unread,
+  };
+}
+
+/** Project one dismissal onto the wire. */
+export function presentNotificationDismissal(
+  dismissal: NotificationDismissal,
+): PresentedNotificationDismissal {
+  return {
+    notificationId: dismissal.notificationId,
+    dismissedAt: dismissal.dismissedAt.toISOString(),
   };
 }

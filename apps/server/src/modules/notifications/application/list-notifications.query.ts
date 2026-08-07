@@ -1,4 +1,5 @@
 import type { ViewerId } from '../../../shared/auth/viewer-id';
+import type { NotificationDismissalRepository } from '../domain/notification-dismissal.repository';
 import {
   groupIntoNotificationWindows,
   type NotificationWindow,
@@ -29,6 +30,7 @@ export interface ListNotificationsQuery {
 /** Collaborators, injected rather than resolved (addendum §12, ADR-0003). */
 export interface ListNotificationsDependencies {
   readonly deliveredNotifications: DeliveredNotificationRepository;
+  readonly dismissals: NotificationDismissalRepository;
 }
 
 /**
@@ -49,6 +51,12 @@ export interface ListNotificationsDependencies {
  *    was already committed, and a person would see a regrouping their device never got.
  *    A group left with nothing visible disappears entirely rather than reading as an
  *    empty notification.
+ * 4. **Mark, never subtract.** A dismissal sets `unread: false` and leaves the
+ *    notification in the list. Removing it here would be a *second* rule about what is
+ *    in somebody's panel, sitting beside step 3's — and the two are answers to different
+ *    questions ("may I still see this" versus "have I dealt with it") that a client has
+ *    to be able to tell apart. See
+ *    {@link import('./grouped-notification').GroupedNotification.unread}.
  *
  * **Bounded by ADR-0006's retention, not by a page size.** Outbox rows are pruned after
  * fourteen days, so this read is naturally finite and takes no `limit` — a client-supplied
@@ -72,15 +80,20 @@ export function createListNotificationsQuery(
       }
 
       const windows = groupIntoNotificationWindows(delivered);
-      const visible = new Set(
-        await dependencies.deliveredNotifications.findVisibleBulletinIds(
-          command.viewerId,
-          [...new Set(delivered.map((match) => match.bulletinId))],
-        ),
-      );
+      // Concurrent, because neither read informs the other: what the viewer may still
+      // see is a fact about authorization, and what they have dismissed is a fact about
+      // their own choices — the same shape `modules/bulletins`' board read uses for its
+      // own two.
+      const [visibleIds, dismissed] = await Promise.all([
+        dependencies.deliveredNotifications.findVisibleBulletinIds(command.viewerId, [
+          ...new Set(delivered.map((match) => match.bulletinId)),
+        ]),
+        dependencies.dismissals.findDismissedFor(command.viewerId),
+      ]);
+      const visible = new Set(visibleIds);
 
       return windows
-        .flatMap((window) => presentableWindow(window, visible))
+        .flatMap((window) => presentableWindow(window, visible, dismissed))
         .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime());
     },
   };
@@ -97,6 +110,7 @@ export function createListNotificationsQuery(
 function presentableWindow(
   window: NotificationWindow<DeliveredNotificationMatch>,
   visible: ReadonlySet<string>,
+  dismissed: ReadonlySet<string>,
 ): readonly GroupedNotification[] {
   const opening = window.matches[0];
   if (opening === undefined) {
@@ -111,5 +125,15 @@ function presentableWindow(
 
   return bulletinIds.length === 0
     ? []
-    : [{ notificationId: opening.eventId, occurredAt: window.startsAt, bulletinIds }];
+    : [
+        {
+          notificationId: opening.eventId,
+          occurredAt: window.startsAt,
+          bulletinIds,
+          // Keyed on the same identifier the client was served and dismisses by, so
+          // there is no second mapping between "what a notification is called" and
+          // "what a dismissal names".
+          unread: !dismissed.has(opening.eventId),
+        },
+      ];
 }

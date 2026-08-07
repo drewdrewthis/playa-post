@@ -1,3 +1,5 @@
+import type { VisibleEdge } from './visible-edge';
+
 /**
  * The disclosure levels `app.visible_people` computes.
  *
@@ -77,14 +79,26 @@ export interface VisiblePerson {
 }
 
 /**
- * The viewer's visible network.
+ * The viewer's visible network: the nodes, and the lines between them.
  *
  * A wrapper rather than a bare array because M5 adds `truncated` and its reason
  * (ADR-0004 decision 2: when `max_depth` or `node_budget` binds, the boundary is
  * stated, never silent), and widening an array into an object later is a change at
- * every call site.
+ * every call site. `edges` is the first thing that wrapper earned.
+ *
+ * ⚠ **One snapshot, one read.** People and edges are answered together rather than by
+ * two procedures, because a client that fetched them separately could hold an edge whose
+ * endpoint is not in the person list it already has — a line to nowhere, appearing only
+ * under a connection change between the two calls, and only on somebody else's device.
  */
 export interface VisibleGraph {
   /** Always includes the viewer, at degree 0. */
   readonly people: readonly VisiblePerson[];
+  /**
+   * Accepted connections between two people in {@link people}.
+   *
+   * Includes the viewer's own edges. Never introduces an identifier absent from
+   * {@link people} — see {@link import('./visible-edge').VisibleEdge}.
+   */
+  readonly edges: readonly VisibleEdge[];
 }

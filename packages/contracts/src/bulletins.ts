@@ -13,11 +13,36 @@ export const BULLETIN_TYPE = {
 /** One of {@link BULLETIN_TYPE}'s values. */
 export type BulletinType = (typeof BULLETIN_TYPE)[keyof typeof BULLETIN_TYPE];
 
-/** `bulletins.create` input. */
+/**
+ * `bulletins.create` input.
+ *
+ * `loc` and `expiresAt` are `?: T | undefined` rather than `?: T`, for the reason
+ * {@link BoardRequest} gives: the server marks them `.optional()`, which accepts an
+ * explicitly-`undefined` value as well as an omitted key.
+ *
+ * There is deliberately **no audience field**. Who can see a bulletin is decided by the
+ * viewer's reachability, in `app.visible_bulletins`, and a per-bulletin audience would
+ * be a second answer to that question — a trust-model change rather than a form field.
+ */
 export interface CreateBulletinRequest {
   readonly type: BulletinType;
   readonly title: string;
   readonly body: string;
+  /**
+   * Free-text place — "7:30 & E", "departing Reno, Aug 24". At most 120 characters
+   * after trimming; a value that trims to nothing is stored as no location at all.
+   *
+   * ⚠ A display string, never searched and never matched on. Do not build a filter,
+   * a map pin, or a "who is near me" affordance from it.
+   */
+  readonly loc?: string | undefined;
+  /**
+   * ISO-8601 moment the bulletin stops being visible. Omit for one that never does.
+   *
+   * Must not already have passed, or the call is refused with
+   * `BULLETIN_EXPIRY_INVALID`. An offset (`-07:00`) is accepted as well as `Z`.
+   */
+  readonly expiresAt?: string | undefined;
 }
 
 /** Input of every procedure that names one bulletin. */
@@ -50,6 +75,17 @@ export interface Bulletin {
   readonly title: string;
   readonly body: string;
   readonly createdAt: string;
+  /** Free-text place. `null` when the bulletin names none. */
+  readonly loc: string | null;
+  /**
+   * ISO-8601, or `null` when the bulletin never expires.
+   *
+   * ⚠ **May already have passed**, unlike {@link VisibleBulletin.expiresAt}: this is the
+   * author's own view, and an expired bulletin stays on their list exactly as an
+   * archived one does. A client rendering `bulletins.listMine` decides for itself how to
+   * mark one; the server does not remove it.
+   */
+  readonly expiresAt: string | null;
   readonly archivedAt: string | null;
   readonly version: number;
 }
@@ -80,6 +116,22 @@ export interface VisibleBulletin {
   readonly title: string;
   readonly body: string;
   readonly createdAt: string;
+  /**
+   * Free-text place. `null` when the bulletin names none.
+   *
+   * `null` rather than an omitted key, deliberately unlike {@link BulletinAuthor}'s
+   * identity fields: those are absent because the disclosure rule withheld them, this
+   * is present and empty. Render no location line for `null`; never substitute one.
+   */
+  readonly loc: string | null;
+  /**
+   * ISO-8601, or `null` when the bulletin never expires.
+   *
+   * ⚠ **Always in the future**: an expired bulletin is not visible, so it never reaches
+   * a board or a `getById`. Safe to render as a countdown; not a value to filter on
+   * client-side, because the server has already done it.
+   */
+  readonly expiresAt: string | null;
   readonly version: number;
   readonly author: BulletinAuthor;
 }

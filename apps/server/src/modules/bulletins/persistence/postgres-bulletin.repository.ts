@@ -43,7 +43,7 @@ export interface PostgresBulletinRepositoryDependencies {
  * {@link VisibleBulletinRow} to be right about only one of.
  */
 const VISIBLE_BULLETIN_COLUMNS = sql`
-  bulletin_id, author_id, type, title, body, created_at, version,
+  bulletin_id, author_id, type, title, body, created_at, loc, expires_at, version,
   author_disclosure, author_display_name, author_handle
 `;
 
@@ -81,6 +81,8 @@ export function createPostgresBulletinRepository(
             type: write.type,
             title: write.title,
             body: write.body,
+            loc: write.loc,
+            expires_at: write.expiresAt,
             created_at: write.createdAt,
           })
           .returningAll()

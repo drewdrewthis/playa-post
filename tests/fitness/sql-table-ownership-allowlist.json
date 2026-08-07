@@ -12,7 +12,16 @@
     "exists to police everyone else against — recorded here, not hardcoded, so a",
     "reviewer sees and approves the grant. See find-sql-table-ownership-violations.ts's",
     "docstring and this lane's test-writing report for the open question this",
-    "allowlist answers provisionally."
+    "allowlist answers provisionally.",
+    "",
+    "The same grant also covers app.visible_edges (visible-edges.sql), which answers",
+    "'which of my visible people know each other' for the graph screen's cluster view.",
+    "It reads app.connections for the connection rows themselves and composes",
+    "app.visible_people for BOTH endpoints — the double join is what keeps an edge from",
+    "ever naming somebody outside the viewer's own authorized set. It deliberately does",
+    "NOT read app.connection_trust or app.users: an edge carries two ids and no weight",
+    "(ADR-0004 decision 6, ADR-0002 B6), and visible-edges-sql-composition.unit.test.ts",
+    "asserts it stays that way. No new table name is granted by adding it."
   ],
   "graph": ["connections", "connection_trust", "users"]
 }

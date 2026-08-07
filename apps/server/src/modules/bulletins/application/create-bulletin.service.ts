@@ -1,5 +1,6 @@
 import type { Bulletin, BulletinType } from '../domain/bulletin';
 import { validateBulletinContent } from '../domain/bulletin-content.policy';
+import { validateBulletinExpiry } from '../domain/bulletin-expiry.policy';
 import type { BulletinRepository } from '../domain/bulletin.repository';
 
 /**
@@ -17,6 +18,16 @@ export interface CreateBulletinCommand {
   readonly type: BulletinType;
   readonly title: string;
   readonly body: string;
+  /**
+   * Free-text place. Absent means the bulletin names none.
+   *
+   * Optional rather than `string | null`, and the difference is who may omit it: this
+   * is the *submitted* value, and a transport that never learned about locations must
+   * still be able to build a valid command.
+   */
+  readonly loc?: string | undefined;
+  /** When it stops being visible. Absent means never. Must not already have passed. */
+  readonly expiresAt?: Date | undefined;
 }
 
 export interface CreateBulletinService {
@@ -33,9 +44,13 @@ export interface CreateBulletinDependencies {
 /**
  * The create-bulletin use case (M2.8).
  *
- * Two steps and no third: validate the content, then hand one atomic write to the
- * repository. The `BulletinCreated` outbox row is written **inside that same
- * transaction** — see {@link BulletinRepository.add} — rather than published from here,
+ * Three steps and no fourth: validate the content, validate the expiry against this
+ * service's own clock, then hand one atomic write to the repository. Both policies run
+ * here rather than at the transport, so `sync.submitMutations`' offline replay reaches
+ * the same rules by running the same use case — a second copy at either boundary is a
+ * second answer for one of the two paths. The `BulletinCreated` outbox row is written
+ * **inside that same transaction** — see {@link BulletinRepository.add} — rather than
+ * published from here,
  * because publishing after a commit is the dual-write bug ADR-0006 exists to prevent
  * and M2-AC6 measures.
  *
@@ -51,14 +66,24 @@ export function createCreateBulletinService(
 
   return {
     async create(command: CreateBulletinCommand): Promise<Bulletin> {
-      const content = validateBulletinContent({ title: command.title, body: command.body });
+      const content = validateBulletinContent({
+        title: command.title,
+        body: command.body,
+        loc: command.loc,
+      });
+      // One clock reading for both, so a bulletin can never be stamped `created_at`
+      // after the moment its expiry was checked against.
+      const createdAt = readClock();
+      const expiresAt = validateBulletinExpiry(command.expiresAt, createdAt);
 
       return dependencies.bulletins.add({
         authorId: command.authorId,
         type: command.type,
         title: content.title,
         body: content.body,
-        createdAt: readClock(),
+        loc: content.loc,
+        expiresAt,
+        createdAt,
       });
     },
   };

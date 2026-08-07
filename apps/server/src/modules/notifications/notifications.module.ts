@@ -3,6 +3,7 @@ import type { DatabaseConnection } from '@playa-post/database';
 import type { VisiblePeopleDirectory } from '../graph/graph.module';
 import { createNotifyMeQueryDirectory } from '../views/views.module';
 
+import { createDismissNotificationService } from './application/dismiss-notification.service';
 import {
   createEvaluateNotifyMeHandler,
   type EvaluateNotifyMeHandler,
@@ -16,6 +17,7 @@ import { createSubscribeToPushService } from './application/subscribe-to-push.se
 import { SELF_DRAINED_EVENT_TYPES } from './domain/notification.events';
 import type { PushTransport } from './domain/push-transport';
 import { createPostgresDeliveredNotificationRepository } from './persistence/postgres-delivered-notification.repository';
+import { createPostgresNotificationDismissalRepository } from './persistence/postgres-notification-dismissal.repository';
 import { createPostgresNotifyMeMatchRepository } from './persistence/postgres-notify-me-match.repository';
 import { createPostgresPushSubscriptionRepository } from './persistence/postgres-push-subscription.repository';
 import {
@@ -107,11 +109,16 @@ export function createNotificationsModule(
   const matches = createPostgresNotifyMeMatchRepository({ database });
   const pushSubscriptions = createPostgresPushSubscriptionRepository({ database });
   const deliveredNotifications = createPostgresDeliveredNotificationRepository({ database });
+  const dismissals = createPostgresNotificationDismissalRepository({ database });
 
   return {
     router: createNotificationsRouter({
       subscribeToPush: createSubscribeToPushService({ pushSubscriptions }),
-      listNotifications: createListNotificationsQuery({ deliveredNotifications }),
+      listNotifications: createListNotificationsQuery({ deliveredNotifications, dismissals }),
+      // The read and the write share both collaborators on purpose: `unread` is the
+      // negation of what `dismiss` writes, so a second store behind either one would be
+      // two answers to one question.
+      dismissNotification: createDismissNotificationService({ deliveredNotifications, dismissals }),
     }),
     evaluateNotifyMe: createEvaluateNotifyMeHandler({
       notifyMeQueries: createNotifyMeQueryDirectory({ database }),

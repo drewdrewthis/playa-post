@@ -24,9 +24,9 @@
 -- can be handed to a session whose search_path means something else, and every
 -- unqualified identifier inside it would change meaning with it.
 --
--- M2 scope: Request bulletins from reachable authors. Tags, location, expiry, the
--- other six types, dismissals and reports are M5 — each arrives as another predicate
--- here rather than as another visibility query somewhere else.
+-- M2 scope: Request bulletins from reachable authors, unarchived and unexpired. Tags,
+-- the other six types, dismissals and reports are M5 — each arrives as another
+-- predicate here rather than as another visibility query somewhere else.
 create or replace function app.visible_bulletins(viewer_id uuid)
 returns table (
   bulletin_id         uuid,
@@ -35,6 +35,8 @@ returns table (
   title               text,
   body                text,
   created_at          timestamptz,
+  loc                 text,
+  expires_at          timestamptz,
   version             int,
   author_disclosure   text,
   author_display_name text,
@@ -62,6 +64,13 @@ as $$
          b.title,
          b.body,
          b.created_at,
+         -- Free-text place, projected as written. Deliberately NOT part of
+         -- search_document: a location that joined the haystack would make bare text a
+         -- way to ask "who is camped at 7:30 & E", which is a people search through the
+         -- text channel — the same thing ADR-0007 deviation 1 keeps author names out
+         -- for.
+         b.loc,
+         b.expires_at,
          b.version,
          -- ADR-0002 §6a, applied at the source. A bulletin can be legitimately
          -- visible while its author is not: visibility follows reachability, identity
@@ -89,4 +98,14 @@ as $$
    -- table directly, so "still mine, archived" and "visible to a viewer" stay two
    -- questions with two answers instead of one answer with an exception (M2-AC12).
    where b.archived_at is null
+     -- Expiry is the same statement about a different clause of the same lifecycle, so
+     -- it is the same kind of predicate in the same place. Putting it in the board's
+     -- compiled filter instead would leave getById, the notification read-time
+     -- re-check, and the moderation actorship check each seeing an expired bulletin —
+     -- three surfaces disagreeing with the board about what is live.
+     --
+     -- `pg_catalog.now()` is the transaction timestamp, which is what keeps this
+     -- function `stable`; unqualified it would resolve against whatever search_path the
+     -- pooler handed the session, and this one has none (ADR-0002:164).
+     and (b.expires_at is null or b.expires_at > pg_catalog.now())
 $$;
