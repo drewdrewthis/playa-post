@@ -24,6 +24,14 @@ interface BoardCardView {
   readonly title: string;
   readonly body: string;
   readonly createdAt: string;
+  /**
+   * Carried, not yet rendered. The card's `◦ {loc} · {author}` meta line is issue #46's
+   * work; this view holds the two fields anyway because the optimistic-archive path
+   * below rebuilds a whole `Bulletin` from a card, and a field this view dropped would
+   * come back as `null` in the offline cache — a silent edit to somebody's own post.
+   */
+  readonly loc: string | null;
+  readonly expiresAt: string | null;
   readonly own: boolean;
   readonly archived: boolean;
   readonly author?: BulletinAuthor;
@@ -82,6 +90,8 @@ export function BoardRoute(): JSX.Element {
           title: card.title,
           body: card.body,
           createdAt: card.createdAt,
+          loc: card.loc,
+          expiresAt: card.expiresAt,
           archivedAt: new Date().toISOString(),
           version: 0,
         },
@@ -100,6 +110,8 @@ export function BoardRoute(): JSX.Element {
       title: item.title,
       body: item.body,
       createdAt: item.createdAt,
+      loc: item.loc,
+      expiresAt: item.expiresAt,
       own: false,
       archived: false,
       author: item.author,
@@ -119,6 +131,8 @@ export function BoardRoute(): JSX.Element {
       title: bulletin.title,
       body: bulletin.body,
       createdAt: bulletin.createdAt,
+      loc: bulletin.loc,
+      expiresAt: bulletin.expiresAt,
       own: true,
       archived: bulletin.archivedAt !== null,
     });
@@ -132,6 +146,8 @@ export function BoardRoute(): JSX.Element {
       title: bulletin.title,
       body: bulletin.body,
       createdAt: bulletin.createdAt,
+      loc: bulletin.loc,
+      expiresAt: bulletin.expiresAt,
       own: true,
       archived: bulletin.archivedAt !== null,
     });

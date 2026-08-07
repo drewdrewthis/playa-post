@@ -21,6 +21,10 @@ export interface VisibleBulletinRow {
   readonly title: string;
   readonly body: string;
   readonly created_at: Date;
+  /** `null` when the bulletin names no place. */
+  readonly loc: string | null;
+  /** `null` when the bulletin never expires; never an elapsed moment (the function filters those). */
+  readonly expires_at: Date | null;
   readonly version: number;
   readonly author_disclosure: string;
   /** `null` for an author below `full` disclosure — the column is not projected. */
@@ -46,6 +50,12 @@ export function toVisibleBulletin(row: VisibleBulletinRow): VisibleBulletin {
     title: row.title,
     body: row.body,
     createdAt: row.created_at,
+    // `null`, not an omission, and deliberately unlike the author's identity fields
+    // below: those are absent because §6a withheld them, whereas these are present and
+    // empty. Collapsing the two into one shape would let a client read "the projection
+    // hid this" and "there is nothing here" as the same fact.
+    loc: row.loc,
+    expiresAt: row.expires_at,
     version: row.version,
     author: {
       userId: row.author_id,

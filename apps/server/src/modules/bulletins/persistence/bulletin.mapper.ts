@@ -26,6 +26,8 @@ export function toBulletin(row: BulletinRow): Bulletin {
     title: row.title,
     body: row.body,
     createdAt: row.created_at,
+    loc: row.loc,
+    expiresAt: row.expires_at,
     archivedAt: row.archived_at,
     version: row.version,
   };

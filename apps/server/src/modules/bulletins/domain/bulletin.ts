@@ -39,6 +39,24 @@ export interface Bulletin {
   readonly title: string;
   readonly body: string;
   readonly createdAt: Date;
+  /**
+   * Free-text place, as the author typed it. `null` when the bulletin names none.
+   *
+   * A display string and never a lookup key: nothing geocodes it, indexes it, or
+   * matches on it. `app.visible_bulletins`' free-text haystack is title and body only,
+   * so a location cannot become a channel for finding *people* by where they camp.
+   */
+  readonly loc: string | null;
+  /**
+   * When this bulletin stops being visible. `null` means it never does.
+   *
+   * ⚠ Enforced in `app.visible_bulletins`, beside `archived_at`, and therefore for
+   * every viewer-scoped read at once. This field is carried on the entity because the
+   * **author** must be able to see what they set — `bulletins.listMine` reads the table
+   * directly and is the one place an already-expired bulletin still surfaces, exactly
+   * as an archived one does (M2-AC12's retention half).
+   */
+  readonly expiresAt: Date | null;
   /** `null` while live. Absence, not a sentinel, is the unarchived state. */
   readonly archivedAt: Date | null;
   /**

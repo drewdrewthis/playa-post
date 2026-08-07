@@ -88,6 +88,38 @@ describe('L3a migration — app.bulletins', () => {
       expect(rows[0]?.is_nullable, 'app.bulletins.archived_at must exist and be nullable').toBe('YES');
     });
 
+    it('has an expires_at column that is nullable — never expiring is the absence of a value', async () => {
+      // Same shape as `archived_at`, and for the same reason: a `default 'infinity'`
+      // or an `is_expired boolean` beside it would be two representations of one fact,
+      // and the second one to be updated would be the one a visibility query read.
+      const { rows } = await database.client.query<{ is_nullable: string; data_type: string }>(
+        `select is_nullable, data_type from information_schema.columns
+          where table_schema = 'app' and table_name = 'bulletins' and column_name = 'expires_at'`,
+      );
+      expect(rows[0], 'app.bulletins.expires_at must exist').toBeDefined();
+      expect(rows[0]?.is_nullable).toBe('YES');
+      expect(rows[0]?.data_type).toMatch(/timestamp with time zone/i);
+    });
+
+    it('has a nullable loc column with no length constraint — the bound is the domain policy', async () => {
+      // A `varchar(120)` or a check constraint would surface an over-long location as a
+      // driver-level 500, losing the stable `BULLETIN_CONTENT_INVALID` code that tells a
+      // client which input to put the message beside.
+      const { rows } = await database.client.query<{
+        is_nullable: string;
+        data_type: string;
+        character_maximum_length: number | null;
+      }>(
+        `select is_nullable, data_type, character_maximum_length
+           from information_schema.columns
+          where table_schema = 'app' and table_name = 'bulletins' and column_name = 'loc'`,
+      );
+      expect(rows[0], 'app.bulletins.loc must exist').toBeDefined();
+      expect(rows[0]?.is_nullable).toBe('YES');
+      expect(rows[0]?.data_type).toBe('text');
+      expect(rows[0]?.character_maximum_length).toBeNull();
+    });
+
     it('has a version column that is not nullable (ADR-0005 conflict handling)', async () => {
       const { rows } = await database.client.query<{
         is_nullable: string;

@@ -55,6 +55,18 @@ export interface VisibleBulletin {
   readonly title: string;
   readonly body: string;
   readonly createdAt: Date;
+  /** Free-text place, as the author typed it. `null` when the bulletin names none. */
+  readonly loc: string | null;
+  /**
+   * When this bulletin stops being visible. `null` means it never does.
+   *
+   * ⚠ Always in the future for a bulletin that reached this read model at all: an
+   * elapsed expiry is filtered inside `app.visible_bulletins`, exactly as `archived_at`
+   * is. It is carried anyway because a client renders "expires in 2 days" from it, and
+   * because a payload that omitted it would leave a card unable to say the one thing
+   * about a bulletin that changes while nobody is touching it.
+   */
+  readonly expiresAt: Date | null;
   /** ADR-0005's version, so an M5 `bulletin.update` has one to send back. */
   readonly version: number;
   readonly author: VisibleBulletinAuthor;

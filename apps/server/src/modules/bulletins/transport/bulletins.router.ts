@@ -19,7 +19,7 @@ import {
   type PresentedBulletin,
   type PresentedVisibleBulletin,
 } from './bulletin.presenter';
-import { createBulletinInput } from './create-bulletin.input';
+import { createBulletinCommandFields, createBulletinInput } from './create-bulletin.input';
 
 /** The application operations this router speaks for. One use case, one procedure. */
 export interface BulletinsRouterDependencies {
@@ -102,9 +102,7 @@ export function createBulletinsRouter(dependencies: BulletinsRouterDependencies)
           presentBulletin(
             await dependencies.createBulletin.create({
               authorId: ctx.actor.userId,
-              type: input.type,
-              title: input.title,
-              body: input.body,
+              ...createBulletinCommandFields(input),
             }),
           ),
         ),

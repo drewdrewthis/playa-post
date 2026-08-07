@@ -58,7 +58,15 @@ export interface AppBulletins {
   author_id: string;
   body: string;
   created_at: Timestamp;
+  /**
+   * NULL means the bulletin never expires. An elapsed expiry is absent from app.visible_bulletins for everyone, author included — exactly as archived_at is; the author keeps it through bulletins.listMine, which reads this table directly.
+   */
+  expires_at: Timestamp | null;
   id: Generated<string>;
+  /**
+   * Free-text place as the author typed it, at most 120 characters (enforced in modules/bulletins/domain/bulletin-content.policy.ts). A display string and never a lookup key: it is deliberately absent from search_document, so bare text can never become a way to ask who is camped where.
+   */
+  loc: string | null;
   search_document: Generated<string | null>;
   title: string;
   type: string;
@@ -122,6 +130,12 @@ export interface AppMutationResults {
   outcome: string;
   request_hash: string;
   result: Json | null;
+}
+
+export interface AppNotificationDismissals {
+  dismissed_at: Timestamp;
+  notification_id: string;
+  recipient_id: string;
 }
 
 export interface AppNotifyMeQueries {
@@ -192,6 +206,7 @@ export interface DB {
   "app.consumer_receipts": AppConsumerReceipts;
   "app.invitations": AppInvitations;
   "app.mutation_results": AppMutationResults;
+  "app.notification_dismissals": AppNotificationDismissals;
   "app.notify_me_queries": AppNotifyMeQueries;
   "app.outbox_events": AppOutboxEvents;
   "app.push_subscriptions": AppPushSubscriptions;

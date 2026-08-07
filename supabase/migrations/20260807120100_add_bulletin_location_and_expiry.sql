@@ -1,3 +1,73 @@
+-- Location and expiry on `app.bulletins`, plus the `app.visible_bulletins` predicate
+-- that makes an elapsed expiry invisible everywhere at once.
+--
+-- Two columns and one function. The columns are what the compose screen collects
+-- ("Where — e.g. 7:30 & E, Center Camp"; 24h / 3 days / 1 week) and what the board card
+-- renders in its `◦ {loc} · {author}` meta line. The function is where expiry becomes a
+-- *visibility* rule rather than a column somebody has to remember to filter on — the
+-- seam `create_bulletins.sql`'s own scope note reserved for it: "Tags, location, expiry
+-- … each arrives as another predicate here rather than as another visibility query
+-- somewhere else."
+
+-- Everything is created, owned, and granted by `app_migrator`, so the catalog comes
+-- out identical whether the runner is a superuser (Testcontainers) or Supabase's
+-- non-superuser `postgres`.
+set role app_migrator;
+
+--------------------------------------------------------------------------------
+-- 1. app.bulletins gains loc + expires_at
+--------------------------------------------------------------------------------
+
+-- ⚠ Both nullable, and both `text`/`timestamptz` with **no check constraint** — the
+-- same decision `title`, `body` and `type` already record on this table. The 120-
+-- character bound on `loc` lives in modules/bulletins/domain/bulletin-content.ts, where
+-- a refusal can carry the stable `BULLETIN_CONTENT_INVALID` code and name the field;
+-- as a constraint it would surface as a driver-level 500 with a message written for a
+-- DBA. The "must be in the future" rule on `expires_at` likewise lives in
+-- bulletin-expiry.policy.ts, and could not be a constraint at all: it is a comparison
+-- against the clock at *write* time, which a row-level check would re-evaluate on every
+-- later UPDATE and start refusing legitimate archives of expired bulletins.
+alter table app.bulletins add column loc text;
+alter table app.bulletins add column expires_at timestamptz;
+
+comment on column app.bulletins.loc is
+  'Free-text place as the author typed it, at most 120 characters (enforced in '
+  'modules/bulletins/domain/bulletin-content.policy.ts). A display string and never a '
+  'lookup key: it is deliberately absent from search_document, so bare text can never '
+  'become a way to ask who is camped where.';
+
+comment on column app.bulletins.expires_at is
+  'NULL means the bulletin never expires. An elapsed expiry is absent from '
+  'app.visible_bulletins for everyone, author included — exactly as archived_at is; '
+  'the author keeps it through bulletins.listMine, which reads this table directly.';
+
+-- No index. The predicate is evaluated over rows app.visible_bulletins has already
+-- narrowed to one viewer's authorized authors, so it filters a handful of rows rather
+-- than scanning the table — an index here would cost every write to buy nothing
+-- measurable. Revisit if the board's plan ever shows a sequential scan of app.bulletins.
+
+--------------------------------------------------------------------------------
+-- 2. app.visible_bulletins, re-installed with loc, expires_at, and the expiry filter
+--------------------------------------------------------------------------------
+
+-- ⚠ `drop` first, not `create or replace`: the return type gains two columns, and
+-- PostgreSQL refuses to replace a set-returning function whose `returns table` shape
+-- changed. Dropping and recreating inside one migration is atomic — no transaction ever
+-- observes the function missing.
+drop function if exists app.visible_bulletins(uuid);
+
+-- ⚠ Everything between this comment and the closing `$$;` is a **byte-identical
+-- copy** of apps/server/src/modules/bulletins/persistence/sql/visible-bulletins.sql,
+-- which is the checked-in source ADR-0004:73-74 requires. A migration cannot read a
+-- file, and migrations are forward-only, so the copy is the price. It is not left to
+-- a reviewer to notice: visible-bulletins-migration.integration.test.ts asserts the
+-- checked-in file appears verbatim in exactly one migration and fails the moment the
+-- two drift — which is also why `create_bulletins.sql`'s now-superseded copy must
+-- never be edited to match this one.
+--
+-- Changing the function again means editing the module file and shipping a NEW
+-- migration carrying the new text. Never edit this one.
+
 -- app.visible_bulletins — the one definition of "which bulletins can this viewer see".
 --
 -- ADR-0004:75-77, ADR-0002 §5 (viewer_id passed explicitly), §6 (one composition
@@ -109,3 +179,9 @@ as $$
      -- pooler handed the session, and this one has none (ADR-0002:164).
      and (b.expires_at is null or b.expires_at > pg_catalog.now())
 $$;
+-- app_rw is the only role that may execute it. Re-granted because the DROP above took
+-- the previous grant with it, and the baseline's default-privilege revokes keep PUBLIC
+-- out of anything `app_migrator` creates in `app` (ADR-0002 §3).
+grant execute on function app.visible_bulletins(uuid) to app_rw;
+
+reset role;

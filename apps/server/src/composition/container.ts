@@ -12,7 +12,10 @@ import type { CreateBulletinService } from '../modules/bulletins/application/cre
 import type { FindVisibleBulletinAuthor } from '../modules/bulletins/application/find-visible-bulletin-author.query';
 import { createBulletinsModule } from '../modules/bulletins/bulletins.module';
 import { presentBulletin } from '../modules/bulletins/transport/bulletin.presenter';
-import { createBulletinInput } from '../modules/bulletins/transport/create-bulletin.input';
+import {
+  createBulletinCommandFields,
+  createBulletinInput,
+} from '../modules/bulletins/transport/create-bulletin.input';
 import { createConnectionsModule } from '../modules/connections/connections.module';
 import { createGraphModule } from '../modules/graph/graph.module';
 import { createIdentityModule } from '../modules/identity/identity.module';
@@ -124,9 +127,10 @@ function mutationHandlers(createBulletin: CreateBulletinService): MutationHandle
               // From the resolved actor, never from the payload (ADR-0002 §5a, B14) —
               // the one line in the offline path where impersonation would live.
               authorId: actorId,
-              type: parsed.data.type,
-              title: parsed.data.title,
-              body: parsed.data.body,
+              // Field-for-field with the tRPC procedure, through the one mapping both
+              // call: a queued bulletin that lost its location or its expiry on the way
+              // back online would be a silent difference between the two paths.
+              ...createBulletinCommandFields(parsed.data),
             }),
           ),
         };
