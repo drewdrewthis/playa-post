@@ -44,7 +44,11 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `pnpm --filter @playa-post/web exec vite --port ${WEB_PORT} --strictPort`,
+    // `--host 127.0.0.1` pins Vite's bind to the exact address `url` below probes.
+    // Without it Vite binds its default `localhost`, which CI runners can resolve to
+    // `::1` only — run 31134162047 logged "VITE ready in 222 ms" yet the 127.0.0.1
+    // readiness probe timed out, which is that mismatch, not a slow start.
+    command: `pnpm --filter @playa-post/web exec vite --host 127.0.0.1 --port ${WEB_PORT} --strictPort`,
     url: `http://127.0.0.1:${WEB_PORT}`,
     reuseExistingServer: !process.env['CI'],
     // 180s, not the 60s default-ish value shipped first: CI run 31133839942 timed out
