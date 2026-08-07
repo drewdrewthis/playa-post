@@ -59,8 +59,12 @@ export default defineConfig({
         display: 'standalone',
         start_url: '/',
         scope: '/',
-        theme_color: '#0b0b0f',
-        background_color: '#0b0b0f',
+        // The light palette's background (`--pp-bg`), because light is the default
+        // theme (issue #43). A manifest colour is fixed at install time and cannot
+        // follow the in-app toggle the way `index.html`'s `theme-color` meta does, so
+        // it tracks the default rather than guessing.
+        theme_color: '#f6efe2',
+        background_color: '#f6efe2',
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],

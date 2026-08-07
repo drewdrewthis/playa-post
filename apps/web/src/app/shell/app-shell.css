@@ -1,182 +1,246 @@
-/* Light theme only (M2 scope). Tokens live in `app/theme/tokens.css`. */
+/*
+ * The shell's own chrome: the header cluster, the scrolling middle, the bottom tab bar
+ * with its compose FAB, the offline strip, and the notifications overlay.
+ *
+ * Tokens live in `app/theme/tokens.css`; the column this all sits inside, and everything
+ * a screen is built from, live in `app/theme/screens.css`.
+ *
+ * ⚠ The comp's vertical paddings include an iOS bezel allowance (60px above the
+ * wordmark, 28px below the tabs) that belongs to `design/ios-frame.jsx`, not to a web
+ * app. Those two are replaced here by a normal spacing step plus `env(safe-area-inset-*)`,
+ * which is the real version of what the bezel was standing in for.
+ */
 
-.app-shell {
-  min-height: 100vh;
+/* Header ------------------------------------------------------------------ */
+
+.app-chrome {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--pp-space-4);
+  padding: calc(var(--pp-space-5) + env(safe-area-inset-top)) var(--pp-space-5) var(--pp-space-2);
+}
+
+.app-chrome__actions {
+  display: flex;
+  gap: var(--pp-space-2);
+  margin-top: var(--pp-space-1);
+}
+
+/** A round 38px control: the notifications bell and the theme toggle. */
+.icon-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 2.375rem;
+  height: 2.375rem;
+  padding: 0;
+  border: 1px solid var(--pp-card-border);
+  border-radius: 50%;
+  background: var(--pp-card);
+  color: var(--pp-ink);
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.icon-button:hover {
+  transform: scale(1.08);
+}
+
+.icon-button__count {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0 3px;
+  border-radius: var(--pp-radius-pill);
+  background: var(--pp-fab-bg);
+  color: var(--pp-fab-fg);
+  font-weight: 700;
+  font-size: 0.625rem;
+  line-height: 1rem;
+  text-align: center;
+}
+
+/* The screen in the middle ------------------------------------------------ */
+
+/*
+ * The only scrolling region. The column itself clips, so the chrome and the tab bar
+ * stay put while a long board moves under them — and `overscroll-behavior` keeps a
+ * flick at the end of that list from scrolling the page behind the app.
+ */
+.app-shell__main {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Bottom tab bar ---------------------------------------------------------- */
+
+.tab-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--pp-space-3) 1.625rem calc(var(--pp-space-4) + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--pp-tab-border);
+  background: var(--pp-tab-bg);
+}
+
+.tab-bar__link {
   display: flex;
   flex-direction: column;
-}
-
-.app-shell__header {
-  display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--pp-space-4);
-  padding: var(--pp-space-3) var(--pp-space-5);
-  background: var(--pp-surface);
-  border-bottom: 1px solid var(--pp-border);
-}
-
-.app-shell__brand {
-  margin: 0;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--pp-accent);
-}
-
-.app-shell__nav {
-  display: flex;
-  gap: var(--pp-space-3);
-}
-
-.app-shell__nav a {
-  color: var(--pp-ink-muted);
+  gap: 2px;
+  width: 3.25rem;
+  padding: var(--pp-space-1) var(--pp-space-2);
+  color: var(--pp-tab-off);
   text-decoration: none;
 }
 
-.app-shell__nav a.active {
-  color: var(--pp-ink);
-  text-decoration: underline;
+/*
+ * Selected state keys off `aria-current`, which the tab already sets for assistive
+ * technology. One source of truth: a tab cannot look active while announcing that it
+ * is not.
+ */
+.tab-bar__link[aria-current='page'] {
+  color: var(--pp-tab-on);
 }
 
-.app-shell__status {
-  margin-left: auto;
+.tab-bar__glyph {
+  font-size: 1.0625rem;
+  line-height: 1;
+}
+
+.tab-bar__label {
+  font-weight: 600;
+  font-size: var(--pp-text-2xs);
+}
+
+/*
+ * The compose button, breaking the tab bar's top edge.
+ *
+ * ⚠ `align-self: flex-start` is what makes the lift deterministic. Under the bar's
+ * `align-items: center` the FAB is centred against whichever item is tallest, so the
+ * comp's -14px measured from a moving baseline and the button ended up *inside* the
+ * bar — 3px below its own top border instead of 2px above it. Anchored to the top of
+ * the line, -14px means -14px.
+ */
+.compose-fab {
   display: flex;
   align-items: center;
-  gap: var(--pp-space-3);
-}
-
-.app-shell__main {
-  flex: 1;
-  padding: var(--pp-space-5);
-}
-
-.app-shell__notice {
-  padding: var(--pp-space-6);
-  color: var(--pp-ink-muted);
-}
-
-/* Screens ---------------------------------------------------------------- */
-
-.screen {
-  max-width: 44rem;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--pp-space-4);
-}
-
-.screen--centred {
-  min-height: 100vh;
   justify-content: center;
-  padding: var(--pp-space-5);
+  flex: none;
+  align-self: flex-start;
+  width: 3.125rem;
+  height: 3.125rem;
+  margin-top: -0.875rem;
+  border-radius: 50%;
+  background: var(--pp-fab-bg);
+  box-shadow: var(--pp-fab-glow);
+  color: var(--pp-fab-fg);
+  font-weight: 300;
+  font-size: 1.6875rem;
+  line-height: 1;
+  text-decoration: none;
+  transition: transform 0.15s ease;
 }
 
-.screen__header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--pp-space-4);
+.compose-fab:hover {
+  transform: scale(1.06);
 }
 
-.screen__actions {
-  margin-left: auto;
-  display: flex;
-  gap: var(--pp-space-2);
-}
+/* Offline queue ----------------------------------------------------------- */
 
-.screen__title {
-  margin: 0;
-  font-size: var(--pp-text-xl);
-}
-
-.screen__lede,
-.screen__notice {
-  margin: 0;
-  color: var(--pp-ink-muted);
-}
-
-/* Controls --------------------------------------------------------------- */
-
-.button {
-  padding: var(--pp-space-2) var(--pp-space-4);
-  border: 1px solid var(--pp-border-strong);
-  border-radius: var(--pp-radius-pill);
-  background: var(--pp-surface);
-  color: var(--pp-ink);
-}
-
-.button--primary {
-  background: var(--pp-accent);
-  border-color: var(--pp-accent);
-  color: var(--pp-accent-contrast);
-}
-
-.button--quiet {
-  border-color: transparent;
-  background: transparent;
-  color: var(--pp-ink-muted);
-}
-
-.button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pp-space-4);
-  align-items: flex-start;
-}
-
-.form__field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pp-space-1);
-  width: 100%;
-}
-
-.form__label {
-  font-size: var(--pp-text-sm);
-  color: var(--pp-ink-muted);
-}
-
-.form__input {
+/*
+ * The comp's offline strip, immediately under the header, carrying the queue state.
+ * One visible affordance per non-`synced` state: they differ by colour *and* by the
+ * label the component renders, because colour alone is not an affordance for everyone.
+ */
+.pending-badge {
+  flex: none;
+  /* A `<span>`, so it needs this to take the vertical margin and flex sizing below. */
+  display: block;
+  margin: var(--pp-space-2) var(--pp-space-5) 0;
   padding: var(--pp-space-2) var(--pp-space-3);
-  border: 1px solid var(--pp-border-strong);
-  border-radius: var(--pp-radius);
-  background: var(--pp-surface);
+  border: 1px dashed var(--pp-warn);
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-warn-bg);
+  color: var(--pp-warn);
+  font-weight: 600;
+  font-size: var(--pp-text-xs);
+  letter-spacing: 0.05em;
 }
 
-.form__input--multiline {
-  resize: vertical;
-}
-
-.form__slider {
-  width: 100%;
-}
-
-.form__error {
-  margin: 0;
+.pending-badge--failed,
+.pending-badge--conflicted {
+  border-color: var(--pp-danger-border);
+  background: transparent;
   color: var(--pp-danger);
 }
 
-.banner {
+.pending-badge--conflicted {
+  font-weight: 700;
+}
+
+/* Notifications ----------------------------------------------------------- */
+
+/*
+ * A takeover of the whole column, tab bar included — `inset: 0` against `.app-column`,
+ * which is the positioned ancestor. It is rendered after the tab bar in the shell so
+ * the stacking order needs no z-index race to win.
+ */
+.notifications {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  background: var(--pp-bg);
+}
+
+.notifications__header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--pp-space-2);
+  padding: calc(var(--pp-space-5) + env(safe-area-inset-top)) var(--pp-space-4) var(--pp-space-3);
+  border-bottom: 1px solid var(--pp-card-border);
+}
+
+.notifications__back {
+  flex: none;
+  padding: var(--pp-space-1) var(--pp-space-2);
+  border: none;
+  background: none;
+  color: var(--pp-ink);
+  font-size: var(--pp-text-xl);
+  line-height: 1;
+}
+
+.notifications__title {
+  flex: 1;
   margin: 0;
-  padding: var(--pp-space-3) var(--pp-space-4);
-  border-radius: var(--pp-radius);
-  background: var(--pp-surface-sunken);
-  border: 1px solid var(--pp-border);
+  font-family: var(--pp-font-display);
+  font-weight: 400;
+  font-size: var(--pp-text-xl);
+  color: var(--pp-ink);
 }
 
-.banner--good {
-  border-color: var(--pp-calm);
+.notifications__body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-3);
+  padding: var(--pp-space-4) var(--pp-space-5) var(--pp-space-6);
 }
 
-/* Graph ------------------------------------------------------------------ */
-
-.person-list,
-.board-list,
 .notifications__list {
   list-style: none;
   margin: 0;
@@ -186,182 +250,14 @@
   gap: var(--pp-space-3);
 }
 
-.person-list__item {
-  display: flex;
-  align-items: center;
-  gap: var(--pp-space-3);
-  padding: var(--pp-space-3) var(--pp-space-4);
-  background: var(--pp-surface);
-  border: 1px solid var(--pp-border);
+.notifications__item {
+  padding: 0.8125rem 0.875rem;
+  border: 1px solid var(--pp-card-border);
   border-radius: var(--pp-radius);
-}
-
-.person-list__link {
-  text-decoration: none;
-  color: inherit;
-}
-
-.person-list__trust {
-  margin-left: auto;
-  font-size: var(--pp-text-sm);
-  color: var(--pp-ink-muted);
-}
-
-.person-identity {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--pp-space-2);
-}
-
-.person-identity__avatar {
-  width: 2rem;
-  height: 2rem;
-  border-radius: var(--pp-radius-pill);
-  object-fit: cover;
-}
-
-.person-identity__handle {
-  color: var(--pp-ink-muted);
-  font-size: var(--pp-text-sm);
-}
-
-/* The private treatment carries no name, no handle, and no derived placeholder. */
-.person-identity--private .person-identity__private-mark {
-  width: 2rem;
-  height: 2rem;
-  border-radius: var(--pp-radius-pill);
-  background: repeating-linear-gradient(
-    45deg,
-    var(--pp-border) 0,
-    var(--pp-border) 4px,
-    var(--pp-surface-sunken) 4px,
-    var(--pp-surface-sunken) 8px
-  );
-}
-
-.person-identity--private .person-identity__private-label {
-  color: var(--pp-ink-muted);
-  font-style: italic;
-}
-
-.person-sheet__trust-value {
-  margin: 0;
-  font-size: var(--pp-text-lg);
-}
-
-/* Board ------------------------------------------------------------------ */
-
-.bulletin-card {
-  padding: var(--pp-space-4);
-  background: var(--pp-surface);
-  border: 1px solid var(--pp-border);
-  border-radius: var(--pp-radius);
-}
-
-.bulletin-card[data-archived='true'] {
-  background: var(--pp-surface-sunken);
-  border-style: dashed;
-}
-
-.bulletin-card__type {
-  margin: 0;
-  font-size: var(--pp-text-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--pp-accent);
-}
-
-.bulletin-card__title {
-  margin: var(--pp-space-1) 0;
-  font-size: var(--pp-text-lg);
-}
-
-.bulletin-card__body {
-  margin: 0 0 var(--pp-space-3);
-}
-
-.bulletin-card__author,
-.bulletin-card__archived {
-  margin: 0 0 var(--pp-space-2);
-  font-size: var(--pp-text-sm);
-  color: var(--pp-ink-muted);
-}
-
-.bulletin-card__actions {
-  display: flex;
-  gap: var(--pp-space-2);
-}
-
-.invite-token {
-  margin: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--pp-space-2);
-  align-items: baseline;
-}
-
-.invite-token__label {
-  font-size: var(--pp-text-sm);
-  color: var(--pp-ink-muted);
-}
-
-.invite-token__value {
-  font-family: var(--pp-font-mono);
-  word-break: break-all;
-}
-
-/* Offline + notifications ------------------------------------------------ */
-
-/*
- * One visible affordance per non-`synced` state. They differ by colour *and* by the
- * label the component renders, because colour alone is not an affordance for everyone.
- */
-.pending-badge {
-  padding: var(--pp-space-1) var(--pp-space-3);
-  border-radius: var(--pp-radius-pill);
-  font-size: var(--pp-text-sm);
-  border: 1px solid var(--pp-border-strong);
-  background: var(--pp-surface-sunken);
-}
-
-.pending-badge--pending {
-  border-color: var(--pp-warn);
-  color: var(--pp-warn);
-}
-
-.pending-badge--inflight {
-  border-color: var(--pp-calm);
-  color: var(--pp-calm);
-}
-
-.pending-badge--failed {
-  border-color: var(--pp-danger);
-  color: var(--pp-danger);
-}
-
-.pending-badge--conflicted {
-  border-color: var(--pp-accent-bright);
-  color: var(--pp-accent-bright);
-  font-weight: 600;
-}
-
-.notifications {
-  position: relative;
-}
-
-.notifications__panel {
-  position: absolute;
-  right: 0;
-  top: calc(100% + var(--pp-space-2));
-  min-width: 16rem;
-  padding: var(--pp-space-3);
-  background: var(--pp-surface);
-  border: 1px solid var(--pp-border);
-  border-radius: var(--pp-radius);
-  z-index: 10;
-}
-
-.notifications__empty {
-  margin: 0;
-  color: var(--pp-ink-muted);
+  background: var(--pp-card);
+  font-family: var(--pp-font-display);
+  font-weight: 400;
+  font-size: var(--pp-text-base);
+  line-height: 1.35;
+  color: var(--pp-ink);
 }

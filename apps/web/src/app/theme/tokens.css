@@ -1,32 +1,85 @@
 /*
- * Light theme only — M2's scope is "Light theme only. No service worker yet."
- * (`m2-lane-briefs.md` §L5). There is deliberately no `prefers-color-scheme` block:
- * a half-built dark theme is worse than none, and `playwright.config.ts` pins
- * `colorScheme: 'light'` so CI and a developer's machine render the same thing.
+ * The design tokens, in two complete sets.
  *
- * Values are read from the settled UX prototype (`design/Playa Post.dc.html`), never
- * copied structurally — the prototype is product evidence, not production code
- * (`docs/engineering/repo-map.md`).
+ * Every colour, shadow, and gradient below is lifted **verbatim** from the settled UX
+ * prototype's `theme(dark)` function (`design/Playa Post.dc.html`). The prototype is
+ * product evidence, not production code (`docs/engineering/repo-map.md`), so its
+ * *values* are copied and its *structure* is not: there it is a JavaScript object read
+ * per render, here it is two custom-property sets the browser resolves.
+ *
+ * Light is `:root` and dark is `[data-theme='dark']` rather than a
+ * `prefers-color-scheme` block, because the theme is an explicit, persisted user choice
+ * (`app/theme/theme-preference.ts`) and not an OS reading — the prototype's toggle
+ * writes `localStorage['playapost-theme']` and this app does the same. `color-scheme` is
+ * declared per theme so the caret, scrollbars, and native form controls follow the
+ * choice instead of being pinned to one of them.
+ *
+ * ⚠ `--pp-bg` and `--pp-fab-bg` are **images** in dark (a radial gradient and a linear
+ * gradient). Always apply them with the `background` shorthand; `background-color:
+ * var(--pp-bg)` silently renders nothing in dark.
  */
 
 :root {
   color-scheme: light;
 
-  --pp-sand: #f6efe2;
-  --pp-surface: #fffdf6;
-  --pp-surface-sunken: #f8f2e4;
-  --pp-ink: #2e2418;
-  --pp-ink-muted: #8a755a;
-  --pp-border: #e0d3b8;
-  --pp-border-strong: #cdbfa6;
-  --pp-accent: #b45336;
-  --pp-accent-bright: #ff6a3d;
-  --pp-accent-contrast: #fffdf6;
-  --pp-warn: #c58a2a;
-  --pp-warn-soft: #ffc466;
-  --pp-danger: #9c5a68;
-  --pp-calm: #5f7d7b;
+  /* Surfaces */
+  --pp-desk: #dcd6c8;
+  --pp-bg: #f6efe2;
+  --pp-bg-solid: #f6efe2;
+  --pp-card: #fffdf6;
+  --pp-card-border: #e3d7bf;
+  --pp-input-bg: #f6efe2;
+  --pp-track: #e0d3b8;
 
+  /* Ink */
+  --pp-ink: #2e2418;
+  --pp-sub: #8a755a;
+  --pp-faint: #a4917a;
+  --pp-accent: #b45336;
+
+  /* Wordmark */
+  --pp-wordmark: #2e2418;
+  --pp-wordmark-glow: none;
+
+  /* Bottom tab bar */
+  --pp-tab-bg: #f6efe2;
+  --pp-tab-border: #e0d3b8;
+  --pp-tab-on: #2e2418;
+  --pp-tab-off: #a4917a;
+
+  /* Compose FAB */
+  --pp-fab-bg: #b45336;
+  --pp-fab-fg: #f6efe2;
+  --pp-fab-glow: 0 4px 10px rgb(180 83 54 / 40%);
+
+  /* Sheets and overlays */
+  --pp-sheet-bg: #fffdf6;
+  --pp-sheet-border: #d8c9ac;
+  --pp-sheet-shadow: 0 18px 40px rgb(46 36 24 / 30%);
+  --pp-scrim: rgb(46 36 24 / 35%);
+
+  /* Chips — the selected/unselected pill pair */
+  --pp-chip-on-bg: #2e2418;
+  --pp-chip-on-fg: #f6efe2;
+  --pp-chip-off-fg: #6d5c44;
+  --pp-chip-off-border: #cdbfa6;
+
+  /* Status */
+  --pp-warn: #a06a10;
+  --pp-warn-bg: rgb(197 138 42 / 12%);
+  --pp-danger: #b45336;
+  --pp-danger-border: #d8a794;
+  --pp-ok: #5a7a44;
+  --pp-ok-bg: rgb(119 116 58 / 14%);
+
+  /*
+   * Per-bulletin-type tint (the prototype's `tintsL`/`tintsD` maps). Only `request`
+   * exists in `BULLETIN_TYPE` today, so only `request` is declared — a token per type
+   * the contract does not have yet would be a palette for a product that is not built.
+   */
+  --pp-tint-request: #b45336;
+
+  /* Spacing */
   --pp-space-1: 0.25rem;
   --pp-space-2: 0.5rem;
   --pp-space-3: 0.75rem;
@@ -34,17 +87,84 @@
   --pp-space-5: 1.5rem;
   --pp-space-6: 2rem;
 
+  /* Radii — the prototype's 8 / 12 / 18px steps, plus the pill */
+  --pp-radius-sm: 0.5rem;
   --pp-radius: 0.75rem;
+  --pp-radius-lg: 1.125rem;
   --pp-radius-pill: 999px;
 
+  /*
+   * Three typefaces, three jobs (issue #52): Instrument Serif for the wordmark,
+   * headings, and card titles; Karla for every label, control, and chip; IBM Plex Mono
+   * for query text and codes — the things a user retypes and therefore has to read
+   * character by character. Self-hosted; see `app/theme/typefaces.ts`.
+   */
+  --pp-font-display: 'Instrument Serif', ui-serif, Georgia, 'Times New Roman', serif;
   --pp-font-body:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-  --pp-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    'Karla', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    sans-serif;
+  --pp-font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
+  /* Type scale, in the prototype's steps */
+  --pp-text-2xs: 0.65625rem;
+  --pp-text-xs: 0.6875rem;
   --pp-text-sm: 0.8125rem;
-  --pp-text-base: 1rem;
-  --pp-text-lg: 1.25rem;
-  --pp-text-xl: 1.75rem;
+  --pp-text-base: 0.9375rem;
+  --pp-text-lg: 1.0625rem;
+  --pp-text-xl: 1.375rem;
+  --pp-text-2xl: 1.5rem;
+  --pp-text-wordmark: 1.875rem;
+
+  /* The width of the prototype's phone content area — the app is one column, always. */
+  --pp-column-width: 27.5rem;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --pp-desk: #0c0712;
+  --pp-bg: radial-gradient(circle at 50% 18%, #251533 0%, #120a1a 72%);
+  --pp-bg-solid: #171021;
+  --pp-card: rgb(255 255 255 / 5%);
+  --pp-card-border: rgb(255 255 255 / 11%);
+  --pp-input-bg: rgb(255 255 255 / 6%);
+  --pp-track: rgb(255 255 255 / 18%);
+
+  --pp-ink: #f4ecff;
+  --pp-sub: #b7a6cc;
+  --pp-faint: #7d6b94;
+  --pp-accent: #ff8a5f;
+
+  --pp-wordmark: #ffe9dc;
+  --pp-wordmark-glow: 0 0 20px rgb(255 106 61 / 55%);
+
+  --pp-tab-bg: rgb(16 9 24 / 94%);
+  --pp-tab-border: rgb(255 255 255 / 8%);
+  --pp-tab-on: #ffe9dc;
+  --pp-tab-off: #5f5378;
+
+  --pp-fab-bg: linear-gradient(135deg, #ff6a3d, #ff7eb6);
+  --pp-fab-fg: #1c0f26;
+  --pp-fab-glow: 0 0 20px rgb(255 106 61 / 45%);
+
+  --pp-sheet-bg: #1e142e;
+  --pp-sheet-border: rgb(255 255 255 / 15%);
+  --pp-sheet-shadow: 0 18px 50px rgb(0 0 0 / 65%);
+  --pp-scrim: rgb(6 3 12 / 60%);
+
+  --pp-chip-on-bg: #ffe9dc;
+  --pp-chip-on-fg: #241533;
+  --pp-chip-off-fg: #b7a6cc;
+  --pp-chip-off-border: rgb(255 255 255 / 18%);
+
+  --pp-warn: #ffc466;
+  --pp-warn-bg: rgb(255 196 102 / 10%);
+  --pp-danger: #ff7eb6;
+  --pp-danger-border: rgb(255 126 182 / 45%);
+  --pp-ok: #56e0c0;
+  --pp-ok-bg: rgb(86 224 192 / 12%);
+
+  --pp-tint-request: #ff7eb6;
 }
 
 *,
@@ -55,15 +175,19 @@
 
 body {
   margin: 0;
-  background: var(--pp-sand);
+
+  /* The surround, so an overscroll bounce shows the desk rather than white. */
+  background: var(--pp-desk);
   color: var(--pp-ink);
   font-family: var(--pp-font-body);
   font-size: var(--pp-text-base);
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
 button {
   font: inherit;
+  color: inherit;
   cursor: pointer;
 }
 

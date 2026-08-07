@@ -57,7 +57,7 @@ export function ComposeBulletinRoute(): JSX.Element {
         <label className="form__field">
           <span className="form__label">Type</span>
           <select
-            className="form__input"
+            className="form__input form__input--pill"
             data-testid="compose-bulletin-type-select"
             aria-label="Type"
             name="type"
@@ -75,7 +75,7 @@ export function ComposeBulletinRoute(): JSX.Element {
         <label className="form__field">
           <span className="form__label">Title</span>
           <input
-            className="form__input"
+            className="form__input form__input--prose"
             data-testid="compose-bulletin-title-input"
             name="title"
             required
@@ -87,7 +87,7 @@ export function ComposeBulletinRoute(): JSX.Element {
         <label className="form__field">
           <span className="form__label">Body</span>
           <textarea
-            className="form__input form__input--multiline"
+            className="form__input form__input--prose form__input--multiline"
             data-testid="compose-bulletin-body-input"
             name="body"
             required

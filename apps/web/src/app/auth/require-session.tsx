@@ -32,6 +32,25 @@ const SIGN_IN_PATH = '/signin';
  * of bouncing to `/signin` the moment the network drops — a dropped connection is not
  * an authorization answer.
  */
+/**
+ * A one-line status where a whole screen would otherwise be.
+ *
+ * Framed like every other screen rather than left as a bare paragraph: these three
+ * states (restoring, offline, loading) are the first thing a user sees on a cold or bad
+ * start, and unstyled text on a white page reads as a crash rather than as a wait.
+ */
+function SessionNotice({ children }: { readonly children: ReactNode }): JSX.Element {
+  return (
+    <div className="app-frame">
+      <main className="app-column">
+        <div className="screen screen--fill screen--centred">
+          <p className="screen__notice">{children}</p>
+        </div>
+      </main>
+    </div>
+  );
+}
+
 export function RequireSession({ children }: { readonly children: ReactNode }): JSX.Element {
   const { status, clearRejectedSession } = useSession();
   const api = useApi();
@@ -52,7 +71,7 @@ export function RequireSession({ children }: { readonly children: ReactNode }): 
   }, [rejected, clearRejectedSession]);
 
   if (status === 'loading') {
-    return <p className="app-shell__notice">Restoring your session…</p>;
+    return <SessionNotice>Restoring your session…</SessionNotice>;
   }
 
   if (status === 'anonymous') {
@@ -77,7 +96,7 @@ export function RequireSession({ children }: { readonly children: ReactNode }): 
 
     if (code === null) {
       // Not the server refusing — a transport failure. Say so; do not sign anyone out.
-      return <p className="app-shell__notice">You are offline. Reconnect to load this view.</p>;
+      return <SessionNotice>You are offline. Reconnect to load this view.</SessionNotice>;
     }
   }
 
@@ -85,5 +104,5 @@ export function RequireSession({ children }: { readonly children: ReactNode }): 
     return <>{children}</>;
   }
 
-  return <p className="app-shell__notice">Loading…</p>;
+  return <SessionNotice>Loading…</SessionNotice>;
 }

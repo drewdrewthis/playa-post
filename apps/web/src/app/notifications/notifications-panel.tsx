@@ -1,50 +1,51 @@
-import { useQuery } from '@tanstack/react-query';
-import { useState, type JSX } from 'react';
+import type { JSX } from 'react';
 
-import { useApi } from '../api/api-provider';
+import { useGroupedNotifications } from './notifications-query';
 
 /**
- * The notifications bell and its panel.
+ * Notifications, as the comp draws them: a full takeover of the column rather than a
+ * dropdown.
  *
- * Reads `notifications.list` — the caller's own grouped Notify Me notifications,
- * newest first — only while the panel is open, and keeps polling while it stays open:
- * the grouping-window flush (ADR-0006) delivers on the server's schedule, not the
- * client's, so a panel opened moments after a matching bulletin would otherwise show
- * "Nothing new" until a remount.
+ * A dropdown puts a scrolling list inside a 38px button's shadow on a 390px-wide phone.
+ * The comp's answer is a screen with its own back chevron, and it is the right one —
+ * these items are things to read and act on, not a menu.
+ *
+ * Rendered by the shell as a sibling of the tab bar, so `inset: 0` resolves against the
+ * app column and the overlay covers the tabs too.
  */
-export function NotificationsPanel(): JSX.Element {
-  const api = useApi();
-  const [open, setOpen] = useState(false);
-
-  const notifications = useQuery({
-    queryKey: ['notifications', 'list'],
-    queryFn: () => api.query('notifications.list', undefined),
-    enabled: open,
-    refetchInterval: open ? 1000 : false,
-  });
-
-  const items = notifications.data ?? [];
+export function NotificationsPanel({ onClose }: { readonly onClose: () => void }): JSX.Element {
+  const notifications = useGroupedNotifications(true);
 
   return (
-    <div className="notifications">
-      <button
-        className="button button--quiet"
-        data-testid="notifications-bell-button"
-        type="button"
-        aria-expanded={open}
-        aria-label="Notifications"
-        onClick={() => setOpen((previous) => !previous)}
-      >
-        Notifications
-      </button>
+    <section
+      className="notifications"
+      data-testid="notifications-panel"
+      role="region"
+      aria-label="Notifications"
+    >
+      <header className="notifications__header">
+        <button
+          className="notifications__back"
+          type="button"
+          aria-label="Close notifications"
+          onClick={onClose}
+        >
+          <span aria-hidden="true">‹</span>
+        </button>
+        <h2 className="notifications__title">Notifications</h2>
+      </header>
 
-      {open ? (
-        <div className="notifications__panel" data-testid="notifications-panel" role="region">
-          {items.length === 0 ? (
-            <p className="notifications__empty">Nothing new.</p>
-          ) : (
+      <div className="notifications__body">
+        {notifications.length === 0 ? (
+          <p className="screen__empty">All quiet. The dust settles.</p>
+        ) : (
+          <>
+            <p className="screen__aside">
+              Everything that landed on your board or changed your graph.
+            </p>
+
             <ul className="notifications__list">
-              {items.map((notification) => (
+              {notifications.map((notification) => (
                 <li
                   key={notification.notificationId}
                   className="notifications__item"
@@ -56,9 +57,9 @@ export function NotificationsPanel(): JSX.Element {
                 </li>
               ))}
             </ul>
-          )}
-        </div>
-      ) : null}
-    </div>
+          </>
+        )}
+      </div>
+    </section>
   );
 }
