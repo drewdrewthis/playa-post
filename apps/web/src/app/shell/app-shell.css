@@ -155,6 +155,8 @@
  */
 .pending-badge {
   flex: none;
+  /* A `<span>`, so it needs this to take the vertical margin and flex sizing below. */
+  display: block;
   margin: var(--pp-space-2) var(--pp-space-5) 0;
   padding: var(--pp-space-2) var(--pp-space-3);
   border: 1px dashed var(--pp-warn);

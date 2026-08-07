@@ -370,6 +370,14 @@
   color: var(--pp-ink);
 }
 
+/*
+ * A person's name *is* the heading on their own sheet, so it takes the heading's type
+ * rather than the 13px label treatment it gets in a list row.
+ */
+.screen__title .person-identity__name {
+  font: inherit;
+}
+
 .person-identity__handle {
   font-weight: 500;
   font-size: var(--pp-text-xs);

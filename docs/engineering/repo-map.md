@@ -39,6 +39,11 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  bulletins,views,notifications,moderation,sync}/{api,components,hooks,model,routes,
                  state,tests}. Shell/router/providers/auth/api client/offline queue in
                  src/app/{routes,auth,api,offline,shell} (the M2 frontend). Shared UI in src/shared/.
+                 src/app/theme/ is the design system: tokens.css (two token sets, light on :root and
+                 dark on [data-theme='dark']), screens.css (the column and every shared screen
+                 element), typefaces.ts (the self-hosted font imports, which double as the service
+                 worker's precache budget), and the theme provider/toggle — ADR-0015. Values come
+                 from design/Playa Post.dc.html, which is product evidence and never imported.
 apps/server/     The modular monolith.
   composition/   The ONLY place that knows about the object graph, and the only place that reads
                  process.env (ADR-0003). config.ts · container.ts · request-scope.ts ·
