@@ -21,7 +21,7 @@ import {
   createModerationModule,
 } from '../modules/moderation/moderation.module';
 import type { SendGroupedPushHandler } from '../modules/notifications/application/send-grouped-push.handler';
-import { isPushDeliveryConfigured } from '../modules/notifications/domain/push-transport';
+import { isPushDeliveryConfigured, type PushTransport } from '../modules/notifications/domain/push-transport';
 import { unconfiguredPushTransport } from '../modules/notifications/infrastructure/unconfigured-push.transport';
 import { createNotificationsModule } from '../modules/notifications/notifications.module';
 import type {
@@ -232,6 +232,13 @@ export interface AppContainer {
  * @param configuration - Already validated by `loadServerConfiguration`. This function
  *   never reads `process.env` — `composition/config.ts` is the only place that may.
  *
+ * @param overrides - Composition-layer injection seam (issue #31, option 2). Today it
+ *   carries exactly one thing: a `PushTransport` for a harness that needs the flush to
+ *   be schedulable — the e2e's recording transport in `tests/e2e/global-setup.ts` is
+ *   the one caller. Absent, the wiring is byte-identical to before the seam existed:
+ *   `unconfiguredPushTransport`, so `notificationFlush` stays `null` until a real
+ *   VAPID-configured adapter replaces that default here.
+ *
  * @example
  * ```ts
  * const container = buildAppContainer(loadServerConfiguration());
@@ -242,7 +249,10 @@ export interface AppContainer {
  * }
  * ```
  */
-export function buildAppContainer(configuration: Configuration): AppContainer {
+export function buildAppContainer(
+  configuration: Configuration,
+  overrides?: { readonly pushTransport?: PushTransport },
+): AppContainer {
   const logger = createLogger({
     level: configuration.logLevel,
     name: 'playa-post-server',
@@ -295,7 +305,7 @@ export function buildAppContainer(configuration: Configuration): AppContainer {
   // ⚠ Refuses every dispatch, on purpose. M2 configures no VAPID key pair, and a
   // silently-dropping transport would mark windows delivered while nobody received
   // anything — see the adapter's own docstring for what replacing it costs.
-  const pushTransport = unconfiguredPushTransport;
+  const pushTransport = overrides?.pushTransport ?? unconfiguredPushTransport;
   const notifications = createNotificationsModule({
     database,
     visiblePeople: graph.visiblePeople,

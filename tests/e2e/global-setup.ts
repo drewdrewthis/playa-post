@@ -8,10 +8,21 @@ import type { Configuration } from '../../apps/server/src/composition/config';
 import { buildAppContainer, type AppContainer } from '../../apps/server/src/composition/container';
 import { buildRequestScope } from '../../apps/server/src/composition/request-scope';
 import { createHttpServer } from '../../apps/server/src/entrypoints/http/http-server';
+import { startNotificationFlushPoller } from '../../apps/server/src/entrypoints/notification-flush/start-notification-flush-poller';
+import { startOutboxDrainerPoller } from '../../apps/server/src/entrypoints/outbox-drainer/start-outbox-drainer-poller';
 import { createCallerFactory } from '../../apps/server/src/shared/trpc/trpc';
 
 import { API_PORT } from './support/e2e-ports';
 import { startMockSupabaseJwtIssuer, type MockSupabaseJwtIssuer } from './support/mock-supabase-jwt-issuer';
+import { startMockWebPushTransport } from './support/mock-web-push-transport';
+
+/**
+ * How often the e2e server's grouping-window flush polls. Production's poller runs
+ * every 10s; here it is 1s so step 9's wait is dominated by the 60-second grouping
+ * window itself (M2-AC7, a domain constant the harness must not shorten), not by
+ * poll latency stacked on top of it.
+ */
+const E2E_FLUSH_INTERVAL_MS = 1_000;
 
 /**
  * Boots the real substrate `vertical-slice-e2e.spec.ts` drives the frontend against:
@@ -39,13 +50,15 @@ import { startMockSupabaseJwtIssuer, type MockSupabaseJwtIssuer } from './suppor
  * that drifts: the router this e2e drives would stop being the router production
  * serves. When a lane mounts a ninth module, this file needs no edit.
  *
- * ⚠ **No `notifications` reader exists on the router.** `modules/notifications` has a
- * grouped-push *writer* (`sendGroupedPush`, driven by the flush scheduler) and no
- * procedure that returns a viewer's notifications, so step 9 of the eleven-step flow
- * has no data source a browser can render. `startMockWebPushTransport` is unused for
- * the same reason: `buildAppContainer` hardcodes `unconfiguredPushTransport`, so there
- * is no seam to hand a recording transport to either. Both are cross-lane gaps, stated
- * in the L5 PR body rather than papered over here.
+ * **Step 9's environment is completed here, in three moves.** (a) The mock web-push
+ * transport is injected through `buildAppContainer`'s composition-layer override seam
+ * (issue #31, option 2), which is what makes `container.notificationFlush` non-null.
+ * (b) User B is seeded with a Notify Me query (`type:request`) through the real
+ * `views.notifyMe.update` procedure, so step 7's Request bulletin produces a
+ * `NotifyMeMatched` row. (c) The same two scheduled loops production's `main.ts`
+ * starts — the outbox drainer (which runs `EvaluateNotifyMeHandler`) and the
+ * grouping-window flush — are started here on a 1-second interval, so the elapsed
+ * window is actually flushed and `notifications.list` has receipts to read.
  */
 export default async function globalSetup(_config: FullConfig): Promise<() => Promise<void>> {
   const testDatabase: PostgresTestDatabase = await startPostgresTestDatabase();
@@ -54,6 +67,7 @@ export default async function globalSetup(_config: FullConfig): Promise<() => Pr
   );
 
   const jwtIssuer: MockSupabaseJwtIssuer = await startMockSupabaseJwtIssuer();
+  const webPush = await startMockWebPushTransport();
 
   const configuration: Configuration = {
     nodeEnv: 'test',
@@ -68,12 +82,39 @@ export default async function globalSetup(_config: FullConfig): Promise<() => Pr
     supabaseUrl: jwtIssuer.baseUrl,
   };
 
-  const container: AppContainer = buildAppContainer(configuration);
+  const container: AppContainer = buildAppContainer(configuration, {
+    pushTransport: webPush.transport,
+  });
   const httpServer = createHttpServer(container);
   await httpServer.listen({ host: configuration.host, port: configuration.port });
 
   const userA = await onboard(container, jwtIssuer, 'e2e_user_a', 'User A');
   const userB = await onboard(container, jwtIssuer, 'e2e_user_b', 'User B');
+
+  // Step 9's precondition: without a saved query, `EvaluateNotifyMeHandler` matches
+  // nothing and the notifications panel is legitimately empty. `type:request` matches
+  // the Request bulletin step 7 creates. Seeded through the real procedure, like
+  // onboarding above, so the row is exactly what a signed-in User B would have saved.
+  await callerFor(container, userB.accessToken).views.notifyMe.update({
+    sourceText: 'type:request',
+  });
+
+  if (container.notificationFlush === null) {
+    throw new Error(
+      'global-setup.ts: notificationFlush is null despite the injected mock transport — the container seam regressed',
+    );
+  }
+  const flushPoller = startNotificationFlushPoller({
+    flusher: container.notificationFlush,
+    intervalMs: E2E_FLUSH_INTERVAL_MS,
+  });
+  // The other scheduled loop `main.ts` starts, for the same reason: without the
+  // drainer, `BulletinCreated` is never consumed, `EvaluateNotifyMeHandler` never
+  // writes a `NotifyMeMatched` row, and the flush above has nothing to deliver.
+  const drainerPoller = startOutboxDrainerPoller({
+    drainer: container.outboxDrainer,
+    intervalMs: E2E_FLUSH_INTERVAL_MS,
+  });
 
   process.env['E2E_API_BASE_URL'] = `http://127.0.0.1:${API_PORT}`;
   process.env['E2E_USER_A_ACCESS_TOKEN'] = userA.accessToken;
@@ -82,9 +123,14 @@ export default async function globalSetup(_config: FullConfig): Promise<() => Pr
   process.env['E2E_USER_B_HANDLE'] = userB.handle;
 
   return async function globalTeardown(): Promise<void> {
+    // Pollers first: `stop()` waits for any in-flight round, which writes through the
+    // pool `container.dispose()` destroys.
+    await drainerPoller.stop();
+    await flushPoller.stop();
     await httpServer.close();
     await container.dispose();
     await jwtIssuer.stop();
+    await webPush.stop();
     await testDatabase.stop();
   };
 }
@@ -113,13 +159,17 @@ async function onboard(
 ): Promise<OnboardedTestUser> {
   const authUserId = randomUUID();
   const accessToken = await jwtIssuer.mintAccessToken(authUserId);
-  const caller = createCallerFactory(container.router)(
-    buildRequestScope(container, { authorizationHeader: `Bearer ${accessToken}` }),
-  );
 
-  await caller.identity.completeOnboarding({ handle, displayName });
+  await callerFor(container, accessToken).identity.completeOnboarding({ handle, displayName });
 
   return { authUserId, handle, accessToken };
+}
+
+/** A server-side tRPC caller acting as the bearer of `accessToken`. */
+function callerFor(container: AppContainer, accessToken: string) {
+  return createCallerFactory(container.router)(
+    buildRequestScope(container, { authorizationHeader: `Bearer ${accessToken}` }),
+  );
 }
 
 function withRole(connectionString: string, username: string, password: string): string {

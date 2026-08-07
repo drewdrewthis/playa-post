@@ -20,6 +20,11 @@ import { API_PORT, WEB_PORT } from './tests/e2e/support/e2e-ports';
  */
 export default defineConfig({
   testDir: './tests/e2e',
+  // The eleven-step test legitimately spends ~60-75s inside step 9 waiting out the
+  // 60-second notification grouping window (M2-AC7 — a domain constant the harness
+  // must not shorten), so Playwright's 30s default would fail a correct run. 180s
+  // covers that window plus the other ten steps with margin.
+  timeout: 180_000,
   fullyParallel: false,
   forbidOnly: Boolean(process.env['CI']),
   retries: 0,

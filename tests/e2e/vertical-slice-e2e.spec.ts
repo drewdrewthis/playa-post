@@ -5,10 +5,10 @@ import { expect, test, type Page } from '@playwright/test';
  * eleven named steps" (M2-AC1). The only browser-driven test in M2
  * (`m2-lane-briefs.md` §"What `@e2e` means in a lane"). Two browser contexts, eleven
  * named `test.step()`s matching the feature table verbatim, real backend
- * (`tests/e2e/global-setup.ts`), real Postgres, real tRPC router. The only mocked
- * boundary this run touches is the Supabase Auth JWT issuer (see
- * `tests/e2e/support/mock-supabase-jwt-issuer.ts`) — Web Push is not yet exercised
- * because `modules/notifications` has not merged (see step 9's note below).
+ * (`tests/e2e/global-setup.ts`), real Postgres, real tRPC router. The two mocked
+ * boundaries are the ones the lane brief allows: the Supabase Auth JWT issuer
+ * (`tests/e2e/support/mock-supabase-jwt-issuer.ts`) and the Web Push delivery
+ * endpoint (`tests/e2e/support/mock-web-push-transport.ts`).
  *
  * ---
  *
@@ -157,15 +157,15 @@ test.describe('The M2 vertical slice, end to end (vertical-slice-e2e.feature, M2
         await expect(pageB.getByTestId(`board-bulletin-card-${bulletinId}`)).toBeVisible();
       });
 
-      // `modules/notifications` (L3b-notify) has not merged into this branch's base —
-      // `git log` shows L1, L2, L3a, and L3b-infra only. This step therefore has no
-      // Notify Me query, no push subscription table, and no notification UI to drive
-      // yet; it fails the moment the coder reaches it, for that reason, until
-      // L3b-notify lands. See `tests/e2e/support/mock-web-push-transport.ts`'s doc
-      // comment for the mock this step will need once it does.
       await test.step('9. Notify Me produces a grouped notification for a matching viewer', async () => {
         await pageB.getByTestId('notifications-bell-button').click();
-        await expect(pageB.getByTestId('notification-grouped-item')).toBeVisible();
+        // 90s, not the default: the 60-second grouping window (M2-AC7, a domain
+        // constant this harness must not shorten) has to fully elapse after step 7's
+        // bulletin before the flush may deliver, so the item appears ~60-75s after
+        // step 7. 90s covers that plus the harness's 1s flush poll and drainer lag.
+        await expect(pageB.getByTestId('notification-grouped-item')).toBeVisible({
+          timeout: 90_000,
+        });
       });
 
       await test.step('10. User B dismisses or privately reports the bulletin', async () => {
@@ -193,6 +193,16 @@ test.describe('The M2 vertical slice, end to end (vertical-slice-e2e.feature, M2
           );
         },
       );
+
+      // Not a twelfth step and not an assertion: when the runner asks for it (a local
+      // evidence run, never CI), capture the board as User A sees it after the full
+      // flow, as the PR's visual proof. Guarded by an env var so a normal run writes
+      // nothing into the repo.
+      const screenshotPath = process.env['E2E_BOARD_SCREENSHOT_PATH'];
+      if (screenshotPath !== undefined && screenshotPath !== '') {
+        await pageA.goto('/board');
+        await pageA.screenshot({ path: screenshotPath, fullPage: true });
+      }
     } finally {
       await contextA.close();
       await contextB.close();
