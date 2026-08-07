@@ -1,28 +1,29 @@
+import { useQuery } from '@tanstack/react-query';
 import { useState, type JSX } from 'react';
 
-import type { GroupedNotification } from '@playa-post/contracts';
+import { useApi } from '../api/api-provider';
 
 /**
  * The notifications bell and its panel.
  *
- * ⚠ **M2 ships the surface with no source behind it, and that is stated rather than
- * faked.** `modules/notifications` has a grouped-push *writer* (`sendGroupedPush`,
- * driven by the flush scheduler) and **no reader**: there is no procedure on the
- * router that returns a viewer's notifications, so `PlayaPostApi` has no key to call
- * and this panel has nothing to render. The component takes its items as a prop so
- * that the read procedure L3b-notify still owes plugs in at one call site — see the L5
- * PR body's "step 9" note for the defect this is waiting on.
- *
- * Deriving the list client-side instead — "recent board items", say — would render a
- * `notification-grouped-item` that has nothing to do with a Notify Me query, and a
- * green assertion over the wrong thing is worse than a red one over the right thing.
+ * Reads `notifications.list` — the caller's own grouped Notify Me notifications,
+ * newest first — only while the panel is open, and keeps polling while it stays open:
+ * the grouping-window flush (ADR-0006) delivers on the server's schedule, not the
+ * client's, so a panel opened moments after a matching bulletin would otherwise show
+ * "Nothing new" until a remount.
  */
-export function NotificationsPanel({
-  notifications = [],
-}: {
-  readonly notifications?: readonly GroupedNotification[];
-}): JSX.Element {
+export function NotificationsPanel(): JSX.Element {
+  const api = useApi();
   const [open, setOpen] = useState(false);
+
+  const notifications = useQuery({
+    queryKey: ['notifications', 'list'],
+    queryFn: () => api.query('notifications.list', undefined),
+    enabled: open,
+    refetchInterval: open ? 1000 : false,
+  });
+
+  const items = notifications.data ?? [];
 
   return (
     <div className="notifications">
@@ -39,17 +40,19 @@ export function NotificationsPanel({
 
       {open ? (
         <div className="notifications__panel" data-testid="notifications-panel" role="region">
-          {notifications.length === 0 ? (
+          {items.length === 0 ? (
             <p className="notifications__empty">Nothing new.</p>
           ) : (
             <ul className="notifications__list">
-              {notifications.map((notification) => (
+              {items.map((notification) => (
                 <li
-                  key={notification.bulletinIds.join(',')}
+                  key={notification.notificationId}
                   className="notifications__item"
                   data-testid="notification-grouped-item"
                 >
-                  {notification.message}
+                  {notification.bulletinIds.length === 1
+                    ? 'A new bulletin matches your Notify Me query'
+                    : `${notification.bulletinIds.length} new bulletins match your Notify Me query`}
                 </li>
               ))}
             </ul>

@@ -13,18 +13,16 @@ export interface SubscribeToPushRequest {
 }
 
 /**
- * One grouped Notify Me notification, as a client renders it.
+ * One grouped Notify Me notification — `notifications.list` output, one element.
  *
- * ⚠ **Not on the wire in M2, and deliberately not a key of `PlayaPostApi`.** The
- * server has a grouped-push *writer* (`sendGroupedPush`) and no reader: there is no
- * procedure that returns a viewer's notifications, so this type describes the shape a
- * notifications panel renders and nothing currently produces one over HTTP. It is
- * declared here rather than inside `apps/web` so that the read procedure L3b-notify
- * still owes can be added as one `PlayaPostApi` key without moving the type — see the
- * L5 PR body's "step 9" note.
+ * The caller is the recipient (`notifications.list` takes no input; ADR-0002 §5a), so
+ * no recipient identifier rides along. `occurredAt` is ISO-8601, matching every other
+ * timestamp this API serves. No author name, handle, avatar, or bulletin content —
+ * only the ids a client may then resolve through `bulletins.getById`, which applies
+ * the visibility policy (M2-AC5).
  */
 export interface GroupedNotification {
-  readonly recipientId: string;
+  readonly notificationId: string;
+  readonly occurredAt: string;
   readonly bulletinIds: readonly string[];
-  readonly message: string;
 }
