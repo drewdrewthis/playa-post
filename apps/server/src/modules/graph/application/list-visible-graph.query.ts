@@ -1,7 +1,8 @@
 import type { ViewerId } from '../../../shared/auth/viewer-id';
 
+import type { VisibleEdgesRepository } from './visible-edges.repository';
 import type { VisiblePeopleRepository } from './visible-people.repository';
-import type { VisibleGraph } from './visible-person';
+import type { VisibleGraph, VisiblePerson } from './visible-person';
 
 /**
  * What listing the graph is given.
@@ -47,25 +48,40 @@ export interface VisiblePeopleDirectory {
   /**
    * Everyone this person is currently authorized to see.
    *
+   * ⚠ **People, and deliberately not a {@link VisibleGraph}.** The graph read model now
+   * also carries edges, which this caller has no use for: it asks "is this bulletin's
+   * author still reachable by this recipient" and nothing else. Returning the wrapper
+   * would make every delivery-time re-check pay for a second query on a cron path, and
+   * would leave a field there for a future edit to start reading — at which point a
+   * notification decision would depend on who knows whom.
+   *
    * @param userId - An `app.users.id` read from stored state. **Never** a value that
    *   arrived in a request payload.
    */
-  listFor(userId: string): Promise<VisibleGraph>;
+  listFor(userId: string): Promise<readonly VisiblePerson[]>;
 }
 
 /** Collaborators, injected rather than resolved (addendum §12, ADR-0003). */
 export interface ListVisibleGraphDependencies {
   readonly visiblePeople: VisiblePeopleRepository;
+  readonly visibleEdges: VisibleEdgesRepository;
 }
 
 /**
  * The graph read (M2.7) — ADR-0004 decision 7's `ListVisibleGraphQuery`.
  *
- * **Thin on purpose.** Every visibility rule lives in `app.visible_people`: who is
- * reachable, what each person's disclosure level is, which identity fields survive it,
- * and whose trust is attached. Re-deriving any of that here would be the second
- * definition of "who can this viewer reach" that ADR-0002 §6 exists to forbid — and
- * the one this lane's own `sql-table-ownership` rule was added to catch.
+ * **Thin on purpose.** Every visibility rule lives in `app.visible_people` and
+ * `app.visible_edges`: who is reachable, what each person's disclosure level is, which
+ * identity fields survive it, whose trust is attached, and which pairs may be joined by
+ * a line. Re-deriving any of that here would be the second definition of "who can this
+ * viewer reach" that ADR-0002 §6 exists to forbid — and the one this lane's own
+ * `sql-table-ownership` rule was added to catch.
+ *
+ * **Two statements, issued concurrently, and neither narrows the other.** The edge
+ * function composes `app.visible_people` itself, so it is already constrained to the
+ * same authorized set rather than to whatever this function happened to read — which is
+ * what makes running them in parallel safe: an edge cannot arrive for a person the
+ * people query would have excluded, even under a connection change between the two.
  *
  * `max_depth` and `node_budget` are left at the function's defaults (4 and 1500).
  * They are operational levers rather than product rules (ADR-0004 decision 2), so
@@ -77,11 +93,16 @@ export function createListVisibleGraphQuery(
 ): ListVisibleGraphQuery & VisiblePeopleDirectory {
   return {
     async list(command: ListVisibleGraphCommand): Promise<VisibleGraph> {
-      return { people: await dependencies.visiblePeople.findVisiblePeople(command.viewerId) };
+      const [people, edges] = await Promise.all([
+        dependencies.visiblePeople.findVisiblePeople(command.viewerId),
+        dependencies.visibleEdges.findVisibleEdges(command.viewerId),
+      ]);
+
+      return { people, edges };
     },
 
-    async listFor(userId: string): Promise<VisibleGraph> {
-      return { people: await dependencies.visiblePeople.findVisiblePeopleFor(userId) };
+    async listFor(userId: string): Promise<readonly VisiblePerson[]> {
+      return dependencies.visiblePeople.findVisiblePeopleFor(userId);
     },
   };
 }

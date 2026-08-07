@@ -26,6 +26,7 @@ import { createIdentityModule } from '../../../identity/identity.module';
 // None of these exist yet — legible failure at this seam until the coder writes them.
 import { createListVisibleGraphQuery } from '../../application/list-visible-graph.query';
 import { createGraphModule, type GraphModule } from '../../graph.module';
+import { createPostgresVisibleEdgesRepository } from '../../persistence/postgres-visible-edges.repository';
 import { createPostgresVisiblePeopleRepository } from '../../persistence/postgres-visible-people.repository';
 
 /**
@@ -134,7 +135,8 @@ describe('graph visibility (graph-visibility.feature, M2-AC1/AC5)', () => {
       await seedAcceptedConnection(userA.userId, userB.userId);
 
       const visiblePeople = createPostgresVisiblePeopleRepository({ database });
-      const listVisibleGraph = createListVisibleGraphQuery({ visiblePeople });
+      const visibleEdges = createPostgresVisibleEdgesRepository({ database });
+      const listVisibleGraph = createListVisibleGraphQuery({ visiblePeople, visibleEdges });
 
       const graph = await listVisibleGraph.list({ viewerId: asViewer(userC.userId, 'dusty_graph_zero_c') });
 
@@ -150,7 +152,8 @@ describe('graph visibility (graph-visibility.feature, M2-AC1/AC5)', () => {
       await seedAcceptedConnection(userA.userId, userB.userId, { bTowardA: 'limited' });
 
       const visiblePeople = createPostgresVisiblePeopleRepository({ database });
-      const listVisibleGraph = createListVisibleGraphQuery({ visiblePeople });
+      const visibleEdges = createPostgresVisibleEdgesRepository({ database });
+      const listVisibleGraph = createListVisibleGraphQuery({ visiblePeople, visibleEdges });
 
       const graph = await listVisibleGraph.list({
         viewerId: asViewer(userA.userId, 'dusty_graph_below_a'),

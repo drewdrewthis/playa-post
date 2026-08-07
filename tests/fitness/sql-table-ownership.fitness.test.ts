@@ -94,11 +94,11 @@ describe('sql-table-ownership (m2-lane-briefs.md:311, blocking finding B-3)', ()
   });
 
   describe('against modules/graph/persistence/sql/ in the real tree', () => {
-    it('holds visible-people.sql to the tables it was granted, and no others', () => {
-      // Load-bearing. `modules/graph/persistence/sql/visible-people.sql` ships in this
-      // commit and is the only checked-in `.sql` file in the tree, so this walks a
-      // real file with real `app.<table>` references — it is the rule's first and
-      // currently only production subject.
+    it('holds visible-people.sql and visible-edges.sql to the tables they were granted, and no others', () => {
+      // Load-bearing. `modules/graph/persistence/sql/` holds two checked-in files with
+      // real `app.<table>` references — `visible-people.sql` (the authorized-people
+      // CTE) and `visible-edges.sql` (which pairs of them may be joined by a line) —
+      // so this walks real production SQL rather than a fixture.
       //
       // What it protects: `app.visible_people` is the single definition of "who can
       // this viewer reach" (ADR-0002 §6), and computing it legitimately requires three

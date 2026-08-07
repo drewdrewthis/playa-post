@@ -7,6 +7,7 @@ import { startPostgresTestDatabase, type PostgresTestDatabase } from '@playa-pos
 
 // None of these exist yet — legible failure at this seam until the coder writes them.
 import { createListVisibleGraphQuery } from '../../apps/server/src/modules/graph/application/list-visible-graph.query';
+import { createPostgresVisibleEdgesRepository } from '../../apps/server/src/modules/graph/persistence/postgres-visible-edges.repository';
 import { createPostgresVisiblePeopleRepository } from '../../apps/server/src/modules/graph/persistence/postgres-visible-people.repository';
 import {
   viewerIdFromActor,
@@ -91,13 +92,21 @@ describe('B5 (graph half) — visibility matrix, §6a person-projection sub-case
     await seedAcceptedConnection(userA, userB);
 
     const visiblePeople = createPostgresVisiblePeopleRepository({ database });
-    const listVisibleGraph = createListVisibleGraphQuery({ visiblePeople });
+    const visibleEdges = createPostgresVisibleEdgesRepository({ database });
+    const listVisibleGraph = createListVisibleGraphQuery({ visiblePeople, visibleEdges });
 
     const graph = await listVisibleGraph.list({ viewerId: asViewer(userC, 'b5_graph_c') });
 
     expect(graph.people.some((person) => person.userId === userA || person.userId === userB)).toBe(
       false,
     );
+    // The edge half of the same control. `graph.list` now also answers which of the
+    // viewer's people know each other, and an edge is a second shape a relationship
+    // could leak through — one that names two identifiers without naming a person. B5
+    // is about the whole response, so it asserts over the whole response.
+    expect(graph.edges).toEqual([]);
+    expect(JSON.stringify(graph)).not.toContain(userA);
+    expect(JSON.stringify(graph)).not.toContain(userB);
   });
 
   it('renders a below-full-disclosure connection with no name, handle, or avatar (§6a)', async () => {
@@ -106,7 +115,8 @@ describe('B5 (graph half) — visibility matrix, §6a person-projection sub-case
     await seedAcceptedConnection(userA, userB, { bTowardA: 'limited' });
 
     const visiblePeople = createPostgresVisiblePeopleRepository({ database });
-    const listVisibleGraph = createListVisibleGraphQuery({ visiblePeople });
+    const visibleEdges = createPostgresVisibleEdgesRepository({ database });
+    const listVisibleGraph = createListVisibleGraphQuery({ visiblePeople, visibleEdges });
 
     const graph = await listVisibleGraph.list({ viewerId: asViewer(userA, 'b5_graph_below_a') });
     const bNode = graph.people.find((person) => person.userId === userB);

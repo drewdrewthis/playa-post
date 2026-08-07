@@ -36,7 +36,34 @@ export interface Person {
   readonly trust: number | null;
 }
 
-/** `graph.list` output. One graph per viewer — no depth or pagination parameters. */
+/**
+ * One line between two people on the viewer's graph — an accepted connection.
+ *
+ * **Undirected and canonically ordered**: `personAId` is always the lexicographically
+ * smaller identifier, so one connection is one edge and a client can key a rendered line
+ * by the pair without normalising first. Neither endpoint is the source.
+ *
+ * ⚠ **Both endpoints are always in {@link Graph.people}.** An edge never introduces
+ * somebody the person list does not already contain, which is the whole reason it is
+ * safe to send: it reveals shape, never existence. Rendering a node for an identifier
+ * found only here would put a stranger on the screen.
+ *
+ * ⚠ **No weight, and there is deliberately none to read.** Trust is the viewer's own,
+ * per person, on {@link Person.trust}; an edge between two other people has no weight
+ * anybody is entitled to. Do not infer one from proximity, degree, or edge count.
+ */
+export interface Edge {
+  readonly personAId: string;
+  readonly personBId: string;
+}
+
+/**
+ * `graph.list` output. One graph per viewer — no depth or pagination parameters.
+ *
+ * People and edges arrive together, as one snapshot: fetching them separately could
+ * leave a client holding a line to a node it does not have.
+ */
 export interface Graph {
   readonly people: readonly Person[];
+  readonly edges: readonly Edge[];
 }
