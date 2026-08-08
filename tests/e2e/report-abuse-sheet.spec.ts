@@ -210,6 +210,219 @@ test.describe('the report-abuse sheet renders in both themes', () => {
 });
 
 /**
+ * The notice's two theme-dependent colours, as the browser actually resolved them.
+ *
+ * Hand-typed against `globalThis` for the reason the session seeder above is: the root
+ * `tsconfig.json` sets `lib: ["ES2022"]` with no DOM, so there is no `Window` to lean on.
+ * Only types cross this boundary — Playwright ships the function body to the page, and
+ * every annotation here is erased before it goes.
+ */
+interface ResolvedColours {
+  readonly color: string;
+  readonly borderTopColor: string;
+}
+
+interface ColourScope {
+  readonly document: { querySelector(selector: string): object | null };
+  getComputedStyle(element: object): ResolvedColours;
+}
+
+async function noticeColours(
+  page: Page,
+): Promise<{ text: string; border: string; inherited: string }> {
+  return page.evaluate(() => {
+    const scope = globalThis as unknown as ColourScope;
+    const notice = scope.document.querySelector('.hide-failure');
+    const message = scope.document.querySelector('.hide-failure__message');
+
+    if (notice === null || message === null) {
+      throw new Error('The hide-failure notice is not on the page.');
+    }
+
+    return {
+      text: scope.getComputedStyle(message).color,
+      border: scope.getComputedStyle(notice).borderTopColor,
+      // The notice sets no `color` of its own, so this is the ink the message would fall
+      // back to — see the assertion that reads it.
+      inherited: scope.getComputedStyle(notice).color,
+    };
+  });
+}
+
+/**
+ * A hide that never reached the server is visible to the person who asked for it.
+ *
+ * ⚠ **This is the only place the wiring can be proven.** `vitest.config.ts` runs the
+ * `unit` project in `environment: 'node'` and the repo carries no jsdom, happy-dom, or
+ * testing-library — so `describeHideFailure`'s *decisions* are unit-tested
+ * (`hide-failure.unit.test.ts`) and its *effects* — the card coming back, the notice
+ * rendering, the retry re-sending — have nowhere else to be asserted.
+ *
+ * `route.abort('connectionfailed')` is the honest stand-in: it makes `fetch` reject with
+ * no envelope at all, which is exactly what an offline device produces and exactly what
+ * `moderation.report` produces today, since `QUEUED_MUTATION_TYPES` does not include it
+ * ([#63](https://github.com/drewdrewthis/playa-post/issues/63)) and
+ * `mutations: { retry: false }` means there is no second attempt.
+ *
+ * Both callers of `hideBulletin` are exercised, because both had the same silence.
+ */
+test.describe('a report or dismissal that did not reach the server says so', () => {
+  test('puts the card back, says what did not happen, and re-sends what was typed', async ({
+    browser,
+  }) => {
+    const userAAccessToken = requireEnv('E2E_USER_A_ACCESS_TOKEN');
+    const userBAccessToken = requireEnv('E2E_USER_B_ACCESS_TOKEN');
+
+    const contextA = await browser.newContext();
+    const contextB = await browser.newContext();
+    const pageA = await contextA.newPage();
+    const pageB = await contextB.newPage();
+
+    try {
+      // The same setup the suite above needs, and for the same reason: dismiss and report
+      // are rendered only on a bulletin the viewer does not own
+      // (`bulletin-detail-sheet.tsx` — `card.own ? archive : (dismiss, report)`).
+      await bootstrapSession(pageA, userAAccessToken);
+      await expect(pageA.getByTestId('graph-home')).toBeVisible();
+
+      await pageA.getByTestId('invite-create-button').click();
+      const inviteToken = (await pageA.getByTestId('invite-token-display').innerText()).trim();
+
+      await bootstrapSession(pageB, userBAccessToken);
+      await pageB.goto(`/invite/${inviteToken}`);
+      await pageB.getByTestId('invite-accept-button').click();
+      await expect(pageB.getByTestId('connection-accepted-banner')).toBeVisible();
+
+      await pageA.getByTestId('compose-bulletin-button').click();
+      await pageA.getByTestId('compose-bulletin-type-select').selectOption(BULLETIN_TYPE.request);
+      await pageA.getByTestId('compose-bulletin-title-input').fill('Spare goggles, dusty camp');
+      await pageA.getByTestId('compose-bulletin-body-input').fill('Lost mine on the deep playa.');
+      await pageA.getByTestId('compose-bulletin-submit-button').click();
+
+      const createdCard = pageA.locator('[data-testid^="board-bulletin-card-"]').first();
+      await expect(createdCard).toBeVisible();
+      const bulletinId =
+        (await createdCard.getAttribute('data-testid'))?.replace('board-bulletin-card-', '') ?? '';
+      expect(bulletinId).not.toBe('');
+
+      await pageB.goto('/board');
+      const card = pageB.getByTestId(`board-bulletin-card-${bulletinId}`);
+      await expect(card).toBeVisible();
+
+      const notice = pageB.getByTestId('hide-failure');
+
+      /* The plain-hide path: a dismissal with no reason, and no sheet to hold it open. */
+      await pageB.route('**/trpc/moderation.dismiss*', async (route) => {
+        await route.abort('connectionfailed');
+      });
+
+      await card.getByTestId('bulletin-open-button').click();
+      await pageB.getByTestId('bulletin-dismiss-button').click();
+
+      await expect(notice).toHaveText(
+        /Dismissing that bulletin did not reach the server\. It is back on your board\./,
+      );
+      await expect(card).toBeVisible();
+
+      /*
+       * Both themes, on the notice itself, while it is on screen — a live toggle rather
+       * than a second two-user setup. Every colour here is a `--pp-*` token declared in
+       * both of `tokens.css`'s blocks, but *declared* and *resolves* are different facts
+       * and only the second one is worth asserting (the reason the suite above renders
+       * the sheet twice). A notice whose words came out transparent in dark would pass
+       * every other check in this file.
+       */
+      const firstTheme = (await pageB.locator('html').getAttribute('data-theme')) ?? 'light';
+      const otherTheme = firstTheme === 'dark' ? 'light' : 'dark';
+      const firstColours = await noticeColours(pageB);
+
+      await pageB.getByTestId('theme-toggle-button').click();
+      await expect(pageB.locator('html')).toHaveAttribute('data-theme', otherTheme);
+      await expect(notice).toBeVisible();
+      const otherColours = await noticeColours(pageB);
+
+      for (const colour of [
+        firstColours.text,
+        firstColours.border,
+        otherColours.text,
+        otherColours.border,
+      ]) {
+        // A token that failed to resolve leaves the property at its initial value, which
+        // is `rgba(0, 0, 0, 0)` for a colour — invisible, and green on a visibility check.
+        expect(colour).toMatch(/^rgba?\(/);
+        expect(colour).not.toBe('rgba(0, 0, 0, 0)');
+      }
+
+      expect(otherColours.text).not.toBe(firstColours.text);
+      expect(otherColours.border).not.toBe(firstColours.border);
+
+      /*
+       * ⚠ The assertion that makes the two above mean something. `--pp-danger` failing to
+       * resolve does not blank the text — an invalid `var()` leaves `color` at `inherit`,
+       * so the message would quietly take the notice's own ink, which *also* differs
+       * between themes and would satisfy every check above it. The words being a
+       * different colour from the box they sit in is what proves the token arrived.
+       */
+      expect(firstColours.text).not.toBe(firstColours.inherited);
+      expect(otherColours.text).not.toBe(otherColours.inherited);
+
+      await pageB.getByTestId('theme-toggle-button').click();
+      await expect(pageB.locator('html')).toHaveAttribute('data-theme', firstTheme);
+
+      await pageB.unroute('**/trpc/moderation.dismiss*');
+      await pageB.getByTestId('hide-failure-dismiss-button').click();
+      await expect(notice).toBeHidden();
+
+      /*
+       * The report path. Every attempt's body is captured, so the retry can be shown to
+       * carry the reporter's own words — the sheet that collected them was unmounted the
+       * moment Send was pressed, and re-sending them is what makes that survivable.
+       */
+      const reportBodies: string[] = [];
+
+      await pageB.route('**/trpc/moderation.report*', async (route) => {
+        reportBodies.push(route.request().postData() ?? '');
+
+        if (reportBodies.length === 1) {
+          await route.abort('connectionfailed');
+          return;
+        }
+
+        await route.continue();
+      });
+
+      await card.getByTestId('bulletin-open-button').click();
+      await pageB.getByTestId('bulletin-report-button').click();
+      await pageB.getByTestId(`report-reason-${REPORT_REASON.scamOrFraud}`).click();
+      await pageB.getByTestId('report-detail-input').fill(REPORT_DETAIL);
+      await pageB.getByTestId('report-send-button').click();
+
+      // The defect, inverted: the reporter is told the stewards do not have it, and the
+      // card they were told was handled is back where it was.
+      await expect(notice).toHaveText(
+        /Your report did not reach the stewards\. The bulletin is back on your board\./,
+      );
+      await expect(card).toBeVisible();
+
+      await pageB.getByTestId('hide-failure-retry-button').click();
+
+      await expect(notice).toBeHidden();
+      await expect(card).toBeHidden();
+
+      expect(reportBodies).toHaveLength(2);
+      // Both attempts carry the account that was typed once, into a sheet that no longer
+      // exists by the time the second one is sent.
+      for (const body of reportBodies) {
+        expect(body).toContain(REPORT_DETAIL);
+      }
+    } finally {
+      await contextA.close();
+      await contextB.close();
+    }
+  });
+});
+
+/**
  * The provider's own 429 body, verbatim in shape.
  *
  * ⚠ **The auth provider is the one boundary this stands in for**, and it stands in at

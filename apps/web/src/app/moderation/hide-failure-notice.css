@@ -1,0 +1,61 @@
+/*
+ * The board's notice for a report or dismissal that did not reach the server.
+ *
+ * ⚠ **Every selector here is a name `screens.css` does not use, and none of them
+ * override a rule it declares.** Feature stylesheets are reached through the router and
+ * therefore land *before* `screens.css` in the bundle (`entry.tsx` imports the router
+ * above the two theme sheets, and ESM evaluates depth-first), so an equal-specificity
+ * override written here would lose silently. The two shared classes this notice uses —
+ * `button button--quiet` and nothing else — are used as-is rather than adjusted, which is
+ * why that ordering cannot bite. Add a rule that touches `.button` and it will.
+ *
+ * Every colour is a `--pp-*` token, so the notice resolves in both themes; there is no
+ * `--pp-danger-bg`, and rather than mint one this borrows `.banner`'s card fill and
+ * carries the danger on the border and the words.
+ */
+.hide-failure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-3);
+  margin: 0;
+  padding: var(--pp-space-3) var(--pp-space-4);
+  border: 1px solid var(--pp-danger-border);
+  border-radius: var(--pp-radius);
+  background: var(--pp-card);
+}
+
+.hide-failure__message {
+  margin: 0;
+  color: var(--pp-danger);
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+}
+
+/*
+ * `flex-end` and `wrap`: at the comp's 430px column a long refusal plus two controls can
+ * exceed one line, and a notice whose "Try again" has been pushed off the edge is the
+ * defect this component exists to fix, wearing a stylesheet.
+ */
+.hide-failure__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pp-space-3);
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/*
+ * Deliberately not a `.button`: dismissing is the way out of the notice, not an action on
+ * the report, and giving it a pill would put it in the same visual class as the retry.
+ */
+.hide-failure__dismiss {
+  padding: var(--pp-space-1) var(--pp-space-2);
+  border: none;
+  background: none;
+  color: var(--pp-faint);
+  font-weight: 600;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+}

@@ -47,8 +47,12 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  formatter; src/app/graph/ is the network canvas: graph-layout.ts seeded from person
                  ids, graph-viewport.ts pan/zoom arithmetic, graph-node-identity.ts §6a for dots,
                  graph-counts.ts, graph-network.tsx, graph-viz.css; src/app/moderation/ is the report
-                 sheet: report-abuse-draft.ts holds the reason vocabulary and the send gate,
-                 report-abuse-sheet.tsx renders them). A feature stylesheet is imported
+                 sheet and what the board says when a hide fails: report-abuse-draft.ts holds the
+                 reason vocabulary and the send gate, report-abuse-sheet.tsx renders them,
+                 hide-failure.ts turns a refused or undelivered moderation.report/moderation.dismiss
+                 into a message plus whether a retry can work and whether the card belongs back,
+                 hide-failure-notice.css styles the notice board.tsx renders from it).
+                 A feature stylesheet is imported
                  by the component that owns it, never added to screens.css.
                  ⚠ The unit project runs in environment: 'node' and there is no component-test
                  harness, so logic left inside a component is logic no test can reach — extract it
