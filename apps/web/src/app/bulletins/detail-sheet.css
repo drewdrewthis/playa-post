@@ -1,0 +1,199 @@
+/*
+ * The bulletin detail sheet (issue #47), following `design/Playa Post.dc.html`
+ * lines 263-300: a scrim over the whole column and a rounded sheet lifted off the
+ * bottom edge, arriving with the comp's `sheetup`.
+ *
+ * Both elements are `position: absolute` against `.app-column`, which is the nearest
+ * positioned ancestor and therefore their containing block — so they cover the tab bar
+ * and are *not* clipped by `.app-shell__main`'s own scrolling, even though the board
+ * renders inside it. That is the same mechanism the notifications overlay uses, and the
+ * z-indices are the comp's own 32 and 33, below the notifications takeover at 35.
+ */
+
+.detail-sheet__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 32;
+  background: var(--pp-scrim);
+}
+
+.detail-sheet {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.875rem;
+  left: 0.75rem;
+  z-index: 33;
+  max-height: 80%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-3);
+  padding: var(--pp-space-5);
+  border: 1px solid var(--pp-sheet-border);
+  border-radius: var(--pp-radius-lg);
+  background: var(--pp-sheet-bg);
+  box-shadow: var(--pp-sheet-shadow);
+  animation: pp-sheetup 0.22s ease-out;
+}
+
+@keyframes pp-sheetup {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/*
+ * The drag handle. The comp has no grabber — it dismisses by scrim or by CLOSE — but a
+ * sheet that can be dragged away needs somewhere that visibly affords the drag, or the
+ * gesture is only discoverable by accident. `touch-action: none` is what stops a
+ * downward drag from scrolling the sheet's own text instead of moving the sheet.
+ */
+.detail-sheet__grabber {
+  align-self: center;
+  flex: none;
+  width: 2.25rem;
+  height: 0.25rem;
+  margin-bottom: var(--pp-space-1);
+  border-radius: var(--pp-radius-pill);
+  background: var(--pp-track);
+  cursor: grab;
+  touch-action: none;
+}
+
+.detail-sheet__grabber:active {
+  cursor: grabbing;
+}
+
+.detail-sheet__header {
+  display: flex;
+  align-items: center;
+  gap: var(--pp-space-2);
+}
+
+/*
+ * The card's dashed badge, in the sheet.
+ *
+ * ⚠ The type-to-tint mapping is stated again below because the card's copy lives in
+ * `app/theme/screens.css`, which another lane owns; a shared `[data-type]` rule would
+ * mean editing that file. Two lines per type, in two files — when a second bulletin
+ * type ships, both need it.
+ */
+.detail-sheet__type {
+  align-self: flex-start;
+  padding: 3px 7px;
+  border: 1px dashed var(--pp-bulletin-tint, var(--pp-accent));
+  border-radius: 3px;
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-bulletin-tint, var(--pp-accent));
+}
+
+.detail-sheet[data-type='request'] {
+  --pp-bulletin-tint: var(--pp-tint-request);
+}
+
+.detail-sheet__time {
+  font-size: var(--pp-text-xs);
+  color: var(--pp-faint);
+}
+
+.detail-sheet__close {
+  margin-left: auto;
+  padding: var(--pp-space-1) var(--pp-space-2);
+  border: none;
+  background: none;
+  color: var(--pp-faint);
+  font-weight: 700;
+  font-size: var(--pp-text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/** Italic serif at 24px — the sheet's title is the comp's largest piece of type. */
+.detail-sheet__title {
+  margin: 0;
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: var(--pp-text-2xl);
+  line-height: 1.2;
+  color: var(--pp-ink);
+}
+
+.detail-sheet__loc {
+  margin: 0;
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-sub);
+}
+
+/** The reason this sheet exists: the full text, in the reading face. */
+.detail-sheet__body {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: var(--pp-font-display);
+  font-weight: 400;
+  font-size: var(--pp-text-base);
+  line-height: 1.5;
+  color: var(--pp-ink);
+}
+
+.detail-sheet__expiry {
+  margin: 0;
+  font-weight: 600;
+  font-size: var(--pp-text-xs);
+  letter-spacing: 0.04em;
+  color: var(--pp-warn);
+}
+
+.detail-sheet__gone {
+  margin: 0;
+  padding: var(--pp-space-2) var(--pp-space-3);
+  border: 1px dashed var(--pp-warn);
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-warn-bg);
+  font-size: var(--pp-text-xs);
+  line-height: 1.5;
+  color: var(--pp-warn);
+}
+
+/** A dashed rule above the author, as the comp separates the text from who wrote it. */
+.detail-sheet__author {
+  margin: 0;
+  padding-top: var(--pp-space-2);
+  border-top: 1px dashed var(--pp-card-border);
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-sub);
+}
+
+.detail-sheet__actions {
+  display: flex;
+  gap: var(--pp-space-2);
+}
+
+.detail-sheet__actions .button {
+  flex: 1;
+}
+
+.detail-sheet__unbuilt {
+  margin: 0;
+  font-size: var(--pp-text-xs);
+  line-height: 1.5;
+  color: var(--pp-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-sheet {
+    animation: none;
+  }
+}

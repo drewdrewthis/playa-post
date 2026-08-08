@@ -37,9 +37,11 @@ import { expect, test, type Page } from '@playwright/test';
  * | `board-bulletin-card-<bulletinId>` | board | One bulletin's card. Carries `data-archived="true"` once archived |
  * | `notifications-bell-button` | app shell | Opens the notifications panel (a full-column takeover since #51, not a dropdown) |
  * | `notification-grouped-item` | notifications panel | One grouped Notify Me notification |
- * | `bulletin-dismiss-button` | inside a `board-bulletin-card-*` | Privately dismiss this bulletin for the viewer |
- * | `bulletin-report-button` | inside a `board-bulletin-card-*` | Privately report this bulletin (alternative to dismiss, step 10 accepts either) |
- * | `bulletin-archive-button` | inside a `board-bulletin-card-*`, author only | Archive the bulletin |
+ * | `bulletin-open-button` | inside a `board-bulletin-card-*` | The card's tap target. Opens the detail sheet — since the design wave (#46/#47) the card is a badge, a time, a title and a meta line, and the body and every action live in the sheet |
+ * | `bulletin-detail-sheet` | board | The bottom sheet one card's `bulletin-open-button` opens |
+ * | `bulletin-dismiss-button` | inside `bulletin-detail-sheet` | Privately dismiss this bulletin for the viewer |
+ * | `bulletin-report-button` | inside `bulletin-detail-sheet` | Privately report this bulletin (alternative to dismiss, step 10 accepts either) |
+ * | `bulletin-archive-button` | inside `bulletin-detail-sheet`, author only | Archive the bulletin |
  * | `offline-pending-badge` | app shell | Visible while a mutation is queued/pending/inflight per the offline store (ADR-0005:105-107); hidden once synced |
  *
  * `getByRole('slider', { name: 'Trust' })` — the person sheet's trust control, not a
@@ -175,8 +177,16 @@ test.describe('The M2 vertical slice, end to end (vertical-slice-e2e.feature, M2
         // than reaching around it keeps this step a description of real behaviour.
         await pageB.getByRole('button', { name: 'Close notifications' }).click();
 
+        // Two clicks rather than one since the design wave (#47): the card is a tap
+        // target and the moderation actions live in the detail sheet it opens, which is
+        // where the comp puts them. Same mutation, same testid, one more step — the
+        // step is a description of real behaviour, and this is now the real behaviour.
         const card = pageB.getByTestId(`board-bulletin-card-${bulletinId}`);
-        await card.getByTestId('bulletin-dismiss-button').click();
+        await card.getByTestId('bulletin-open-button').click();
+        await pageB
+          .getByTestId('bulletin-detail-sheet')
+          .getByTestId('bulletin-dismiss-button')
+          .click();
         await expect(card).toBeHidden();
       });
 
@@ -185,8 +195,16 @@ test.describe('The M2 vertical slice, end to end (vertical-slice-e2e.feature, M2
         async () => {
           await pageA.goto('/board');
           await contextA.setOffline(true);
+          // The sheet opens offline: its `bulletins.getById` refresh fails with no
+          // network, and it falls back to the copy the board was already built from —
+          // which is exactly the ADR-0005 behaviour this step exists to prove. Archive
+          // is reachable either way.
           await pageA
             .getByTestId(`board-bulletin-card-${bulletinId}`)
+            .getByTestId('bulletin-open-button')
+            .click();
+          await pageA
+            .getByTestId('bulletin-detail-sheet')
             .getByTestId('bulletin-archive-button')
             .click();
           await expect(pageA.getByTestId('offline-pending-badge')).toBeVisible();

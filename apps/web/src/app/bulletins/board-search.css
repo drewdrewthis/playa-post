@@ -1,0 +1,178 @@
+/*
+ * The board's search bar, help popover, match count and filter chips (issue #45),
+ * following `design/Playa Post.dc.html` lines 77-100.
+ *
+ * The query text is monospaced throughout — the field, the help line, and the count.
+ * That is the typeface rule this repo already made (`tokens.css`): IBM Plex Mono is for
+ * what a person reads or retypes character by character, and a query is exactly that.
+ */
+
+.board-search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+}
+
+.board-search__field {
+  display: flex;
+  align-items: center;
+  gap: var(--pp-space-2);
+  padding: 0.5625rem 0.75rem;
+  border: 1px solid var(--pp-card-border);
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-card);
+}
+
+/*
+ * The focus ring moves from the input to the field it sits inside. The comp draws one
+ * bordered box, and a ring drawn around the bare `<input>` would float inside that box
+ * with the glyph and the two icon buttons outside it — visibly not the thing that has
+ * focus. This is a relocation, never a removal: `screens.css` sets the global
+ * `:focus-visible` ring precisely so no control is left without one.
+ */
+.board-search__field:focus-within {
+  border-color: var(--pp-accent);
+  box-shadow: 0 0 0 1px var(--pp-accent);
+}
+
+.board-search__glyph {
+  flex: none;
+  font-size: 0.875rem;
+  line-height: 1;
+  color: var(--pp-faint);
+}
+
+.board-search__input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--pp-ink);
+  font-family: var(--pp-font-mono);
+  font-weight: 500;
+  font-size: var(--pp-text-sm);
+}
+
+.board-search__input:focus-visible {
+  outline: none;
+}
+
+/** WebKit's own clear affordance, which would sit beside this component's own ✕. */
+.board-search__input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.board-search__icon-action {
+  flex: none;
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  font-weight: 700;
+  font-size: var(--pp-text-xs);
+  line-height: 1;
+  color: var(--pp-faint);
+}
+
+.board-search__icon-action--help {
+  font-family: var(--pp-font-mono);
+  color: var(--pp-accent);
+}
+
+.board-search__help {
+  margin: 0;
+  padding: 0.625rem 0.75rem;
+  border: 1px dashed var(--pp-card-border);
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-card);
+  font-family: var(--pp-font-mono);
+  font-weight: 500;
+  font-size: var(--pp-text-xs);
+  line-height: 1.7;
+  color: var(--pp-sub);
+}
+
+.board-search__status {
+  display: flex;
+  align-items: center;
+  gap: var(--pp-space-2);
+}
+
+.board-search__count {
+  flex: none;
+  white-space: nowrap;
+  font-family: var(--pp-font-mono);
+  font-weight: 600;
+  font-size: var(--pp-text-xs);
+  color: var(--pp-sub);
+}
+
+.board-search__save-slot {
+  margin-left: auto;
+}
+
+.board-search__save {
+  white-space: nowrap;
+  padding: 4px 10px;
+  border: 1px dashed var(--pp-accent);
+  border-radius: var(--pp-radius-pill);
+  background: none;
+  color: var(--pp-accent);
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.board-search__save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/*
+ * The chip row scrolls edge to edge, so a chip is never half-clipped by the screen's
+ * own gutter. The negative inline margin cancels `.screen`'s padding and the matching
+ * inline padding puts it back inside the scroller.
+ */
+.board-search__chips {
+  display: flex;
+  gap: var(--pp-space-2);
+  overflow-x: auto;
+  margin-inline: calc(var(--pp-space-5) * -1);
+  padding-block: 2px;
+  padding-inline: var(--pp-space-5);
+  scrollbar-width: none;
+}
+
+.board-search__chips::-webkit-scrollbar {
+  display: none;
+}
+
+.board-search__chip {
+  flex: none;
+  white-space: nowrap;
+  padding: var(--pp-space-2) 0.875rem;
+  border: 1px solid var(--pp-chip-off-border);
+  border-radius: var(--pp-radius-pill);
+  background: none;
+  color: var(--pp-chip-off-fg);
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  transition: background 0.15s ease;
+}
+
+/*
+ * Selected state keys off `aria-pressed`, the same one-source-of-truth rule the tab bar
+ * uses: a chip cannot look active while announcing that it is not.
+ */
+.board-search__chip[aria-pressed='true'] {
+  border-color: var(--pp-chip-on-bg);
+  background: var(--pp-chip-on-bg);
+  color: var(--pp-chip-on-fg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-search__chip {
+    transition: none;
+  }
+}

@@ -1,0 +1,91 @@
+/*
+ * The card's comp anatomy (issue #46): badge row, serif title, meta line.
+ *
+ * The card's own box — border, radius, padding, the badge's dashed tint, and the serif
+ * title — already lives in `app/theme/screens.css`. Nothing here restates it; these are
+ * only the parts the comp has that the app did not: the header row that puts the age
+ * opposite the badge, the meta line, and the button that makes the whole card a tap
+ * target.
+ */
+
+/*
+ * The card *is* the button. It resets the UA's control styling and inherits the card's
+ * own flex column so the badge row, title, and meta line lay out as if the button were
+ * not there.
+ */
+.bulletin-card__open {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4375rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.bulletin-card {
+  transition: border-color 0.15s ease;
+}
+
+/* The comp's `style-hover="border-color:{{ t.faint }}"` — the card reads as tappable. */
+.bulletin-card:hover {
+  border-color: var(--pp-faint);
+}
+
+.bulletin-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--pp-space-2);
+}
+
+/** `margin-left: auto` is what pushes the age to the far end of the badge row. */
+.bulletin-card__time {
+  flex: none;
+  margin-left: auto;
+  font-size: var(--pp-text-xs);
+  color: var(--pp-faint);
+}
+
+.bulletin-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pp-space-1);
+  font-weight: 600;
+  font-size: var(--pp-text-xs);
+  color: var(--pp-sub);
+}
+
+/*
+ * The author renders through `PersonIdentity` rather than as plain text, because that
+ * component is the one place §6a's "no derived placeholder" rule is implemented. It is
+ * built for a list row, so here it is scaled down to a meta line's 11px — restyled, not
+ * reimplemented, so the disclosure rule keeps living in exactly one file.
+ */
+.bulletin-card__meta .person-identity {
+  gap: var(--pp-space-1);
+}
+
+.bulletin-card__meta .person-identity__avatar,
+.bulletin-card__meta .person-identity__private-mark {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.bulletin-card__meta .person-identity__name,
+.bulletin-card__meta .person-identity__handle,
+.bulletin-card__meta .person-identity__private-label {
+  font-size: inherit;
+  color: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bulletin-card {
+    transition: none;
+  }
+}
