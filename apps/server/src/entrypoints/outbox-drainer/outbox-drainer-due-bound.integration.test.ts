@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createDatabaseConnection, type DatabaseConnection } from '@playa-post/database';
 import { startPostgresTestDatabase, type PostgresTestDatabase } from '@playa-post/testing';
 
+import type { OutboxConsumer } from './outbox-consumer';
 import { createOutboxDrainer } from './outbox-drainer';
 
 /**
@@ -63,9 +64,15 @@ describe('outbox drainer due-bound (#74, available_at microsecond precision)', (
     return eventId;
   }
 
-  async function claimFields(eventId: string): Promise<{ claimed_at: Date; available_at: Date }> {
-    const { rows } = await testDatabase.client.query<{ claimed_at: Date; available_at: Date }>(
-      `select claimed_at, available_at from app.outbox_events where event_id = $1`,
+  async function eventRow(
+    eventId: string,
+  ): Promise<{ status: string; claimed_at: Date; available_at: Date }> {
+    const { rows } = await testDatabase.client.query<{
+      status: string;
+      claimed_at: Date;
+      available_at: Date;
+    }>(
+      `select status, claimed_at, available_at from app.outbox_events where event_id = $1`,
       [eventId],
     );
     const row = rows[0];
@@ -117,6 +124,36 @@ describe('outbox drainer due-bound (#74, available_at microsecond precision)', (
     }, 60_000);
 
     /**
+     * The bound's exact width, pinned from the excluded side.
+     *
+     * `00:00:00.001000` is the first instant the predicate must reject: the reading stands
+     * for some instant in `[00:00:00.000, 00:00:00.001)`, so this row is strictly later
+     * than the drainer's own clock wherever in that interval the true reading fell. The
+     * negative case above sits a comfortable 2ms out and would still pass if the slack
+     * were bumped to 1.5ms; this one goes red the moment the bound grows by a single
+     * microsecond, or the moment `<` relaxes back to `<=`.
+     */
+    it('leaves the row at exactly one millisecond past the reading — the bound is exclusive', async () => {
+      const clockReading = new Date('2026-01-01T00:00:00.000Z');
+      const dueExactlyOneMillisecondLater = await seedEventDueAt('2026-01-01 00:00:00.001000+00');
+
+      const drainer = createOutboxDrainer({
+        database,
+        consumers: [],
+        drainerId: 'due-bound-exclusive-edge',
+        now: () => clockReading,
+      });
+
+      const { claimedEventIds } = await drainer.drainOnce();
+
+      expect(
+        claimedEventIds,
+        'T+1.000000 is the first instant the reading provably is not — it is future',
+      ).not.toContain(dueExactlyOneMillisecondLater);
+      expect(claimedEventIds, 'and it was the only row seeded').toEqual([]);
+    }, 60_000);
+
+    /**
      * The other half of the coupling: the widened bound is a *read* predicate only.
      * Writing `dueBound` into either field would make the drainer claim a millisecond it
      * did not act in, and would drift the lease forward by 1ms on every reclaim.
@@ -133,10 +170,63 @@ describe('outbox drainer due-bound (#74, available_at microsecond precision)', (
       });
       await drainer.drainOnce();
 
-      const row = await claimFields(eventId);
+      const row = await eventRow(eventId);
       expect(new Date(row.claimed_at).toISOString()).toBe('2026-01-01T00:00:00.000Z');
       // CLAIM_LEASE_SECONDS (300) past the reading, to the millisecond.
       expect(new Date(row.available_at).toISOString()).toBe('2026-01-01T00:05:00.000Z');
+    }, 60_000);
+  });
+
+  describe('given a pinned clock and a consumer that throws', () => {
+    /**
+     * Covers the *second* of the two clock reads this change threaded — the retry backoff
+     * in `dispatchAndRecordOutcome`, which now reads the injected clock rather than
+     * `Date.now()`. The pinned-clock cases above cannot reach it: they register no
+     * consumers, so nothing ever throws and the `catch` never runs.
+     *
+     * It also pins the backoff formula, which otherwise has no exact test. The sibling
+     * 8-attempt scenario (`outbox-drainer.integration.test.ts`, M2-AC23) measures growth
+     * against the real wall clock with a ±5s tolerance — enough to prove "grows per the
+     * formula", not enough to notice a constant that moved. With the reading pinned,
+     * `available_at` is decidable to the millisecond.
+     *
+     * ⚠ This case leaves the row at `2026-01-01T00:00:05Z` — years in the past in real
+     * terms, so it is immediately reclaimable by any real-clock drain that runs after it.
+     * Harmless only because `afterEach` truncates every table between cases: a future case
+     * added to this file that drains on the real clock and asserts on *what* it claimed
+     * would pick this row up if that truncation ever went away.
+     */
+    it('retries at exactly BACKOFF_BASE_SECONDS past the reading, from the injected clock', async () => {
+      const clockReading = new Date('2026-01-01T00:00:00.000Z');
+      const eventId = await seedEventDueAt('2026-01-01 00:00:00.000999+00');
+
+      const alwaysThrows: OutboxConsumer = {
+        consumerName: 'DueBoundThrowsProbe',
+        async handle(): Promise<void> {
+          throw new Error('this consumer always throws');
+        },
+      };
+      const drainer = createOutboxDrainer({
+        database,
+        consumers: [alwaysThrows],
+        drainerId: 'due-bound-retry-clock',
+        now: () => clockReading,
+      });
+
+      const { claimedEventIds } = await drainer.drainOnce();
+      expect(claimedEventIds, 'the row was claimed before its consumer threw').toEqual([eventId]);
+
+      const row = await eventRow(eventId);
+      // `attempts` is 1 — the claim incremented it off the column's `default 0` — so the
+      // backoff is BACKOFF_BASE_SECONDS * 1^2 = 5s, and 1 < MAX_ATTEMPTS (8) means retry
+      // rather than dead-letter.
+      expect(row.status, 'the first failure of eight is a retry, not a dead letter').toBe(
+        'pending',
+      );
+      expect(
+        new Date(row.available_at).toISOString(),
+        'backoff measured from the injected reading, not from Date.now()',
+      ).toBe('2026-01-01T00:00:05.000Z');
     }, 60_000);
   });
 

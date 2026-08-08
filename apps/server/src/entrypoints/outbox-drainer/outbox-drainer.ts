@@ -54,18 +54,36 @@ const CLAIM_LEASE_SECONDS = 5 * 60;
  * Nothing was lost, only delayed to the next poll, which is exactly what makes it read
  * as an intermittent test failure rather than as a bug.
  *
- * Widening the bound by the width of the truncation window closes it. The cost is that
- * a row genuinely due up to 1ms in the *future* may be claimed up to 1ms early, and that
- * is harmless at every interval this table deals in: the shortest backoff ADR-0006
- * defines is {@link BACKOFF_BASE_SECONDS} (5s) and the claim lease is
- * {@link CLAIM_LEASE_SECONDS} (300s), so the slack is four orders of magnitude smaller
- * than the shortest delay any caller can ask this bound to honour. ADR-0006 draws no
- * distinction between "due now" and "due 1ms from now".
+ * The right question is `available_at < T + 1ms`, and the bound is **exclusive on
+ * purpose**. The real instant `T` stands for lies in the half-open interval `[T, T+1)`,
+ * so every instant it could be is strictly below `T+1` — a row at exactly `T+1.000000`
+ * is in the future wherever in that interval the true reading fell. `<=` would claim it
+ * up to a millisecond early; `<` widens the window by exactly the truncation it corrects
+ * and not one microsecond more, which is what keeps this constant a precision correction
+ * rather than a fudge factor.
  *
- * ⚠ Not solved with a `sql`-tagged `now()`, which would read the database's clock and
- * need no slack at all: `tests/fitness/no-sql-outside-persistence.fitness.test.ts` fails
- * the `sql` tag anywhere under `apps/server/src/**` outside `persistence/`, and this
- * entrypoint deliberately contains no raw SQL (see {@link createOutboxDrainer}).
+ * What survives is a strictly-sub-millisecond residue: a row due at `T.000500` is claimed
+ * even if the true reading was `T.000000`, half a millisecond early. Harmless at every
+ * interval this table deals in — the shortest backoff ADR-0006 defines is
+ * {@link BACKOFF_BASE_SECONDS} (5s) and the claim lease is {@link CLAIM_LEASE_SECONDS}
+ * (300s), four orders of magnitude larger than the residue, and ADR-0006 draws no
+ * distinction between "due now" and "due a fraction of a millisecond from now".
+ *
+ * ⚠ Not solved by reading the database's own clock, which would need no correction at
+ * all. Two routes, both rejected:
+ * - A `sql`-tagged `now()` — blocked outright.
+ *   `tests/fitness/no-sql-outside-persistence.fitness.test.ts` fails the `sql` tag
+ *   anywhere under `apps/server/src/**` outside `persistence/`, and this entrypoint
+ *   deliberately contains no raw SQL (see {@link createOutboxDrainer}).
+ * - Kysely's expression builder, `eb.fn('now')` — **not** blocked by that rule, which
+ *   only sees raw SQL, so it renders `now()` legally. Rejected on the merits instead.
+ *   It fixes the skew in the *read* predicate alone, while `claimed_at` and the lease
+ *   below are still stamped from the JS clock — reintroducing a smaller version of the
+ *   same two-clock skew on the write side, where nothing is watching for it. And it puts
+ *   the due decision out of reach of {@link CreateOutboxDrainerDependencies.now},
+ *   destroying the injected-clock testability this fix rests on: a pinned reading is the
+ *   only thing that makes an off-by-one-truncation-window bound distinguishable from a
+ *   correct one.
  */
 const DUE_BOUND_SLACK_MS = 1;
 
@@ -214,7 +232,9 @@ async function claimBatch(
       .selectFrom('app.outbox_events')
       .select('event_id')
       .where('status', 'in', CLAIMABLE_STATUSES)
-      .where('available_at', '<=', dueBound)
+      // Exclusive: `dueBound` is the first instant this reading provably is not — see
+      // DUE_BOUND_SLACK_MS on the half-open interval.
+      .where('available_at', '<', dueBound)
       // The seam L3b-infra left for L3b-notify, now filled. `SendGroupedPushHandler`
       // reads `NotifyMeMatched` rows itself, on its own 60-second grouping-window
       // schedule — a second scheduled reader, not a consumer this drainer dispatches
