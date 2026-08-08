@@ -1,0 +1,166 @@
+/*
+ * The notifications takeover's contents: the header's CLEAR ALL, the two sections, and
+ * the anatomy of one row.
+ *
+ * The takeover's own frame — the overlay, its header, and its scrolling body — lives in
+ * `app/shell/app-shell.css` alongside the rest of the shell's chrome, and `.notifications
+ * __item` there is the card this file lays out. Nothing below overrides a rule from that
+ * file; every selector here is either new or more specific on purpose.
+ *
+ * Every colour comes from a `--pp-*` token, which is what makes both themes one
+ * stylesheet rather than two. See `app/theme/tokens.css`.
+ */
+
+/* Header action ----------------------------------------------------------- */
+
+.notifications__clear-all {
+  flex: none;
+  padding: var(--pp-space-2);
+  border: none;
+  background: none;
+  color: var(--pp-faint);
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.notifications__clear-all:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Sections ---------------------------------------------------------------- */
+
+/** A labelled group of rows — the dismissed ones, kept as history under their heading. */
+.notifications__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-3);
+}
+
+.notifications__section-label {
+  margin: 0;
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-faint);
+}
+
+/*
+ * What the server refused, said once above the list rather than per row.
+ *
+ * The refused rows come back unread on the same tick, so this line explains a change the
+ * reader is already watching happen — without it, "CLEAR ALL" looks like it half worked.
+ */
+.notifications__refused {
+  margin: 0;
+  padding: var(--pp-space-2) var(--pp-space-3);
+  border: 1px dashed var(--pp-danger-border);
+  border-radius: var(--pp-radius-sm);
+  color: var(--pp-danger);
+  font-size: var(--pp-text-xs);
+  line-height: 1.5;
+}
+
+/* One row ----------------------------------------------------------------- */
+
+.notification-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--pp-space-2);
+}
+
+/*
+ * Dismissed rows stay legible but stop competing with the ones still waiting. The dashed
+ * border is the same "this is settled" signal an archived bulletin card carries.
+ */
+.notification-row[data-unread='false'] {
+  border-style: dashed;
+  opacity: 0.62;
+}
+
+.notification-row:hover {
+  border-color: var(--pp-faint);
+}
+
+/*
+ * The comp draws no per-row unread mark, because presence in its list *is* unread. Here
+ * the panel keeps dismissed notifications in the same column, so the state needs a mark
+ * of its own — and never colour alone: the row's meta line says "new", and the dismissed
+ * ones sit under a heading that names them.
+ */
+.notification-row__mark {
+  flex: none;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  margin-top: 0.4375rem;
+  border-radius: var(--pp-radius-pill);
+  background: var(--pp-accent);
+}
+
+.notification-row__open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--pp-space-2);
+  color: inherit;
+  text-decoration: none;
+}
+
+.notification-row__content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.notification-row__title {
+  font-family: var(--pp-font-display);
+  font-weight: 400;
+  font-size: var(--pp-text-base);
+  line-height: 1.35;
+  color: var(--pp-ink);
+}
+
+/* Karla explicitly: the card sets the display face, and the meta line is a label. */
+.notification-row__meta {
+  font-family: var(--pp-font-body);
+  font-weight: 500;
+  font-size: var(--pp-text-xs);
+  line-height: 1.4;
+  color: var(--pp-faint);
+}
+
+.notification-row__go {
+  flex: none;
+  padding-top: 2px;
+  font-family: var(--pp-font-body);
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-accent);
+}
+
+.notification-row__dismiss {
+  flex: none;
+  padding: 2px var(--pp-space-2);
+  border: none;
+  background: none;
+  color: var(--pp-faint);
+  font-family: var(--pp-font-body);
+  font-weight: 700;
+  font-size: var(--pp-text-sm);
+  line-height: 1.35;
+}
+
+.notification-row__dismiss:hover:not(:disabled) {
+  color: var(--pp-danger);
+}
+
+.notification-row__dismiss:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
