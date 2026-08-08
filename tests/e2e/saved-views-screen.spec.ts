@@ -46,13 +46,30 @@ const THEMES = ['light', 'dark'] as const;
 /**
  * The two bulletins User A writes before saving anything.
  *
- * ⚠ **Two, and only one of them mentioning "airport", is a harness requirement rather
+ * ⚠ **Two, and only one of them mentioning "propane", is a harness requirement rather
  * than set dressing** — see {@link saveViewFromBoard} for the race it closes. Both are
  * `request`s because that is the only type M2 can write.
+ *
+ * ⚠ **This text must not collide with any bulletin another `tests/e2e/*.spec.ts` file
+ * writes.** `global-setup.ts` boots one Testcontainers Postgres for the whole
+ * `pnpm test:e2e` run and nothing under `tests/e2e/` truncates it; `playwright.config.ts`
+ * runs spec files alphabetically, single-worker, so every bulletin an earlier file
+ * composed as User A is still on the board when this file runs. A repeated title
+ * double-matches `getByText` below, and a repeated word inside {@link MATCHING_QUERY} or
+ * {@link EMPTY_QUERY} double-matches the full-text search those queries compile to
+ * (`board-filter.ts`'s `plainto_tsquery('simple', …)`) — both broke this suite (PR #69)
+ * before this text was chosen to be unlike anything `report-abuse-sheet.spec.ts` or
+ * `vertical-slice-e2e.spec.ts` writes.
  */
 const BULLETINS = [
-  { title: 'Ride to the airport Sunday', body: 'Leaving early, happy to chip in for gas.' },
-  { title: 'Spare goggles, dusty camp', body: 'Lost mine on the deep playa.' },
+  {
+    title: 'Borrowing a propane wrench this afternoon',
+    body: 'Stove regulator is stuck, back by sundown.',
+  },
+  {
+    title: 'Extra solar charging capacity to share',
+    body: 'Charging more than our rig uses, come plug in.',
+  },
 ] as const;
 
 /**
@@ -63,7 +80,7 @@ const BULLETINS = [
  * `bulletins.board` run per view, and a screenshot of it reading `0 match now` would not
  * distinguish "the count works" from "the count is stuck".
  */
-const MATCHING_QUERY = { text: 'type:request airport', matches: 1 } as const;
+const MATCHING_QUERY = { text: 'type:request propane', matches: 1 } as const;
 
 /**
  * The query saved as the second view, chosen to match neither bulletin.
