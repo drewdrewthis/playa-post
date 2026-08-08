@@ -4,9 +4,11 @@ import { useNavigate } from 'react-router';
 
 import { useApi } from '../api/api-provider';
 import {
+  bellActionLabel,
   bellLabel,
   deleteActionLabel,
   matchNowLabel,
+  MATCH_COUNT_UNAVAILABLE_LABEL,
   notifyToast,
 } from '../views/saved-view-list';
 
@@ -39,7 +41,14 @@ export function SavedViewsRoute(): JSX.Element {
   const api = useApi();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [status, setStatus] = useState<string | null>(null);
+  /**
+   * The one line of prose under the header, and whether it is reporting a failure.
+   *
+   * ⚠ **`failed` is not decoration.** Both mutations here can be refused or dropped, and
+   * a failure rendered in the same voice as "View deleted" is worse than silence — it
+   * tells someone the thing happened.
+   */
+  const [status, setStatus] = useState<{ message: string; failed: boolean } | null>(null);
 
   const saved = useQuery({
     queryKey: ['views', 'saved', 'list'],
@@ -70,8 +79,20 @@ export function SavedViewsRoute(): JSX.Element {
     onSuccess: async (result, input) => {
       // Reported from the server's answer rather than from what was requested: the bell
       // may have ended up somewhere else entirely if another device moved it first.
-      setStatus(notifyToast(result.notifyingViewId === input.viewId, input.name));
+      setStatus({
+        message: notifyToast(result.notifyingViewId === input.viewId, input.name),
+        failed: false,
+      });
       await refresh();
+    },
+    // ⚠ `retry: false` is the app-wide default, so this is the only attempt. Without it
+    // a failed tap re-renders as the state it was already in, which reads as "the tap
+    // did not register" — and the next tap is the same request failing the same way.
+    onError: (_error, input) => {
+      setStatus({
+        message: `Notifications for ${input.name} could not be changed. Check your connection and try again.`,
+        failed: true,
+      });
     },
   });
 
@@ -79,8 +100,17 @@ export function SavedViewsRoute(): JSX.Element {
     mutationFn: (input: { viewId: string; name: string }) =>
       api.mutate('views.saved.delete', { viewId: input.viewId }),
     onSuccess: async () => {
-      setStatus('View deleted');
+      setStatus({ message: 'View deleted', failed: false });
       await refresh();
+    },
+    // ⚠ The sharper of the two silences: on failure the card is still there, and a card
+    // that is still there is exactly what a *successful* delete would not leave. Without
+    // this, "it did not delete" and "the request never arrived" look identical.
+    onError: (_error, input) => {
+      setStatus({
+        message: `${input.name} could not be deleted. Check your connection and try again.`,
+        failed: true,
+      });
     },
   });
 
@@ -101,8 +131,17 @@ export function SavedViewsRoute(): JSX.Element {
       </p>
 
       {status === null ? null : (
-        <p className="saved-views__status" data-testid="saved-views-status" role="status">
-          {status}
+        <p
+          className={
+            status.failed ? 'saved-views__status saved-views__status--failed' : 'saved-views__status'
+          }
+          data-testid="saved-views-status"
+          data-failed={status.failed ? 'true' : 'false'}
+          // A refusal is announced as one: `alert` interrupts, `status` waits for a gap.
+          // The person is mid-interaction and just did something that did not happen.
+          role={status.failed ? 'alert' : 'status'}
+        >
+          {status.message}
         </p>
       )}
 
@@ -118,8 +157,21 @@ export function SavedViewsRoute(): JSX.Element {
         <ul className="saved-view-list">
           {views.map((view, index) => {
             const notifying = view.id === notifyingViewId;
-            const count = counts[index]?.data ?? null;
+            const countQuery = counts[index];
+            const count = countQuery?.data ?? null;
             const countLabel = matchNowLabel(typeof count === 'number' ? count : null);
+            // ⚠ Told apart from "still loading", which also renders no number. `retry:
+            // false` is deliberate and app-wide, so a dropped request is permanent — and
+            // these go out batched, so one drop blanks every card at once. An empty span
+            // where a count belongs, forever, with no way back short of remounting the
+            // route, is the one failure an offline-first screen must not choose.
+            const countFailed = countQuery?.isError ?? false;
+
+            // ⚠ Scoped to this row. `setNotify` and `remove` are one mutation object each,
+            // shared by every card, so an unscoped `isPending` gates all two dozen cards
+            // on any one card's request.
+            const bellPending = setNotify.isPending && setNotify.variables?.viewId === view.id;
+            const deletePending = remove.isPending && remove.variables?.viewId === view.id;
 
             return (
               <li key={view.id}>
@@ -142,10 +194,21 @@ export function SavedViewsRoute(): JSX.Element {
                       type="button"
                       // The state, not the action: the visible label already says which
                       // it is, and `aria-pressed` is what the CSS keys the lit style off
-                      // so the two can never disagree.
+                      // so the two can never disagree. The *name* says which view, which
+                      // is the thing 24 identical bells otherwise cannot tell anyone.
+                      aria-label={bellActionLabel(view.name)}
                       aria-pressed={notifying}
-                      disabled={setNotify.isPending}
+                      // ⚠ `aria-disabled`, not `disabled`. A browser moves focus off a
+                      // disabled element to `<body>`, so disabling the button someone
+                      // just activated drops them at the top of the document mid-
+                      // interaction, silently, and does not put them back. The handler
+                      // guards instead.
+                      aria-disabled={bellPending}
+                      data-pending={bellPending ? 'true' : 'false'}
                       onClick={() => {
+                        if (bellPending) {
+                          return;
+                        }
                         setNotify.mutate({
                           viewId: view.id,
                           notify: !notifying,
@@ -160,9 +223,25 @@ export function SavedViewsRoute(): JSX.Element {
                   <p className="saved-view__query">{view.sourceText}</p>
 
                   <div className="saved-view__meta">
-                    <span className="saved-view__count" data-testid="saved-view-count">
-                      {countLabel}
-                    </span>
+                    {countFailed ? (
+                      <span className="saved-view__count saved-view__count--failed">
+                        <span data-testid="saved-view-count">{MATCH_COUNT_UNAVAILABLE_LABEL}</span>{' '}
+                        <button
+                          className="button button--quiet saved-view__count-retry"
+                          data-testid="saved-view-count-retry"
+                          type="button"
+                          onClick={() => {
+                            void countQuery?.refetch();
+                          }}
+                        >
+                          Retry
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="saved-view__count" data-testid="saved-view-count">
+                        {countLabel}
+                      </span>
+                    )}
 
                     <button
                       className="saved-view__delete"
@@ -173,8 +252,14 @@ export function SavedViewsRoute(): JSX.Element {
                       // bell is on also ends those notifications, so the control's own
                       // name says so.
                       aria-label={deleteActionLabel(view.name, notifying)}
-                      disabled={remove.isPending}
+                      // Row-scoped, and `aria-disabled` rather than `disabled`, for the
+                      // same two reasons the bell above states.
+                      aria-disabled={deletePending}
+                      data-pending={deletePending ? 'true' : 'false'}
                       onClick={() => {
+                        if (deletePending) {
+                          return;
+                        }
                         remove.mutate({ viewId: view.id, name: view.name });
                       }}
                     >

@@ -95,7 +95,14 @@
   color: var(--pp-chip-on-fg);
 }
 
-.saved-view__bell:disabled {
+/*
+ * ⚠ Keyed off `aria-disabled`, not `:disabled`. These controls stay focusable while their
+ * request is in flight — a `disabled` attribute would throw keyboard focus to `<body>`
+ * mid-interaction — so the attribute that carries the state to assistive technology is
+ * the one that has to carry it visually too.
+ */
+.saved-view__bell[aria-disabled='true'],
+.saved-view__delete[aria-disabled='true'] {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -126,6 +133,23 @@
   font-weight: 500;
   font-size: 0.75rem;
   color: var(--pp-sub);
+}
+
+/*
+ * A refused count reads as refused. Rendering it in the same voice as a real number —
+ * or as the nothing a *pending* count renders — is what let "we never got an answer"
+ * and "still asking" look identical on this card.
+ */
+.saved-view__count--failed {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--pp-space-2);
+  color: var(--pp-faint);
+}
+
+.saved-view__count-retry {
+  padding: 0 4px;
+  font-size: 0.625rem;
 }
 
 .saved-view__delete {
@@ -163,4 +187,14 @@
   font-weight: 600;
   font-size: var(--pp-text-xs);
   color: var(--pp-sub);
+}
+
+/*
+ * A failure must not be readable as a confirmation. Solid rather than dashed and in the
+ * app's danger colour, because this region's other job is to say "View deleted".
+ */
+.saved-views__status--failed {
+  border-style: solid;
+  border-color: var(--pp-danger);
+  color: var(--pp-danger);
 }
