@@ -202,6 +202,36 @@ describe('saved views (issue #45, M5-AC16, D1)', () => {
       expect((await list.list({ viewerId: owner })).views[0]?.name).toBe('New');
     });
 
+    it('renames only the view it was given, not every view of that owner sharing its version', async () => {
+      // ⚠ This test exists to pin `rename`'s `.where('id', ...)` predicate, which every
+      // other rename assertion leaves free: they run against an owner holding a single
+      // view, where `WHERE owner_id = X AND version = N` and `WHERE id = V AND
+      // owner_id = X AND version = N` select the identical row. Views that have never
+      // been renamed all sit at `version = 1`, so an unscoped UPDATE would rename the
+      // owner's whole shelf the first time they rename anything — and
+      // `returningAll().executeTakeFirst()` would still hand back one row, so the API
+      // response looks correct while N rows were mutated.
+      const owner = await seedOnboardedUser('dusty_views_rename_scope');
+      const { save, rename, list } = services();
+
+      const rides = await save.save({ actorId: owner, name: 'Rides', sourceText: 'type:offer' });
+      const events = await save.save({ actorId: owner, name: 'Events', sourceText: 'type:event' });
+      expect(rides.version).toBe(events.version);
+
+      await rename.rename({
+        actorId: owner,
+        viewId: rides.id,
+        name: 'Rides to BRC',
+        expectedVersion: rides.version,
+      });
+
+      const listing = await list.list({ viewerId: owner });
+      expect(listing.views.map((each) => [each.id, each.name, each.version])).toEqual([
+        [rides.id, 'Rides to BRC', rides.version + 1],
+        [events.id, 'Events', events.version],
+      ]);
+    });
+
     it('deletes idempotently — the second call succeeds and reports that nothing was removed', async () => {
       const owner = await seedOnboardedUser('dusty_views_delete');
       const { save, remove, list } = services();
@@ -218,6 +248,69 @@ describe('saved views (issue #45, M5-AC16, D1)', () => {
       });
 
       expect((await list.list({ viewerId: owner })).views).toHaveLength(0);
+    });
+
+    it('deletes only the view it was given, leaving the owner’s other views standing', async () => {
+      // ⚠ Pins `delete`'s `.where('id', ...)` predicate, and deliberately with **no bell
+      // lit anywhere**. Every other delete assertion runs against an owner holding one
+      // view, where dropping that predicate selects the identical row. Unscoped, this
+      // becomes "delete all my views" while `numDeletedRows > 0n` still reports success
+      // — silent, total, unrecoverable loss.
+      //
+      // The no-bell shape is the point: with a designation lit on another view,
+      // `notify_me_queries_source_view_fkey` aborts the transaction and the predicate
+      // would look pinned when it is only being masked by the FK. Nothing catches it
+      // here but the assertion below.
+      const owner = await seedOnboardedUser('dusty_views_delete_scope');
+      const { save, remove, list } = services();
+
+      const rides = await save.save({ actorId: owner, name: 'Rides', sourceText: 'type:offer' });
+      const events = await save.save({ actorId: owner, name: 'Events', sourceText: 'type:event' });
+
+      await expect(remove.delete({ actorId: owner, viewId: rides.id })).resolves.toEqual({
+        viewId: rides.id,
+        deleted: true,
+      });
+
+      const listing = await list.list({ viewerId: owner });
+      expect(listing.views.map((each) => [each.id, each.name])).toEqual([[events.id, 'Events']]);
+    });
+
+    it('leaves a bell lit on another view alone when a different view is deleted', async () => {
+      // ⚠ Pins `delete`'s notify-clear `.where('source_view_id', ...)` predicate. The
+      // identical pair in `setNotify` is pinned by the stale-client test; this copy had
+      // no equivalent, because every scenario reaching it had the bell on the view being
+      // deleted, no bell at all, or a stranger acting — and in all three, dropping the
+      // predicate selects the same rows.
+      //
+      // Unscoped, deleting *any* view switches the owner's notifications off wherever
+      // the bell actually is, emits a spurious `NotifyMeQueryCleared`, and leaves nothing
+      // on screen to explain why the pings stopped.
+      const owner = await seedOnboardedUser('dusty_views_delete_other_bell');
+      const { save, setNotify, remove, list } = services();
+
+      const rides = await save.save({ actorId: owner, name: 'Rides', sourceText: 'type:offer' });
+      const events = await save.save({ actorId: owner, name: 'Events', sourceText: 'type:event' });
+
+      await setNotify.set({ actorId: owner, viewId: rides.id, notify: true });
+
+      await expect(remove.delete({ actorId: owner, viewId: events.id })).resolves.toEqual({
+        viewId: events.id,
+        deleted: true,
+      });
+
+      // The bell is still on `rides`, and the designation still points at it by id.
+      const listing = await list.list({ viewerId: owner });
+      expect(listing.views.map((each) => each.id)).toEqual([rides.id]);
+      expect(listing.notifyingViewId).toBe(rides.id);
+
+      const rows = await notifyMeRows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.source_view_id).toBe(rides.id);
+
+      // Nothing was cleared, so nothing may claim it was: a spurious `NotifyMeQueryCleared`
+      // is what a downstream consumer would act on to stop sending.
+      expect(await outboxEventTypes()).toEqual(['NotifyMeQueryChanged']);
     });
 
     it(`refuses the ${String(SAVED_VIEW_LIMIT_PER_OWNER + 1)}th view rather than growing without bound`, async () => {
