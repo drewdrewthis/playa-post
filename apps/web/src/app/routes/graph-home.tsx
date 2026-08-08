@@ -1,21 +1,22 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import type { JSX } from 'react';
-import { Link } from 'react-router';
-
-import type { Person } from '@playa-post/contracts';
 
 import { useApi } from '../api/api-provider';
-import { PersonIdentity, trustLabel } from '../people/person-identity';
-
-const FIRST_DEGREE = 1;
+import { summariseGraph } from '../graph/graph-counts';
+import { GraphNetwork } from '../graph/graph-network';
 
 /**
- * Graph home: the people this viewer is directly connected to.
+ * Graph home: the viewer's network, drawn as the network it is.
  *
- * **First degree only** (`degree === 1`). The payload can carry further degrees — the
- * §6a projection decides what a viewer may know about each — but M2's home surface is
- * the direct connections, and filtering here rather than asking the server for a
- * narrower query keeps "who can I see" one answer in one place (ADR-0002 §6).
+ * The whole payload is rendered, not just the first degree — a graph screen that hides
+ * the far half of the graph is a list with extra steps. Which people arrive at all is
+ * still the server's answer and only the server's: `app.visible_people` decides who is
+ * reachable and `app.visible_edges` decides which of them may be shown knowing each
+ * other, so this screen filters nothing (ADR-0002 §6).
+ *
+ * ⚠ **Nodes come from `people`.** {@link GraphNetwork} drops an edge naming anybody the
+ * person list does not contain rather than drawing a node for them; see
+ * `graph-layout.ts` for why that is a privacy rule and not a defensive habit.
  */
 export function GraphHomeRoute(): JSX.Element {
   const api = useApi();
@@ -29,7 +30,8 @@ export function GraphHomeRoute(): JSX.Element {
     mutationFn: () => api.mutate('connections.invitations.create', undefined),
   });
 
-  const people = (graph.data?.people ?? []).filter((person) => person.degree === FIRST_DEGREE);
+  const network = graph.data;
+  const summary = summariseGraph(network?.people ?? []);
 
   return (
     <section className="screen" data-testid="graph-home">
@@ -49,6 +51,12 @@ export function GraphHomeRoute(): JSX.Element {
         </div>
       </header>
 
+      {network === undefined ? null : (
+        <p className="graph-counts">
+          {summary.people} PEOPLE · {summary.trusted} TRUSTED
+        </p>
+      )}
+
       {invite.data === undefined ? null : (
         <p className="invite-token">
           <span className="invite-token__label">Share this invite</span>
@@ -58,45 +66,13 @@ export function GraphHomeRoute(): JSX.Element {
         </p>
       )}
 
-      {people.length === 0 ? (
+      {network === undefined || summary.people === 0 ? (
         <p className="screen__empty">
           Nobody yet. Create an invite and send it to someone you know.
         </p>
       ) : (
-        <ul className="person-list">
-          {people.map((person) => (
-            <GraphConnection key={person.userId} person={person} />
-          ))}
-        </ul>
+        <GraphNetwork graph={network} />
       )}
     </section>
-  );
-}
-
-/**
- * One direct connection: the node you can open, and the edge that proves the
- * connection rendered for this viewer.
- *
- * ⚠ The `data-testid`s are keyed on **handle**, so a person the projection has hidden
- * (no handle at all) carries none — which is correct rather than a gap: there is no
- * public name to key on, and inventing one from `userId` would undo the projection.
- */
-function GraphConnection({ person }: { readonly person: Person }): JSX.Element {
-  const handle = person.handle;
-
-  return (
-    <li
-      className="person-list__item"
-      data-testid={handle === undefined ? undefined : `graph-connection-edge-${handle}`}
-    >
-      <Link
-        className="person-list__link"
-        to={`/people/${person.userId}`}
-        data-testid={handle === undefined ? undefined : `graph-connection-node-${handle}`}
-      >
-        <PersonIdentity identity={person} />
-      </Link>
-      <span className="person-list__trust">Trust: {trustLabel(person.trust)}</span>
-    </li>
   );
 }
