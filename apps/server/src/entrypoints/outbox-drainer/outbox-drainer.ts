@@ -36,6 +36,57 @@ const BACKOFF_BASE_SECONDS = 5;
  */
 const CLAIM_LEASE_SECONDS = 5 * 60;
 
+/**
+ * How far past the drainer's own clock reading a row may sit and still count as due.
+ *
+ * **One millisecond, and it is a precision mismatch being corrected, not a fudge
+ * factor.** `app.outbox_events.available_at` is `timestamptz`: PostgreSQL stores it to
+ * the microsecond, and the column's `default now()` fills it to the microsecond.
+ * JavaScript's `Date` is truncated to the millisecond. So a clock reading of `T` does
+ * not mean "the instant T" — it means "some instant in `[T, T+1)`", with the
+ * sub-millisecond remainder discarded.
+ *
+ * Comparing `available_at <= T` therefore asks the wrong question. A row written
+ * *microseconds before* this drainer read its clock lands at, say, `T.000999` — earlier
+ * in time, but larger as a number — so it fails the predicate and is invisible to the
+ * very claim round that should have seen it. Measured at ~1.9% of rows, which is how it
+ * surfaced: an integration test that seeds two rows and drains once observed one (#74).
+ * Nothing was lost, only delayed to the next poll, which is exactly what makes it read
+ * as an intermittent test failure rather than as a bug.
+ *
+ * The right question is `available_at < T + 1ms`, and the bound is **exclusive on
+ * purpose**. The real instant `T` stands for lies in the half-open interval `[T, T+1)`,
+ * so every instant it could be is strictly below `T+1` — a row at exactly `T+1.000000`
+ * is in the future wherever in that interval the true reading fell. `<=` would claim it
+ * up to a millisecond early; `<` widens the window by exactly the truncation it corrects
+ * and not one microsecond more, which is what keeps this constant a precision correction
+ * rather than a fudge factor.
+ *
+ * What survives is a strictly-sub-millisecond residue: a row due at `T.000500` is claimed
+ * even if the true reading was `T.000000`, half a millisecond early. Harmless at every
+ * interval this table deals in — the shortest backoff ADR-0006 defines is
+ * {@link BACKOFF_BASE_SECONDS} (5s) and the claim lease is {@link CLAIM_LEASE_SECONDS}
+ * (300s), four orders of magnitude larger than the residue, and ADR-0006 draws no
+ * distinction between "due now" and "due a fraction of a millisecond from now".
+ *
+ * ⚠ Not solved by reading the database's own clock, which would need no correction at
+ * all. Two routes, both rejected:
+ * - A `sql`-tagged `now()` — blocked outright.
+ *   `tests/fitness/no-sql-outside-persistence.fitness.test.ts` fails the `sql` tag
+ *   anywhere under `apps/server/src/**` outside `persistence/`, and this entrypoint
+ *   deliberately contains no raw SQL (see {@link createOutboxDrainer}).
+ * - Kysely's expression builder, `eb.fn('now')` — **not** blocked by that rule, which
+ *   only sees raw SQL, so it renders `now()` legally. Rejected on the merits instead.
+ *   It fixes the skew in the *read* predicate alone, while `claimed_at` and the lease
+ *   below are still stamped from the JS clock — reintroducing a smaller version of the
+ *   same two-clock skew on the write side, where nothing is watching for it. And it puts
+ *   the due decision out of reach of {@link CreateOutboxDrainerDependencies.now},
+ *   destroying the injected-clock testability this fix rests on: a pinned reading is the
+ *   only thing that makes an off-by-one-truncation-window bound distinguishable from a
+ *   correct one.
+ */
+const DUE_BOUND_SLACK_MS = 1;
+
 /** `drainOnce()`'s default batch size when the caller does not choose one. */
 const DEFAULT_CLAIM_LIMIT = 10;
 
@@ -65,6 +116,18 @@ export interface CreateOutboxDrainerDependencies {
    * a system whose event types are all drained here.
    */
   readonly excludedEventTypes?: readonly string[] | undefined;
+  /**
+   * Reads the wall clock. Overridable so a test can pin which millisecond a claim round
+   * believes it is in — the only way {@link DUE_BOUND_SLACK_MS}'s behaviour is testable
+   * deterministically, since an off-by-one-truncation-window bound is indistinguishable
+   * from a correct one unless you know the exact reading it was derived from.
+   *
+   * Read per use rather than captured once, for the reason
+   * `start-notification-flush-poller.ts` gives at its own clock read ("a captured clock
+   * would freeze the flush on the first" window): a poller calls `drainOnce()`
+   * repeatedly, and a frozen reading would pin every round to the first one's `now`.
+   */
+  readonly now?: (() => Date) | undefined;
 }
 
 export interface DrainOnceOptions {
@@ -121,14 +184,20 @@ export function createOutboxDrainer(
 ): OutboxDrainer {
   const { database, consumers, drainerId } = dependencies;
   const excludedEventTypes = dependencies.excludedEventTypes ?? [];
+  const readClock = dependencies.now ?? ((): Date => new Date());
 
   return {
     async drainOnce(options: DrainOnceOptions = {}): Promise<DrainOnceResult> {
       const limit = options.limit ?? DEFAULT_CLAIM_LIMIT;
-      const claimedEvents = await claimBatch(database, { drainerId, limit, excludedEventTypes });
+      const claimedEvents = await claimBatch(database, {
+        drainerId,
+        limit,
+        excludedEventTypes,
+        readClock,
+      });
 
       for (const event of claimedEvents) {
-        await dispatchAndRecordOutcome(database, consumers, event);
+        await dispatchAndRecordOutcome(database, consumers, event, readClock);
       }
 
       return { claimedEventIds: claimedEvents.map((event) => event.eventId) };
@@ -147,18 +216,25 @@ async function claimBatch(
     readonly drainerId: string;
     readonly limit: number;
     readonly excludedEventTypes: readonly string[];
+    readonly readClock: () => Date;
   },
 ): Promise<OutboxEventRecord[]> {
   const excluded = options.excludedEventTypes;
 
   return database.transaction().execute(async (transaction) => {
-    const now = new Date();
+    const now = options.readClock();
+    // Compared against, but never written — `claimed_at` and the lease below still
+    // record `now`, because those are statements about when this drainer acted, and it
+    // acted at `now`. Only the due question needs the slack; see DUE_BOUND_SLACK_MS.
+    const dueBound = new Date(now.getTime() + DUE_BOUND_SLACK_MS);
 
     const candidates = await transaction
       .selectFrom('app.outbox_events')
       .select('event_id')
       .where('status', 'in', CLAIMABLE_STATUSES)
-      .where('available_at', '<=', now)
+      // Exclusive: `dueBound` is the first instant this reading provably is not — see
+      // DUE_BOUND_SLACK_MS on the half-open interval.
+      .where('available_at', '<', dueBound)
       // The seam L3b-infra left for L3b-notify, now filled. `SendGroupedPushHandler`
       // reads `NotifyMeMatched` rows itself, on its own 60-second grouping-window
       // schedule — a second scheduled reader, not a consumer this drainer dispatches
@@ -223,6 +299,7 @@ async function dispatchAndRecordOutcome(
   database: DatabaseConnection,
   consumers: readonly OutboxConsumer[],
   event: OutboxEventRecord,
+  readClock: () => Date,
 ): Promise<void> {
   try {
     for (const consumer of consumers) {
@@ -245,7 +322,7 @@ async function dispatchAndRecordOutcome(
       .updateTable('app.outbox_events')
       .set({
         status: isDead ? 'dead' : 'pending',
-        available_at: new Date(Date.now() + backoffSeconds * 1000),
+        available_at: new Date(readClock().getTime() + backoffSeconds * 1000),
         last_error: error instanceof Error ? error.message : String(error),
       })
       .where('event_id', '=', event.eventId)
