@@ -134,7 +134,20 @@ describe('B9 — a reported author cannot reach the reporter (M2-AC10)', () => {
       body: 'Leaving Sunday morning.',
     });
 
-    const reportResponse = await reporter.moderation.report({ bulletinId: bulletin.id });
+    /*
+     * ⚠ The account names the reporter, on purpose. `detail` is the one column on
+     * `app.bulletin_reports` whose contents the *reporter* writes, so it is the one that
+     * can carry their identity by accident — "I am b9_reporter and he messaged me" is
+     * how a real person writes this box. Seeding it with all three identifiers turns the
+     * deep search below into a check on the new column too: if any author-reachable read
+     * ever selects `detail`, this test fails on the identity inside it rather than
+     * waiting for someone to notice the column arrived.
+     */
+    const reportResponse = await reporter.moderation.report({
+      bulletinId: bulletin.id,
+      reason: 'harassment',
+      detail: `I am b9_reporter (Quiet Reporter, ${reporterUser.userId}) and they will not stop messaging me.`,
+    });
 
     // Every identifying string the reporter has. All three, because a leak that ships
     // the handle instead of the id is the same leak.

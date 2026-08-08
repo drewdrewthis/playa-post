@@ -2,7 +2,7 @@ import { useState, type FormEvent, type JSX } from 'react';
 import { Navigate } from 'react-router';
 
 import { useSession } from '../auth/session-provider';
-import { AuthNotConfiguredError } from '../auth/supabase-auth-client';
+import { describeSignInFailure } from '../auth/sign-in-failure';
 
 /**
  * Sign-in: an email address and a magic link, which is the whole of ADR-0008's
@@ -31,11 +31,9 @@ export function SignInRoute(): JSX.Element {
       await requestSignInLink(email);
       setSent(true);
     } catch (error) {
-      setFailure(
-        error instanceof AuthNotConfiguredError
-          ? 'This build has no sign-in service configured yet.'
-          : 'That did not go through. Check the address and try again.',
-      );
+      // Every branch lives in `auth/sign-in-failure.ts`, which is unit-tested; a
+      // condition written inline here is one no test in this repository can reach.
+      setFailure(describeSignInFailure(error));
     }
   }
 

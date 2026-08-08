@@ -1,7 +1,11 @@
 import type { DatabaseConnection } from '@playa-post/database';
 
 import type { HiddenBulletin } from '../domain/hidden-bulletin';
-import type { HideBulletinWrite, ModerationRepository } from '../domain/moderation.repository';
+import type {
+  HideBulletinWrite,
+  ModerationRepository,
+  ReportBulletinWrite,
+} from '../domain/moderation.repository';
 
 /** Everything the repository needs, injected (addendum §12). */
 export interface PostgresModerationRepositoryDependencies {
@@ -23,6 +27,12 @@ export interface PostgresModerationRepositoryDependencies {
  * to read the reporter's identity out of (B9). Adding an event here would break a
  * privacy guarantee from a file no privacy test looks at.
  *
+ * ⚠ **No `select` here returns `reason` or `detail`.** They are written and never read
+ * back: `detail` is reporter-authored free text that may name the reporter, and the
+ * only sanctioned reader is the stewards' queue (M5), which does not exist yet. A
+ * convenience `select *` added to `findHiddenFor` would put both on a code path the
+ * board — and therefore an author's own request — travels (M2-AC10, B9).
+ *
  * ⚠ **No statement here reads `app.bulletins` or `app.users`.** Whether the acting
  * viewer may see the bulletin at all is decided *before* this layer, through
  * `modules/bulletins`' authorized read
@@ -36,17 +46,24 @@ export function createPostgresModerationRepository(
   const { database } = dependencies;
 
   return {
-    async report(write: HideBulletinWrite): Promise<HiddenBulletin> {
+    async report(write: ReportBulletinWrite): Promise<HiddenBulletin> {
       // `on conflict do nothing` rather than a read-then-write: ADR-0005's matrix makes
       // a second report of the same bulletin by the same reporter a converging no-op,
       // and expressing that as the unique constraint's own behaviour means two
       // concurrent reports cannot both decide there is no row yet.
+      //
+      // ⚠ `do nothing`, never `do update`: on a repeat the *first* reason and the first
+      // account stay. They are what the reporter filed and what a steward may already
+      // have read; an upsert would let a later re-report silently rewrite a statement
+      // attributed to them.
       const inserted = await database
         .insertInto('app.bulletin_reports')
         .values({
           bulletin_id: write.bulletinId,
           reporter_id: write.viewerId,
           created_at: write.occurredAt,
+          reason: write.reason,
+          detail: write.detail,
         })
         .onConflict((onConflict) =>
           onConflict.columns(['bulletin_id', 'reporter_id']).doNothing(),

@@ -234,6 +234,13 @@ export function BulletinDetailSheet({
                 Dismiss
               </button>
 
+              {/*
+               * ⚠ Dismiss acts; report *asks*. `onReport` opens the report sheet
+               * (`moderation/report-abuse-sheet.tsx`), which collects what kind of abuse
+               * this is and what happened — a report is a claim the stewards act on, and
+               * one filed by a single tap carries nothing for them to act on. Nothing is
+               * sent from this button.
+               */}
               <button
                 className="button button--danger"
                 data-testid="bulletin-report-button"

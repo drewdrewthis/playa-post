@@ -1,12 +1,15 @@
 import { z } from 'zod';
 
 /**
- * The input for both moderation procedures — `moderation.report` and
- * `moderation.dismiss`.
+ * `moderation.dismiss`'s input: one bulletin, and nothing else.
  *
- * One schema for both, because they take the same claim and must answer a bulletin the
- * caller may not touch the same way. Two schemas would be two places for one of them to
- * grow a field the other refuses.
+ * ⚠ **Deliberately not shared with `moderation.report` any more.** It was, while the two
+ * took the same claim — and this comment used to say two schemas "would be two places
+ * for one of them to grow a field the other refuses". The field arrived: a report now
+ * carries a reason and an account (`moderation-report.input.ts`), and a dismissal must
+ * not be able to carry either. Dismissing is "not for me"; it makes no assertion about
+ * the bulletin or its author, and a schema that accepted a reason here would let a
+ * client file one that nothing reads and nobody acts on.
  *
  * Restated here rather than imported from `modules/bulletins/transport`: the wire is a
  * contract owned by the module that serves it, and a shared input schema would make one

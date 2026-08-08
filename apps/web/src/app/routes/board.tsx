@@ -2,6 +2,8 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useCallback, useEffect, useState, type JSX } from 'react';
 
+import type { ModerationTargetRequest, ReportBulletinRequest } from '@playa-post/contracts';
+
 import { useApi } from '../api/api-provider';
 import { applicationErrorCode } from '../api/client';
 import type { BoardCardView } from '../bulletins/board-card-view';
@@ -9,8 +11,12 @@ import { buildBoardQuery, type BoardTypeFilter } from '../bulletins/board-query'
 import { BoardSearch } from '../bulletins/board-search';
 import { BulletinCard } from '../bulletins/bulletin-card';
 import { BulletinDetailSheet } from '../bulletins/bulletin-detail-sheet';
+import { describeHideFailure } from '../moderation/hide-failure';
+import { ReportAbuseSheet } from '../moderation/report-abuse-sheet';
 import { useOffline } from '../offline/offline-provider';
 import { forgetBoardCard, queueMutation } from '../offline/pending-mutations';
+
+import '../moderation/hide-failure-notice.css';
 
 /**
  * How long the board waits after a keystroke before asking the server again.
@@ -77,6 +83,14 @@ export function BoardRoute(): JSX.Element {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<BoardTypeFilter>('all');
   const [openBulletinId, setOpenBulletinId] = useState<string | null>(null);
+  /*
+   * The card being reported, held separately from `openBulletinId`. Reporting hides the
+   * bulletin the moment it succeeds, so it leaves `visible` and `openCard` becomes null
+   * — and a sheet keyed off the open card would unmount mid-send, taking the reporter's
+   * typed account with it. Holding the card is also what lets the sheet quote a title
+   * that is no longer on the board.
+   */
+  const [reporting, setReporting] = useState<BoardCardView | null>(null);
 
   const settledSearch = useDebounced(search, SEARCH_DEBOUNCE_MS);
   const query = buildBoardQuery(filter, settledSearch);
@@ -101,16 +115,49 @@ export function BoardRoute(): JSX.Element {
   // server refetch has not landed yet — is on screen rather than briefly missing.
   const cached = useLiveQuery(() => database.cachedBoard.toArray(), [database], []);
 
+  /*
+   * One mutation for both, because both have the same effect on this screen: the
+   * bulletin leaves the board, the offline cache forgets it, and every query is
+   * invalidated. They differ only in what the server is told — a dismissal says
+   * nothing, a report carries the reason and the account the sheet collected.
+   *
+   * ⚠ **`retry: false` is the app-wide default (`api-provider.tsx`), and neither of
+   * these is queued offline** — `bulletin.report` has no replay route, which is what
+   * [#63](https://github.com/drewdrewthis/playa-post/issues/63) tracks. So one attempt is
+   * all there is, and an offline report fails exactly the way an online refusal does.
+   * `onError` is therefore not a nicety: it is the only thing standing between a failed
+   * report and a person who believes the stewards have it.
+   */
   const hide = useMutation({
-    mutationFn: (input: { bulletinId: string; action: 'dismiss' | 'report' }) =>
-      input.action === 'report'
-        ? api.mutate('moderation.report', { bulletinId: input.bulletinId })
-        : api.mutate('moderation.dismiss', { bulletinId: input.bulletinId }),
+    mutationFn: (input: ReportBulletinRequest | ModerationTargetRequest) =>
+      'reason' in input
+        ? api.mutate('moderation.report', input)
+        : api.mutate('moderation.dismiss', input),
     onSuccess: async (_result, input) => {
       await forgetBoardCard(database, input.bulletinId);
       await queryClient.invalidateQueries();
     },
+    onError: (error, input) => {
+      // A card hidden for a write that never landed is a claim the next reload quietly
+      // reverses. Put it back — unless the server's answer was that it is not there,
+      // which is the one refusal restoring it would contradict.
+      if (describeHideFailure(input, error).restoresCard) {
+        setHidden((previous) => previous.filter((id) => id !== input.bulletinId));
+      }
+    },
   });
+
+  /*
+   * The failed hide still on screen, or `null`.
+   *
+   * Read off the mutation rather than copied into state, because react-query holds the
+   * variables of a failed mutation — which means the reporter's own account of what
+   * happened survives the failure and can be sent again without being retyped. Starting
+   * another hide clears this, so only ever one notice is on screen; the card of an
+   * abandoned one is already back on the board, so nothing is lost by that.
+   */
+  const failedHide = hide.isError && hide.variables !== undefined ? hide.variables : null;
+  const hideFailure = failedHide === null ? null : describeHideFailure(failedHide, hide.error);
 
   async function archive(card: BoardCardView): Promise<void> {
     await queueMutation(database, {
@@ -139,10 +186,18 @@ export function BoardRoute(): JSX.Element {
     setOpenBulletinId(null);
   }, []);
 
-  function hideBulletin(card: BoardCardView, action: 'dismiss' | 'report'): void {
+  /**
+   * Take a card off this board straight away, then tell the server why (or that).
+   *
+   * ⚠ **The removal is provisional, not a claim.** It holds only while the write is in
+   * flight; `hide`'s `onError` puts the card back and the notice below says what did not
+   * happen. Hiding unconditionally is what let a failed report leave someone believing
+   * the stewards had it.
+   */
+  function hideBulletin(bulletinId: string, request: ReportBulletinRequest | ModerationTargetRequest): void {
     closeSheet();
-    setHidden((previous) => [...previous, card.id]);
-    hide.mutate({ bulletinId: card.id, action });
+    setHidden((previous) => [...previous, bulletinId]);
+    hide.mutate(request);
   }
 
   const cards = new Map<string, BoardCardView>();
@@ -225,6 +280,53 @@ export function BoardRoute(): JSX.Element {
         matchCount={board.isSuccess ? visible.length : null}
       />
 
+      {/*
+       * ⚠ **Persistent, not a toast.** Every other confirmation on this app borrows the
+       * comp's `say()` pill, which fades after 2400ms — right for "Posted", wrong here.
+       * The comp has no failure state at all (`sendReport` cannot fail against a mock),
+       * so nothing is being contradicted; but a notice that leaves on its own is one a
+       * person can miss, and missing it returns them to believing a report was filed.
+       * It goes when they say so, or when the retry succeeds.
+       */}
+      {hideFailure === null ? null : (
+        <div className="hide-failure" role="alert" data-testid="hide-failure">
+          <p className="hide-failure__message">{hideFailure.message}</p>
+
+          {/*
+           * The retry is `screens.css`'s own `button--quiet` — the app's pill for a
+           * row-level action, borrowed rather than restyled. It re-sends `failedHide`,
+           * the exact request react-query held onto, so the reporter's account of what
+           * happened goes again without being retyped.
+           */}
+          <div className="hide-failure__actions">
+            {/* Absent, not dimmed, when a retry cannot work — see `hide-failure.ts`. */}
+            {hideFailure.retryable && failedHide !== null ? (
+              <button
+                className="button button--quiet"
+                data-testid="hide-failure-retry-button"
+                type="button"
+                onClick={() => {
+                  hide.mutate(failedHide);
+                }}
+              >
+                Try again
+              </button>
+            ) : null}
+
+            <button
+              className="hide-failure__dismiss"
+              data-testid="hide-failure-dismiss-button"
+              type="button"
+              onClick={() => {
+                hide.reset();
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {queryActive && board.isError ? (
         <p className="form__error" data-testid="board-error">
           {boardErrorMessage(board.error)}
@@ -264,10 +366,30 @@ export function BoardRoute(): JSX.Element {
             void archive(card);
           }}
           onDismiss={(card) => {
-            hideBulletin(card, 'dismiss');
+            hideBulletin(card.id, { bulletinId: card.id });
           }}
+          /*
+           * Reporting no longer fires on the button. It opens the sheet that asks what
+           * kind and what happened, because a report with no reason is a row the
+           * stewards cannot act on (`design/Playa Post.dc.html:337-356`).
+           */
           onReport={(card) => {
-            hideBulletin(card, 'report');
+            closeSheet();
+            setReporting(card);
+          }}
+        />
+      )}
+
+      {reporting === null ? null : (
+        <ReportAbuseSheet
+          bulletinId={reporting.id}
+          bulletinTitle={reporting.title}
+          onClose={() => {
+            setReporting(null);
+          }}
+          onSend={(report) => {
+            setReporting(null);
+            hideBulletin(report.bulletinId, report);
           }}
         />
       )}

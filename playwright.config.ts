@@ -62,6 +62,23 @@ export default defineConfig({
       // Fixed, not discovered at runtime — see `tests/e2e/support/e2e-ports.ts`'s
       // doc comment for why `global-setup.ts` cannot hand this value to this file.
       VITE_API_BASE_URL: `http://127.0.0.1:${API_PORT}`,
+
+      /*
+       * Present only so `createSupabaseAuthClient()` builds the *real*
+       * `@supabase/supabase-js` client instead of `unconfiguredAuthClient()`.
+       *
+       * ⚠ **Neither value is reachable and neither is a credential.** Nothing binds this
+       * port; `report-abuse-sheet.spec.ts` intercepts the provider's `otp` endpoint at
+       * the wire and answers with its own 429 body, which is the only way a rate limit
+       * can be reproduced on demand. Without these two keys that spec would exercise the
+       * `AuthNotConfiguredError` branch and silently prove the wrong message.
+       *
+       * Safe for the vertical slice: `SessionProvider` reads the harness seed *first* and
+       * returns before it ever touches the auth client, so a seeded page never constructs
+       * a request to either value.
+       */
+      VITE_SUPABASE_URL: 'http://127.0.0.1:4399',
+      VITE_SUPABASE_ANON_KEY: 'e2e-placeholder-not-a-credential',
     },
   },
 });

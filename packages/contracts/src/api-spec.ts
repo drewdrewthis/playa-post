@@ -3,7 +3,11 @@ import type { GetConnectionRequest, Connection, Invite, InviteTokenRequest, Open
 import type { Graph } from './graph';
 import type { Health } from './health';
 import type { CompleteOnboardingRequest, OnboardedUser } from './identity';
-import type { HiddenBulletin, ModerationTargetRequest } from './moderation';
+import type {
+  HiddenBulletin,
+  ModerationTargetRequest,
+  ReportBulletinRequest,
+} from './moderation';
 import type {
   GroupedNotification,
   NotificationDismissal,
@@ -75,7 +79,7 @@ export interface PlayaPostApi {
   'bulletins.listMine': QuerySpec<void, readonly Bulletin[]>;
   'bulletins.board': QuerySpec<BoardRequest, Board>;
 
-  'moderation.report': MutationSpec<ModerationTargetRequest, HiddenBulletin>;
+  'moderation.report': MutationSpec<ReportBulletinRequest, HiddenBulletin>;
   'moderation.dismiss': MutationSpec<ModerationTargetRequest, HiddenBulletin>;
 
   'sync.submitMutations': MutationSpec<SubmitMutationsRequest, MutationBatch>;

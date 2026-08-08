@@ -1,0 +1,229 @@
+/*
+ * The report-abuse sheet, following `design/Playa Post.dc.html` lines 337-356.
+ *
+ * Every colour is a token from `app/theme/tokens.css`, which declares a complete set
+ * under `:root` (light) and a second under `[data-theme='dark']`. That is what makes
+ * this file correct in both themes without a single `[data-theme]` selector of its own
+ * — a literal colour here would be a light-mode value shown on a dark sheet.
+ *
+ * ⚠ **Specificity, not source order.** This file is reached through the router, so it
+ * lands in the bundle *before* `app/theme/screens.css`; an equal-specificity rule here
+ * loses to one there no matter what it says. Every declaration below that overrides a
+ * shared class (`.form__input--prose`, `.button--primary`) is therefore written as a
+ * two-class selector, which wins on specificity and is order-independent. Rules that
+ * only style this component's own classes need no such care and do not use it.
+ *
+ * The sheet sits at the comp's own z-indices, 44 and 45: above the detail sheet it is
+ * opened from (32/33) and above the notifications takeover (35), below the compose
+ * sheet (70). Both are `position: absolute` against `.app-column`, the nearest
+ * positioned ancestor, exactly as `detail-sheet.css` explains.
+ */
+
+.report-sheet__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 44;
+  background: var(--pp-scrim);
+}
+
+.report-sheet {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.875rem;
+  left: 0.75rem;
+  z-index: 45;
+  max-height: 85%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-3);
+  padding: var(--pp-space-5);
+  border: 1px solid var(--pp-sheet-border);
+  border-radius: var(--pp-radius-lg);
+  background: var(--pp-sheet-bg);
+  box-shadow: var(--pp-sheet-shadow);
+  animation: pp-report-sheetup 0.22s ease-out;
+}
+
+/*
+ * Its own keyframe, identical in effect to `detail-sheet.css`'s `pp-sheetup`.
+ *
+ * ⚠ Eight duplicated lines, on purpose. Referencing the other feature's keyframe would
+ * make this sheet's animation silently depend on `bulletin-detail-sheet.tsx` being in
+ * the same bundle — true today, and invisible the day this sheet is opened from
+ * somewhere else. One CSS file per feature means the feature's file is complete.
+ */
+@keyframes pp-report-sheetup {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.report-sheet__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--pp-space-2);
+}
+
+/** Italic serif, the comp's 24px — one step down from the detail sheet's own title. */
+.report-sheet__title {
+  margin: 0;
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: var(--pp-text-2xl);
+  line-height: 1.2;
+  color: var(--pp-ink);
+}
+
+.report-sheet__close {
+  flex: none;
+  padding: var(--pp-space-1) var(--pp-space-2);
+  border: none;
+  background: none;
+  color: var(--pp-faint);
+  font-weight: 700;
+  font-size: var(--pp-text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/*
+ * The bulletin being reported, quoted. Monospaced and truncated to one line, per the
+ * comp: it is a reference, not the thing to read, and a long title wrapping to four
+ * lines would push the chips off a small screen.
+ */
+.report-sheet__subject {
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--pp-font-mono);
+  font-weight: 500;
+  font-size: var(--pp-text-xs);
+  color: var(--pp-accent);
+}
+
+.report-sheet__blurb {
+  margin: 0;
+  font-weight: 500;
+  font-size: var(--pp-text-sm);
+  line-height: 1.55;
+  color: var(--pp-sub);
+}
+
+.report-sheet__reasons,
+.report-sheet__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+}
+
+/** The comp's small caps label, above the chips and above the box. */
+.report-sheet__label {
+  margin: 0;
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-faint);
+}
+
+/*
+ * Wraps rather than scrolling sideways, unlike the board's filter row: five reasons is
+ * a closed set that has to be read in full before one is chosen, and a chip parked
+ * off-screen is a category nobody picks.
+ */
+.report-sheet__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pp-space-2);
+}
+
+.report-sheet__chip {
+  padding: 0.4375rem 0.6875rem;
+  border: 1px solid var(--pp-chip-off-border);
+  border-radius: var(--pp-radius-pill);
+  background: none;
+  color: var(--pp-chip-off-fg);
+  font-weight: 600;
+  font-size: var(--pp-text-xs);
+  transition: background 0.15s ease;
+}
+
+/*
+ * Selected keys off `aria-pressed` — the same single source of truth the board's filter
+ * chips and the tab bar use, so a chip cannot look chosen while announcing it is not.
+ * The four `--pp-chip-*` tokens are the comp's `cchip()` helper, and they are declared
+ * in both themes.
+ */
+.report-sheet__chip[aria-pressed='true'] {
+  border-color: var(--pp-chip-on-bg);
+  background: var(--pp-chip-on-bg);
+  color: var(--pp-chip-on-fg);
+}
+
+/*
+ * Two classes, deliberately: `.form__input--prose` in `screens.css` already carries the
+ * comp's serif face, size, and line height, and this only adds what the comp asks for
+ * on top. A single-class selector here would lose the `resize` declaration to any
+ * `.form__input--multiline` rule, because this file is bundled first.
+ */
+.report-sheet .report-sheet__detail {
+  resize: none;
+  min-height: 4.5rem;
+}
+
+/** The comp's slightly taller send control; the fill and weight come from `.button--primary`. */
+.report-sheet .report-sheet__send {
+  padding-block: 0.8125rem;
+}
+
+/*
+ * `aria-disabled`, not `disabled` — see the component for why the control stays
+ * focusable. `screens.css` styles `.button:disabled` and cannot see this state, so the
+ * same treatment is restated; the two-class selector is the bundle-order rule above.
+ */
+.report-sheet .report-sheet__send[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.report-sheet__counter,
+.report-sheet__hint {
+  margin: 0;
+  text-align: center;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.04em;
+}
+
+.report-sheet__counter {
+  color: var(--pp-faint);
+}
+
+/*
+ * `--pp-warn`, not `--pp-danger`: nothing has gone wrong. It names the one field still
+ * to fill in, and the danger colour is what this app reserves for destructive acts and
+ * genuine refusals.
+ */
+.report-sheet__hint {
+  color: var(--pp-warn);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-sheet {
+    animation: none;
+  }
+
+  .report-sheet__chip {
+    transition: none;
+  }
+}
