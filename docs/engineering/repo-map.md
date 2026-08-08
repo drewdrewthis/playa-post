@@ -38,7 +38,9 @@ carry proposed defaults that proceed unless objected to; see the end of the impl
 apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,connections,graph,
                  bulletins,views,notifications,moderation,sync}/{api,components,hooks,model,routes,
                  state,tests}. Shell/router/providers/auth/api client/offline queue in
-                 src/app/{routes,auth,api,offline,shell} (the M2 frontend). Shared UI in src/shared/.
+                 src/app/{routes,auth,api,offline,shell} (the M2 frontend), with a folder per feature
+                 beside them — src/app/{people,notifications,bulletins} — holding the pure rules and
+                 the stylesheet one screen owns. Shared UI in src/shared/.
                  src/app/theme/ is the design system: tokens.css (two token sets, light on :root and
                  dark on [data-theme='dark']), screens.css (the column and every shared screen
                  element), typefaces.ts (the self-hosted font imports, which double as the service
