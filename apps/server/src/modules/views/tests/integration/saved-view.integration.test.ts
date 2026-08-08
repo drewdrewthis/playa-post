@@ -414,6 +414,198 @@ describe('saved views (issue #45, M5-AC16, D1)', () => {
       expect((await list.list({ viewerId: owner })).notifyingViewId).toBeNull();
     });
   });
+
+  /**
+   * Scenario: the *designation* is owner-scoped too, not just the views (M5-AC16).
+   *
+   * The M5-AC16 block above proves the `app.saved_views` statements are scoped — an
+   * actor listing sees none of another owner's rows, and rename/delete/setNotify all
+   * refuse. It cannot say anything about the four statements that read or write
+   * `app.notify_me_queries`, because **no owner in it has a bell lit**: with that table
+   * empty, `listFor`'s second query, `currentDesignation`, and the clear inside `delete`
+   * all return or affect nothing whether their `owner_id` predicate is there or not.
+   * Correct today, and unpinned — which is how a predicate gets deleted in a later
+   * refactor with a green suite.
+   *
+   * ⚠ **Nothing behind these statements is a second line of defence.** ADR-0002 §4's
+   * policy is `using (true) with check (true)` on purpose — "viewer-scoped authorization
+   * lives in the application layer" — so `app_rw` reads every row of
+   * `app.notify_me_queries` regardless of who is asking. The `owner_id` predicate in the
+   * statement is the whole control.
+   *
+   * Each test below was written by falsification: the predicate it names was actually
+   * deleted, the test observed red, and the predicate restored. Two of them are
+   * constructed so that no query-plan detail can let them pass — see their comments.
+   */
+  describe("Scenario: another owner's Notify Me designation is invisible (M5-AC16)", () => {
+    it("does not report another owner's designated view as the caller's lit bell", async () => {
+      const ownerA = await seedOnboardedUser('dusty_designation_owner_a');
+      const ownerB = await seedOnboardedUser('dusty_designation_owner_b');
+      const { save, setNotify, list } = services();
+
+      const viewA = await save.save({
+        actorId: ownerA,
+        name: 'Kitchen crew',
+        sourceText: 'type:request kitchen',
+      });
+      await setNotify.set({ actorId: ownerA, viewId: viewA.id, notify: true });
+
+      const viewB = await save.save({
+        actorId: ownerB,
+        name: 'B events',
+        sourceText: 'type:event',
+      });
+
+      // B has no bell lit and A's is the only row in the table, so an unscoped read of
+      // `app.notify_me_queries` can only return A's — handing B a UUID naming one of A's
+      // saved views, in the field B's client renders as "your notifications are on".
+      // Deterministic: one row means `executeTakeFirst` has nothing else to pick.
+      const listing = await list.list({ viewerId: ownerB });
+
+      expect(listing.notifyingViewId).toBeNull();
+      expect(listing.views.map((each) => each.id)).toEqual([viewB.id]);
+    });
+
+    it('reports each owner the bell on their own view when both have one lit', async () => {
+      const ownerA = await seedOnboardedUser('dusty_designation_both_a');
+      const ownerB = await seedOnboardedUser('dusty_designation_both_b');
+      const { save, setNotify, list } = services();
+
+      const viewA = await save.save({ actorId: ownerA, name: 'A rides', sourceText: 'type:offer' });
+      const viewB = await save.save({ actorId: ownerB, name: 'B events', sourceText: 'type:event' });
+
+      await setNotify.set({ actorId: ownerA, viewId: viewA.id, notify: true });
+      await setNotify.set({ actorId: ownerB, viewId: viewB.id, notify: true });
+
+      // Both assertions in one test on purpose. Unscoped, `executeTakeFirst` returns
+      // whichever of the two rows the plan emits first — and that single row can be the
+      // right answer for at most ONE of these owners, so one of the two must fail
+      // whichever way the planner goes. No storage or plan detail can make this pass
+      // without the predicate.
+      expect((await list.list({ viewerId: ownerA })).notifyingViewId).toBe(viewA.id);
+      expect((await list.list({ viewerId: ownerB })).notifyingViewId).toBe(viewB.id);
+    });
+
+    it("answers a no-op bell-off with the caller's own designation, never another owner's", async () => {
+      const ownerA = await seedOnboardedUser('dusty_designation_noop_a');
+      const ownerB = await seedOnboardedUser('dusty_designation_noop_b');
+      const { save, setNotify } = services();
+
+      const viewA = await save.save({ actorId: ownerA, name: 'A rides', sourceText: 'type:offer' });
+      await setNotify.set({ actorId: ownerA, viewId: viewA.id, notify: true });
+
+      const viewB = await save.save({ actorId: ownerB, name: 'B events', sourceText: 'type:event' });
+
+      // B taps off a bell that was never on. Nothing of B's matches the clear, so the
+      // repository falls through to `currentDesignation` — "where is my bell actually?",
+      // the one read on that path and the only statement in this file no other test
+      // reaches while `app.notify_me_queries` holds a row. Unscoped it answers with A's.
+      await expect(
+        setNotify.set({ actorId: ownerB, viewId: viewB.id, notify: false }),
+      ).resolves.toEqual({ notifyingViewId: null });
+
+      // A's bell is untouched by B's tap.
+      expect(await notifyMeRows()).toEqual([
+        {
+          owner_id: ownerA,
+          source_text: 'type:offer',
+          source_view_id: viewA.id,
+          version: 1,
+        },
+      ]);
+    });
+
+    it("does not switch off another owner's notifications when a stranger deletes their view by id", async () => {
+      const ownerA = await seedOnboardedUser('dusty_designation_delete_a');
+      const actorC = await seedOnboardedUser('dusty_designation_delete_c');
+      const { save, setNotify, remove } = services();
+
+      const viewA = await save.save({ actorId: ownerA, name: 'A rides', sourceText: 'type:offer' });
+      await setNotify.set({ actorId: ownerA, viewId: viewA.id, notify: true });
+
+      await expect(remove.delete({ actorId: actorC, viewId: viewA.id })).resolves.toEqual({
+        viewId: viewA.id,
+        deleted: false,
+      });
+
+      // `delete` clears the designation *before* removing the row, because the FK refuses
+      // the delete while a designation still points there. Scoped to the actor that clear
+      // matches nothing here; unscoped it matches on `source_view_id` alone — so C, who
+      // cannot delete the view and does not, silently switches A's notifications off and
+      // lands a `NotifyMeQueryCleared` attributed to C.
+      expect(await notifyMeRows()).toEqual([
+        {
+          owner_id: ownerA,
+          source_text: 'type:offer',
+          source_view_id: viewA.id,
+          version: 1,
+        },
+      ]);
+      expect(await outboxEventTypes()).toEqual(['NotifyMeQueryChanged']);
+      expect(await savedViewRows()).toEqual([
+        { id: viewA.id, owner_id: ownerA, name: 'A rides' },
+      ]);
+    });
+
+    it("counts only the caller's own views against the per-owner cap", async () => {
+      const ownerA = await seedOnboardedUser('dusty_designation_cap_a');
+      const ownerB = await seedOnboardedUser('dusty_designation_cap_b');
+      const { save, list } = services();
+
+      for (let index = 0; index < SAVED_VIEW_LIMIT_PER_OWNER; index += 1) {
+        // Sequential for the same reason the cap test above is: firing these concurrently
+        // would be testing the race rather than the bound.
+        await save.save({
+          actorId: ownerA,
+          name: `A view ${String(index)}`,
+          sourceText: 'type:request',
+        });
+      }
+
+      // B keeps nothing, so B's first save must land. An unscoped count sees A's full
+      // list and refuses it — one person filling their own Saved screen would lock every
+      // other person out of saving anything. A cap is per owner or it is a shared
+      // resource, and this is the only assertion that can tell the two apart.
+      const viewB = await save.save({
+        actorId: ownerB,
+        name: 'B first',
+        sourceText: 'type:event',
+      });
+
+      expect(viewB.ownerId).toBe(ownerB);
+      expect((await list.list({ viewerId: ownerB })).views.map((each) => each.id)).toEqual([
+        viewB.id,
+      ]);
+    });
+
+    it("refuses a designation pointing at another owner's view, in the database", async () => {
+      const ownerA = await seedOnboardedUser('dusty_designation_fkey_a');
+      const ownerB = await seedOnboardedUser('dusty_designation_fkey_b');
+      const { save } = services();
+
+      const viewA = await save.save({ actorId: ownerA, name: 'A rides', sourceText: 'type:offer' });
+
+      // ⚠ Asserted against raw SQL rather than through a service **because no service can
+      // reach this state**, and that is the finding rather than a gap. `setNotify`'s clear
+      // is the one statement in the repository whose `owner_id` predicate cannot be made
+      // to matter by any test: deleting it leaves this whole file green, because
+      // `notify_me_queries_source_view_fkey` is COMPOSITE on
+      // `(owner_id, source_view_id) references app.saved_views (owner_id, id)` and there
+      // is no row it would have to exclude. That redundancy is only real while the
+      // constraint is — so the constraint is what gets pinned, and the predicate stays as
+      // defence in depth rather than being deleted on the strength of it.
+      await expect(
+        testDatabase.client.query(
+          `insert into app.notify_me_queries
+             (owner_id, source_text, ast, ast_version, updated_at, source_view_id)
+           values ($1, 'type:offer', $2, 1, now(), $3)`,
+          [ownerB, JSON.stringify({ types: ['offer'], text: [] }), viewA.id],
+        ),
+      ).rejects.toThrow(/notify_me_queries_source_view_fkey/);
+
+      expect(await notifyMeRows()).toHaveLength(0);
+    });
+  });
 });
 
 /** Mirrors `packages/database/src/database-schema.integration.test.ts`'s helper. */
