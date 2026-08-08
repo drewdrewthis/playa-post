@@ -1,0 +1,276 @@
+/*
+ * The compose sheet: the comp's "Post a bulletin" overlay (`design/Playa Post.dc.html`
+ * lines 380-421), rendered as the `/board/new` screen.
+ *
+ * Everything here is compose-only. Anything a second screen would want — the field
+ * frame, the buttons, the error line, the small print — is reused from
+ * `app/theme/screens.css` rather than restated, and nothing in this file edits it.
+ *
+ * ⚠ Class and keyframe names are `compose-`prefixed on purpose. Chips and sheets are
+ * coming to the board and the person sheet too, and a bare `.chip` here would be a
+ * silent collision the day one of those lands its own.
+ */
+
+/* The screen ---------------------------------------------------------------- */
+
+/*
+ * The comp's sheet is anchored to the bottom of the phone with a 12px inset. Here that
+ * is the bottom of the scrolling region: `justify-content: flex-end` over a full-height
+ * column, so a short form sits above the tab bar the way the comp draws it and a long
+ * one simply scrolls.
+ *
+ * ⚠ Declares its own layout instead of overriding `.screen`'s. This stylesheet is
+ * reached through `router.tsx`, which `entry.tsx` imports *before* `screens.css`, so it
+ * lands earlier in the bundle — an equal-specificity override here would silently lose
+ * to the class it was written to beat. Anything this file must win, it wins on
+ * specificity or not at all.
+ */
+.compose-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-4);
+  min-height: 100%;
+  justify-content: flex-end;
+  padding: var(--pp-space-4) var(--pp-space-3) var(--pp-space-3);
+}
+
+/* The sheet ----------------------------------------------------------------- */
+
+/*
+ * ⚠ Rounded on all four corners and floating clear of the bottom edge, which is the comp
+ * (line 891: `left:12px;right:12px;bottom:14px;border-radius:18px`). Issue #48's prose
+ * says "rounded top"; the comp is the source of truth and it does not draw one.
+ */
+.compose-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-3);
+  padding: var(--pp-space-5);
+  border: 1px solid var(--pp-sheet-border);
+  border-radius: var(--pp-radius-lg);
+  background: var(--pp-sheet-bg);
+  box-shadow: var(--pp-sheet-shadow);
+  animation: compose-sheetup 0.22s ease-out;
+}
+
+.compose-sheet__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--pp-space-3);
+}
+
+.compose-sheet__title {
+  margin: 0;
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: var(--pp-text-2xl);
+  line-height: 1.15;
+  color: var(--pp-ink);
+}
+
+.compose-sheet__close {
+  flex: none;
+  padding: var(--pp-space-1) var(--pp-space-2);
+  color: var(--pp-faint);
+  font-weight: 700;
+  font-size: var(--pp-text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+
+/* Fields -------------------------------------------------------------------- */
+
+/*
+ * The label and its live count share a line, so the budget is read where the name of
+ * the field is rather than hunted for under the control.
+ */
+.compose-field__label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--pp-space-2);
+}
+
+/*
+ * ⚠ The count is the control's `aria-describedby` target and deliberately **not** a live
+ * region: described-by text is read once, on focus, whereas a counter that announces
+ * itself on every keystroke makes the field unusable with a screen reader.
+ */
+.compose-field__count {
+  flex: none;
+  font-family: var(--pp-font-mono);
+  font-weight: 500;
+  font-size: var(--pp-text-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--pp-faint);
+}
+
+.compose-field__count[data-over='true'] {
+  font-weight: 600;
+  color: var(--pp-danger);
+}
+
+/*
+ * The type control is one chip's worth of control, not a full-width bar. Two classes
+ * deep so it outranks `.form__input`'s `width: 100%` on specificity rather than on
+ * bundle order — see the note on `.compose-screen`.
+ */
+.compose-sheet .compose-type-select {
+  width: auto;
+  min-width: 9rem;
+  align-self: flex-start;
+}
+
+/* Chip groups --------------------------------------------------------------- */
+
+/*
+ * The comp puts "WHO SEES IT" and "EXPIRES" side by side. They wrap here because this
+ * column is narrower than the comp's phone once the expiry row carries a fourth option.
+ */
+.compose-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pp-space-4);
+}
+
+/*
+ * A `fieldset`, so the radios inside are announced as one named group. `min-inline-size`
+ * defeats the element's built-in `min-content` floor, which otherwise refuses to let it
+ * shrink inside the flex row above.
+ */
+.compose-group {
+  flex: 1 1 10rem;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.compose-group__label {
+  padding: 0;
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-faint);
+}
+
+.compose-chips {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pp-space-2);
+}
+
+/*
+ * A real radio, sized away rather than `display: none` — a hidden-by-display input is
+ * removed from the accessibility tree and from tab order, which is exactly the keyboard
+ * behaviour the native control was chosen for.
+ */
+.compose-chip__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.compose-chip {
+  padding: 0.4375rem 0.6875rem;
+  border: 1px solid var(--pp-chip-off-border);
+  border-radius: var(--pp-radius-pill);
+  background: transparent;
+  color: var(--pp-chip-off-fg);
+  font-weight: 600;
+  font-size: var(--pp-text-xs);
+  cursor: pointer;
+}
+
+.compose-chip__input:checked + .compose-chip {
+  border-color: var(--pp-chip-on-bg);
+  background: var(--pp-chip-on-bg);
+  color: var(--pp-chip-on-fg);
+}
+
+/* The focus ring belongs on the visible chip; the input it guards has no size of its own. */
+.compose-chip__input:focus-visible + .compose-chip {
+  outline: 2px solid var(--pp-accent);
+  outline-offset: 2px;
+}
+
+/*
+ * The audience chip is genuinely `disabled`, not painted to look it: who sees a bulletin
+ * is decided by the graph, and a control that could be pressed would be offering a
+ * choice the server has no field for.
+ */
+.compose-chip__input:disabled + .compose-chip {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Toast --------------------------------------------------------------------- */
+
+/*
+ * `fixed`, not `absolute`. The comp's toast floats above the tab bar, which is outside
+ * the scrolling region this screen renders into — an absolutely-positioned pill would be
+ * clipped by that region's `overflow-y: auto` and never seen. Centred on the viewport,
+ * which is where the column is (`.app-frame` centres it).
+ */
+.compose-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 6.5rem;
+  z-index: 70;
+  transform: translateX(-50%);
+  max-width: calc(var(--pp-column-width) - var(--pp-space-6));
+  margin: 0;
+  padding: var(--pp-space-2) var(--pp-space-4);
+  border-radius: var(--pp-radius-pill);
+  background: var(--pp-ink);
+  color: var(--pp-bg-solid);
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  text-align: center;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 30%);
+  pointer-events: none;
+  animation: compose-toastin 0.2s ease-out;
+}
+
+/* Motion -------------------------------------------------------------------- */
+
+@keyframes compose-sheetup {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Carries the centring translate, so the animation cannot undo it mid-flight. */
+@keyframes compose-toastin {
+  from {
+    transform: translate(-50%, 8px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .compose-sheet,
+  .compose-toast {
+    animation: none;
+  }
+}
