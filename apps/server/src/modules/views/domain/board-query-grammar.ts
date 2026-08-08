@@ -1,6 +1,25 @@
 import { ApplicationError } from '../../../shared/errors/application-error';
 
 /**
+ * The shape version of a stored AST — ADR-0007:70-72's `ast_version`.
+ *
+ * It versions **this grammar's output shape**, never a row. A grammar change ships as a
+ * new value here plus a migration that re-validates or re-parses stored queries; until
+ * that migration runs, a query saved under an older version is simply not evaluated by
+ * this grammar. That is the point: silently reinterpreting somebody's saved query
+ * notifies them about the wrong things while they are not there to notice.
+ *
+ * **One constant, because there is one grammar.** `app.saved_views.ast_version` and
+ * `app.notify_me_queries.ast_version` both mean "which shape of {@link BoardQuery} is in
+ * the `ast` column", and ADR-0007's "Reuse" section is explicit that the two tables hold
+ * the same AST. Two constants could drift, and a drift would be invisible: each table's
+ * reader would keep filtering on its own number and quietly stop seeing the other's rows.
+ *
+ * ⚠ Bump this and you owe the migration — for **both** tables.
+ */
+export const BOARD_QUERY_AST_VERSION = 1;
+
+/**
  * The board grammar's hard bounds (ADR-0007:35).
  *
  * Both are counted on the **source text**, before any interpretation, so a query that

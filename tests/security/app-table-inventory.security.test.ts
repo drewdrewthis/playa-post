@@ -34,6 +34,11 @@ const INVENTORY = [
   // Notify Me and push (L3b-notify)
   'notify_me_queries',
   'push_subscriptions',
+  // The named board queries the Saved tab lists (issue #45, ADR-0007:77, ADR-0016).
+  // Pulled forward from M5's A6 — the tab shipped in M2 and pointed at a placeholder.
+  // The per-view bell does NOT live here: it is a pointer on `notify_me_queries`, so
+  // D1's "exactly one Notify Me query per user" stays a primary key.
+  'saved_views',
   // Per-recipient panel state — a dismissal is the one durable fact behind
   // `notifications.list`'s `unread` flag. Its own table rather than a column on
   // `consumer_receipts`, which is ADR-0006 infrastructure this module does not own.
@@ -55,7 +60,7 @@ describe('schema app holds exactly the tables M2 declared (m2-lane-briefs.md rat
     await testDatabase?.stop();
   });
 
-  it('matches the fourteen-name inventory as a set, and in count', async () => {
+  it('matches the fifteen-name inventory as a set, and in count', async () => {
     const { rows } = await testDatabase.client.query<{ tablename: string }>(
       `select tablename from pg_tables where schemaname = 'app' order by tablename`,
     );

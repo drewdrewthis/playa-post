@@ -15,7 +15,18 @@ import type {
   SubscribeToPushRequest,
 } from './notifications';
 import type { MutationBatch, SubmitMutationsRequest } from './sync';
-import type { NotifyMeQuery, UpdateNotifyMeQueryRequest } from './views';
+import type {
+  NotifyMeDesignation,
+  NotifyMeQuery,
+  RenameSavedViewRequest,
+  SavedView,
+  SavedViewDeletion,
+  SavedViewIdRequest,
+  SavedViewListing,
+  SaveViewRequest,
+  SetSavedViewNotifyRequest,
+  UpdateNotifyMeQueryRequest,
+} from './views';
 
 /**
  * One procedure of the client-facing API: what it takes, and what it gives back.
@@ -84,6 +95,11 @@ export interface PlayaPostApi {
 
   'sync.submitMutations': MutationSpec<SubmitMutationsRequest, MutationBatch>;
 
+  'views.saved.list': QuerySpec<void, SavedViewListing>;
+  'views.saved.save': MutationSpec<SaveViewRequest, SavedView>;
+  'views.saved.rename': MutationSpec<RenameSavedViewRequest, SavedView>;
+  'views.saved.delete': MutationSpec<SavedViewIdRequest, SavedViewDeletion>;
+  'views.saved.setNotify': MutationSpec<SetSavedViewNotifyRequest, NotifyMeDesignation>;
   'views.notifyMe.update': MutationSpec<UpdateNotifyMeQueryRequest, NotifyMeQuery>;
 
   'notifications.list': QuerySpec<void, readonly GroupedNotification[]>;

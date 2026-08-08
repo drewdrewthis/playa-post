@@ -76,8 +76,11 @@ apps/server/     The modular monolith.
                  modules/graph has no domain/, because ADR-0004 decision 7 makes the graph a read
                  model rather than an aggregate; modules/views was domain/ + tests/ alone while the
                  board grammar was all it shipped, and gained application/ persistence/ transport/ with
-                 Notify Me in M2.10 — its <name>.module.ts is now a factory as well as a barrel, and
-                 saved views join it in M5, ADR-0013.) A module MAY also grow an infrastructure/ for a
+                 Notify Me in M2.10 — its <name>.module.ts is now a factory as well as a barrel. Saved
+                 views (app.saved_views, views.saved.*) landed there too, ahead of M5, with the
+                 comp's per-view bell modelled as a pointer FROM app.notify_me_queries so decision
+                 D1's "exactly one Notify Me query per user" stays a primary key: ADR-0016.)
+                 A module MAY also grow an infrastructure/ for a
                  non-persistence adapter — modules/connections/infrastructure/ holds the node:crypto
                  CSPRNG behind the invite-token port, and modules/notifications/infrastructure/ holds
                  the Web Push transport, because domain/ and application/ may not import a Node builtin

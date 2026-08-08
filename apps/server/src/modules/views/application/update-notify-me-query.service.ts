@@ -1,5 +1,5 @@
-import { parseBoardQuery } from '../domain/board-query-grammar';
-import { NOTIFY_ME_AST_VERSION, type NotifyMeQuery } from '../domain/notify-me-query';
+import { BOARD_QUERY_AST_VERSION, parseBoardQuery } from '../domain/board-query-grammar';
+import type { NotifyMeQuery } from '../domain/notify-me-query';
 import type { NotifyMeQueryRepository } from '../domain/notify-me-query.repository';
 
 /**
@@ -67,7 +67,7 @@ export function createUpdateNotifyMeQueryService(
         ownerId: command.actorId,
         sourceText: command.sourceText,
         query,
-        astVersion: NOTIFY_ME_AST_VERSION,
+        astVersion: BOARD_QUERY_AST_VERSION,
         updatedAt: readClock(),
         ...(command.expectedVersion === undefined ? {} : { expectedVersion: command.expectedVersion }),
       });

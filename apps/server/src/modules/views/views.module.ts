@@ -1,8 +1,14 @@
 import type { DatabaseConnection } from '@playa-post/database';
 
+import { createDeleteSavedViewService } from './application/delete-saved-view.service';
+import { createListSavedViewsQuery } from './application/list-saved-views.query';
 import type { NotifyMeQueryDirectory } from './application/notify-me-query.directory';
+import { createRenameSavedViewService } from './application/rename-saved-view.service';
+import { createSaveViewService } from './application/save-view.service';
+import { createSetSavedViewNotifyService } from './application/set-saved-view-notify.service';
 import { createUpdateNotifyMeQueryService } from './application/update-notify-me-query.service';
 import { createPostgresNotifyMeQueryRepository } from './persistence/postgres-notify-me-query.repository';
+import { createPostgresSavedViewRepository } from './persistence/postgres-saved-view.repository';
 import { createViewsRouter, type ViewsRouter } from './transport/views.router';
 
 /**
@@ -91,10 +97,22 @@ export function createViewsModule(dependencies: ViewsModuleDependencies): ViewsM
   const notifyMeQueries = createPostgresNotifyMeQueryRepository({
     database: dependencies.database,
   });
+  // A second repository over the same connection, not a second module: `app.saved_views`
+  // and `app.notify_me_queries` are both this module's, and the Notify Me *designation*
+  // is a fact spanning them (ADR-0016). They are separate objects because they answer
+  // separate questions — `notifyMeQueries` is also the cross-module read model
+  // `modules/notifications` consumes, and that consumer must not acquire a way to write
+  // somebody's saved views as a side effect.
+  const savedViews = createPostgresSavedViewRepository({ database: dependencies.database });
 
   return {
     router: createViewsRouter({
       updateNotifyMeQuery: createUpdateNotifyMeQueryService({ notifyMeQueries }),
+      listSavedViews: createListSavedViewsQuery({ savedViews }),
+      saveView: createSaveViewService({ savedViews }),
+      renameSavedView: createRenameSavedViewService({ savedViews }),
+      deleteSavedView: createDeleteSavedViewService({ savedViews }),
+      setSavedViewNotify: createSetSavedViewNotifyService({ savedViews }),
     }),
     notifyMeQueries,
   };

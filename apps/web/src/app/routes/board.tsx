@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useCallback, useEffect, useState, type JSX } from 'react';
+import { useSearchParams } from 'react-router';
 
 import type { ModerationTargetRequest, ReportBulletinRequest } from '@playa-post/contracts';
 
@@ -15,6 +16,7 @@ import { describeHideFailure } from '../moderation/hide-failure';
 import { ReportAbuseSheet } from '../moderation/report-abuse-sheet';
 import { useOffline } from '../offline/offline-provider';
 import { forgetBoardCard, queueMutation } from '../offline/pending-mutations';
+import { saveViewFailureMessage, seedSavedViewName } from '../views/saved-view-list';
 
 import '../moderation/hide-failure-notice.css';
 
@@ -79,8 +81,14 @@ export function BoardRoute(): JSX.Element {
   const api = useApi();
   const queryClient = useQueryClient();
   const { database, syncRunner } = useOffline();
+  const [searchParams] = useSearchParams();
   const [hidden, setHidden] = useState<readonly string[]>([]);
-  const [search, setSearch] = useState('');
+  // Seeded from `?q=` once, on mount: that is how the Saved screen's "OPEN ON BOARD"
+  // arrives, and it is a *starting point* rather than bound state — a person who then
+  // edits the field is editing their own search, not fighting a URL. The chip stays
+  // "All", because a saved query already carries its own `type:` term if it has one
+  // (the comp's `onOpen` sets `filter:'all'` for exactly this reason).
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
   const [filter, setFilter] = useState<BoardTypeFilter>('all');
   const [openBulletinId, setOpenBulletinId] = useState<string | null>(null);
   /*
@@ -91,6 +99,7 @@ export function BoardRoute(): JSX.Element {
    * that is no longer on the board.
    */
   const [reporting, setReporting] = useState<BoardCardView | null>(null);
+  const [savedNotice, setSavedNotice] = useState<string | null>(null);
 
   const settledSearch = useDebounced(search, SEARCH_DEBOUNCE_MS);
   const query = buildBoardQuery(filter, settledSearch);
@@ -114,6 +123,23 @@ export function BoardRoute(): JSX.Element {
   // The offline cache is unioned in so a card written while offline — or one whose
   // server refetch has not landed yet — is on screen rather than briefly missing.
   const cached = useLiveQuery(() => database.cachedBoard.toArray(), [database], []);
+
+  // ⚠ Saves `query`, the composed text the server was actually asked — chip term
+  // included — and not the raw field. A view that stored only what was typed would come
+  // back narrowing differently from the board it was saved off, which is the one way a
+  // saved view can quietly lie.
+  const saveView = useMutation({
+    mutationFn: (input: { name: string; sourceText: string }) =>
+      api.mutate('views.saved.save', input),
+    onSuccess: async () => {
+      setSavedNotice('View saved — find it under Saved');
+      await queryClient.invalidateQueries({ queryKey: ['views', 'saved', 'list'] });
+    },
+    // ⚠ The server's refusals are not all the same refusal — see `saveViewFailureMessage`.
+    onError: (error: unknown) => {
+      setSavedNotice(saveViewFailureMessage(error));
+    },
+  });
 
   /*
    * One mutation for both, because both have the same effect on this screen: the
@@ -278,6 +304,18 @@ export function BoardRoute(): JSX.Element {
         filter={filter}
         onFilterChange={setFilter}
         matchCount={board.isSuccess ? visible.length : null}
+        saving={saveView.isPending}
+        // ⚠ The *settled* query, not the raw field. `BoardSearch` knows a query is being
+        // typed; only this route knows whether one has composed yet, because only it holds
+        // the debounce. Without this the control is live for ~250ms doing nothing.
+        settledQueryActive={queryActive}
+        onSave={() => {
+          if (query === undefined) {
+            return;
+          }
+          setSavedNotice(null);
+          saveView.mutate({ name: seedSavedViewName(query), sourceText: query });
+        }}
       />
 
       {/*
@@ -325,6 +363,17 @@ export function BoardRoute(): JSX.Element {
             </button>
           </div>
         </div>
+      )}
+
+      {/*
+       * `screen__notice` rather than a new class: this is the shared "small line of prose
+       * under the controls" treatment, and a second one would be a second thing to keep
+       * in sync.
+       */}
+      {savedNotice === null ? null : (
+        <p className="screen__notice" data-testid="board-save-view-notice" role="status">
+          {savedNotice}
+        </p>
       )}
 
       {queryActive && board.isError ? (

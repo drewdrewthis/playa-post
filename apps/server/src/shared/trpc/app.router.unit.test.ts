@@ -59,7 +59,14 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
       dismissBulletin: { dismiss: unreachable },
     }),
     sync: createSyncRouter({ submitMutations: { submit: unreachable } }),
-    views: createViewsRouter({ updateNotifyMeQuery: { update: unreachable } }),
+    views: createViewsRouter({
+      updateNotifyMeQuery: { update: unreachable },
+      listSavedViews: { list: unreachable },
+      saveView: { save: unreachable },
+      renameSavedView: { rename: unreachable },
+      deleteSavedView: { delete: unreachable },
+      setSavedViewNotify: { set: unreachable },
+    }),
     notifications: createNotificationsRouter({
       subscribeToPush: { subscribe: unreachable },
       listNotifications: { list: unreachable },
