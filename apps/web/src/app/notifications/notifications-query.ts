@@ -5,6 +5,15 @@ import type { GroupedNotification } from '@playa-post/contracts';
 import { useApi } from '../api/api-provider';
 
 /**
+ * The one cache entry the bell, the panel, and every dismissal all speak about.
+ *
+ * Exported so `notifications-mutation.ts` writes its optimistic update to the same key
+ * this query reads — two literals here would mean an optimistic dismissal that updates
+ * a cache nothing renders.
+ */
+export const NOTIFICATIONS_QUERY_KEY = ['notifications', 'list'] as const;
+
+/**
  * The caller's own grouped Notify Me notifications, newest first.
  *
  * Shared by the bell (which needs the count) and the panel (which needs the items) so
@@ -23,7 +32,7 @@ export function useGroupedNotifications(polling: boolean): readonly GroupedNotif
   const api = useApi();
 
   const notifications = useQuery({
-    queryKey: ['notifications', 'list'],
+    queryKey: NOTIFICATIONS_QUERY_KEY,
     queryFn: () => api.query('notifications.list', undefined),
     refetchInterval: polling ? 1000 : false,
   });
