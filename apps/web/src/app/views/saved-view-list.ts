@@ -11,6 +11,8 @@
  * reads differently from the mock is a difference somebody has to notice and re-ratify.
  */
 
+import { applicationErrorCode } from '../api/client';
+
 /**
  * How much of a query the comp keeps when it seeds a name from it.
  *
@@ -42,9 +44,25 @@ export function matchNowLabel(count: number | null): string | null {
   return count === null ? null : `${String(count)} match now`;
 }
 
+/** What the card shows in place of a count the server refused to give. */
+export const MATCH_COUNT_UNAVAILABLE_LABEL = 'Count unavailable';
+
 /** The bell chip's visible text — the comp's `v.bellLabel`. */
 export function bellLabel(notifying: boolean): string {
   return notifying ? '◉ NOTIFY ON' : '○ NOTIFY OFF';
+}
+
+/**
+ * The bell's accessible name.
+ *
+ * ⚠ **It names the view and deliberately does not change with the state.** A screen can
+ * hold two dozen of these; without the name, a screen-reader user hears the identical
+ * "NOTIFY OFF, toggle button" once per card with nothing to tell them apart. `aria-pressed` carries lit-ness — which is why this string must not
+ * also carry it: a toggle whose *name* changes when it is pressed reads as a different
+ * control each time, and the visible label already says which state it is in.
+ */
+export function bellActionLabel(name: string): string {
+  return `Notify me about ${name}`;
 }
 
 /**
@@ -69,4 +87,45 @@ export function deleteActionLabel(name: string, notifying: boolean): string {
   return notifying
     ? `Delete ${name}, which also switches its notifications off`
     : `Delete ${name}`;
+}
+
+/**
+ * The refusals of `views.saved.save` whose remedy is the person's own.
+ *
+ * ⚠ **Codes, not messages.** Each of these errors is constructed with a sentence that
+ * already names the remedy — "Delete one to save another", the bound a name must fit,
+ * the token the grammar refused — so the server's own message is passed through rather
+ * than restated here. That is `boardErrorMessage`'s rule for `INVALID_BOARD_QUERY`
+ * applied to the other two, and it is safe for exactly the reason those errors document:
+ * none of them echoes the input, so none can carry user text onto the screen or into a
+ * log (`views/domain/saved-view.errors.ts`).
+ *
+ * `SAVED_VIEW_CONFLICT` and `SAVED_VIEW_UNAVAILABLE` are absent on purpose: neither is
+ * reachable from a *save*, which names no existing view.
+ */
+const SAVE_REFUSAL_CODES: readonly string[] = [
+  'SAVED_VIEW_LIMIT_REACHED',
+  'SAVED_VIEW_NAME_INVALID',
+  'INVALID_BOARD_QUERY',
+];
+
+/**
+ * What to tell someone whose "Save as view" did not take.
+ *
+ * ⚠ **A refusal must not be dressed as a connectivity problem.** Someone at the saved-view
+ * cap who is told to check their connection will retry, and the retry fails identically
+ * forever — the one thing they could have done instead (delete a view) is the thing the
+ * server said and this screen threw away.
+ *
+ * @param error - Whatever the mutation rejected with: a tRPC envelope, or a transport
+ *   failure with no envelope at all.
+ */
+export function saveViewFailureMessage(error: unknown): string {
+  const code = applicationErrorCode(error);
+
+  // No envelope means the request never got an answer — the only failure where "check
+  // your connection" is the true and useful thing to say.
+  return code !== null && SAVE_REFUSAL_CODES.includes(code) && error instanceof Error
+    ? error.message
+    : 'That view could not be saved. Check your connection and try again.';
 }

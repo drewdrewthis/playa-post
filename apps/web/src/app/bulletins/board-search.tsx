@@ -36,6 +36,7 @@ export function BoardSearch({
   matchCount,
   onSave,
   saving,
+  settledQueryActive,
 }: {
   readonly search: string;
   readonly onSearchChange: (search: string) => void;
@@ -56,6 +57,16 @@ export function BoardSearch({
   readonly onSave: () => void;
   /** Whether a save is in flight, so the control cannot be tapped twice into two views. */
   readonly saving: boolean;
+  /**
+   * Whether a query that could actually be saved exists *yet*.
+   *
+   * ⚠ **Not the same question as this component's own `queryActive`**, which is computed
+   * from the raw field and decides whether the control is *shown*. The board composes
+   * what gets saved from a debounced copy of that field, so for a beat after the first
+   * keystroke a query is being typed but none has settled. `onSave` returns early in
+   * that window, so without this the button would be visible, enabled, and inert.
+   */
+  readonly settledQueryActive: boolean;
 }): JSX.Element {
   const [helpOpen, setHelpOpen] = useState(false);
   const helpId = useId();
@@ -141,15 +152,18 @@ export function BoardSearch({
            * unnamed query per user — was not somewhere a saved view could go; a control
            * that appeared to work and saved nothing would have been a lie.
            *
-           * Disabled only while a save is in flight, so a double tap cannot make two
-           * views out of one intent.
+           * Disabled while a save is in flight, so a double tap cannot make two views
+           * out of one intent — and until the query it would save has actually settled.
+           * The slot appears on the first keystroke but the board debounces what it
+           * composes, so without `settledQueryActive` there is a window where this reads
+           * as ready and does nothing at all when pressed.
            */}
           <span className="board-search__save-slot">
             <button
               className="board-search__save"
               data-testid="board-search-save-button"
               type="button"
-              disabled={saving}
+              disabled={saving || !settledQueryActive}
               onClick={onSave}
             >
               ☆ Save as view

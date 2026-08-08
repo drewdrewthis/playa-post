@@ -134,21 +134,20 @@ async function seedTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
 /**
  * Saves one view through the board's own control, which is the only way a view is made.
  *
- * ⚠ **The wait on the match count is not politeness, it is the whole correctness of this
- * helper — and it has to be an *exact* count.** `BoardSearch` renders the save button off
- * the **raw** field, but `board.tsx` composes what gets saved from
- * `useDebounced(search, 250)` and returns early while that is still `undefined`. Clicking
- * the moment the button appears is a silent no-op: nothing is saved, no error is shown,
- * and this suite would photograph an empty Saved screen under a "populated" filename.
+ * ⚠ **The wait on `toBeEnabled()` is an assertion about the control, not a sleep.** The
+ * save button appears on the first keystroke — `BoardSearch` shows it off the **raw**
+ * field — but what gets saved is composed from `useDebounced(search, 250)`, so for a beat
+ * there is a query being typed and none that could be saved. The button is `disabled`
+ * across exactly that window (`settledQueryActive`), which is what makes waiting for it
+ * to be enabled both a correct wait *and* a standing check that the window is still
+ * closed. If the guard were removed the button would be enabled immediately, this helper
+ * would click into the dead window, and the notice assertion below would fail.
  *
- * Waiting for *any* count does not close that race, which is how this was first written
- * and why it failed. `matchCount` is `board.isSuccess ? visible.length : null` and the
- * board query runs with `{}` while the debounce is outstanding, so an unfiltered answer
- * satisfies a loose `/\d+ match(es)?/` before the debounced query has been composed at
- * all. Asserting the count this query alone produces — one bulletin, or none, against an
- * unfiltered board of two — can only pass after the debounce has settled and the server
- * has answered. The notice assertion below is the second guard, and would have caught the
- * no-op even if this one were removed.
+ * The exact match count is the second guard, and independent of the first: `matchCount` is
+ * `board.isSuccess ? visible.length : null` and the board runs with `{}` while the debounce
+ * is outstanding, so a loose `/\d+ match(es)?/` would be satisfied by the *unfiltered*
+ * answer. Asserting the number this query alone produces can only pass once the debounced
+ * query has been composed and answered.
  */
 async function saveViewFromBoard(
   page: Page,
@@ -160,6 +159,8 @@ async function saveViewFromBoard(
     matchCountLabel(query.matches),
   );
 
+  // The control refuses the tap until the query it would save exists.
+  await expect(page.getByTestId('board-search-save-button')).toBeEnabled();
   await page.getByTestId('board-search-save-button').click();
   await expect(page.getByTestId('board-save-view-notice')).toHaveText(
     'View saved — find it under Saved',

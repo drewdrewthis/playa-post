@@ -16,7 +16,7 @@ import { describeHideFailure } from '../moderation/hide-failure';
 import { ReportAbuseSheet } from '../moderation/report-abuse-sheet';
 import { useOffline } from '../offline/offline-provider';
 import { forgetBoardCard, queueMutation } from '../offline/pending-mutations';
-import { seedSavedViewName } from '../views/saved-view-list';
+import { saveViewFailureMessage, seedSavedViewName } from '../views/saved-view-list';
 
 import '../moderation/hide-failure-notice.css';
 
@@ -135,8 +135,9 @@ export function BoardRoute(): JSX.Element {
       setSavedNotice('View saved — find it under Saved');
       await queryClient.invalidateQueries({ queryKey: ['views', 'saved', 'list'] });
     },
-    onError: () => {
-      setSavedNotice('That view could not be saved. Check your connection and try again.');
+    // ⚠ The server's refusals are not all the same refusal — see `saveViewFailureMessage`.
+    onError: (error: unknown) => {
+      setSavedNotice(saveViewFailureMessage(error));
     },
   });
 
@@ -304,6 +305,10 @@ export function BoardRoute(): JSX.Element {
         onFilterChange={setFilter}
         matchCount={board.isSuccess ? visible.length : null}
         saving={saveView.isPending}
+        // ⚠ The *settled* query, not the raw field. `BoardSearch` knows a query is being
+        // typed; only this route knows whether one has composed yet, because only it holds
+        // the debounce. Without this the control is live for ~250ms doing nothing.
+        settledQueryActive={queryActive}
         onSave={() => {
           if (query === undefined) {
             return;
