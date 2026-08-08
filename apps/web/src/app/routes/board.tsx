@@ -2,6 +2,8 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useCallback, useEffect, useState, type JSX } from 'react';
 
+import type { ModerationTargetRequest, ReportBulletinRequest } from '@playa-post/contracts';
+
 import { useApi } from '../api/api-provider';
 import { applicationErrorCode } from '../api/client';
 import type { BoardCardView } from '../bulletins/board-card-view';
@@ -9,6 +11,7 @@ import { buildBoardQuery, type BoardTypeFilter } from '../bulletins/board-query'
 import { BoardSearch } from '../bulletins/board-search';
 import { BulletinCard } from '../bulletins/bulletin-card';
 import { BulletinDetailSheet } from '../bulletins/bulletin-detail-sheet';
+import { ReportAbuseSheet } from '../moderation/report-abuse-sheet';
 import { useOffline } from '../offline/offline-provider';
 import { forgetBoardCard, queueMutation } from '../offline/pending-mutations';
 
@@ -77,6 +80,14 @@ export function BoardRoute(): JSX.Element {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<BoardTypeFilter>('all');
   const [openBulletinId, setOpenBulletinId] = useState<string | null>(null);
+  /*
+   * The card being reported, held separately from `openBulletinId`. Reporting hides the
+   * bulletin the moment it succeeds, so it leaves `visible` and `openCard` becomes null
+   * — and a sheet keyed off the open card would unmount mid-send, taking the reporter's
+   * typed account with it. Holding the card is also what lets the sheet quote a title
+   * that is no longer on the board.
+   */
+  const [reporting, setReporting] = useState<BoardCardView | null>(null);
 
   const settledSearch = useDebounced(search, SEARCH_DEBOUNCE_MS);
   const query = buildBoardQuery(filter, settledSearch);
@@ -101,11 +112,17 @@ export function BoardRoute(): JSX.Element {
   // server refetch has not landed yet — is on screen rather than briefly missing.
   const cached = useLiveQuery(() => database.cachedBoard.toArray(), [database], []);
 
+  /*
+   * One mutation for both, because both have the same effect on this screen: the
+   * bulletin leaves the board, the offline cache forgets it, and every query is
+   * invalidated. They differ only in what the server is told — a dismissal says
+   * nothing, a report carries the reason and the account the sheet collected.
+   */
   const hide = useMutation({
-    mutationFn: (input: { bulletinId: string; action: 'dismiss' | 'report' }) =>
-      input.action === 'report'
-        ? api.mutate('moderation.report', { bulletinId: input.bulletinId })
-        : api.mutate('moderation.dismiss', { bulletinId: input.bulletinId }),
+    mutationFn: (input: ReportBulletinRequest | ModerationTargetRequest) =>
+      'reason' in input
+        ? api.mutate('moderation.report', input)
+        : api.mutate('moderation.dismiss', input),
     onSuccess: async (_result, input) => {
       await forgetBoardCard(database, input.bulletinId);
       await queryClient.invalidateQueries();
@@ -139,10 +156,11 @@ export function BoardRoute(): JSX.Element {
     setOpenBulletinId(null);
   }, []);
 
-  function hideBulletin(card: BoardCardView, action: 'dismiss' | 'report'): void {
+  /** Take a card off this board straight away, then tell the server why (or that). */
+  function hideBulletin(bulletinId: string, request: ReportBulletinRequest | ModerationTargetRequest): void {
     closeSheet();
-    setHidden((previous) => [...previous, card.id]);
-    hide.mutate({ bulletinId: card.id, action });
+    setHidden((previous) => [...previous, bulletinId]);
+    hide.mutate(request);
   }
 
   const cards = new Map<string, BoardCardView>();
@@ -264,10 +282,30 @@ export function BoardRoute(): JSX.Element {
             void archive(card);
           }}
           onDismiss={(card) => {
-            hideBulletin(card, 'dismiss');
+            hideBulletin(card.id, { bulletinId: card.id });
           }}
+          /*
+           * Reporting no longer fires on the button. It opens the sheet that asks what
+           * kind and what happened, because a report with no reason is a row the
+           * stewards cannot act on (`design/Playa Post.dc.html:337-356`).
+           */
           onReport={(card) => {
-            hideBulletin(card, 'report');
+            closeSheet();
+            setReporting(card);
+          }}
+        />
+      )}
+
+      {reporting === null ? null : (
+        <ReportAbuseSheet
+          bulletinId={reporting.id}
+          bulletinTitle={reporting.title}
+          onClose={() => {
+            setReporting(null);
+          }}
+          onSend={(report) => {
+            setReporting(null);
+            hideBulletin(report.bulletinId, report);
           }}
         />
       )}

@@ -7,6 +7,7 @@ import type { ReportBulletinService } from '../application/report-bulletin.servi
 import { ModerationTargetUnavailableError } from '../domain/moderation.errors';
 
 import { presentHiddenBulletin, type PresentedHiddenBulletin } from './hidden-bulletin.presenter';
+import { moderationReportInput } from './moderation-report.input';
 import { moderationTargetInput } from './moderation-target.input';
 
 /** The application operations this router speaks for. One use case, one procedure. */
@@ -24,9 +25,12 @@ export interface ModerationRouterDependencies {
  * asks for and what B17 measures — the identical decision
  * `bulletins.router.ts` makes for `BULLETIN_GONE`.
  *
- * `BULLETIN_REPORT_OWN_NOT_ALLOWED` is a **bad request**: the caller is the author, so
- * naming the problem discloses only what they already know, and a 404 there would be a
- * confusing lie about their own bulletin.
+ * `BULLETIN_REPORT_OWN_NOT_ALLOWED` and `REPORT_DETAIL_INVALID` are both **bad
+ * requests**: each describes the caller's own submission, so naming the problem
+ * discloses only what they already know, and a 404 for either would be a confusing lie.
+ * `REPORT_DETAIL_INVALID` is safe here *because* `report-bulletin.service.ts` settles
+ * authorization before it can be raised — it is never the answer to a caller who may not
+ * see the bulletin.
  */
 function asTrpcError(error: ApplicationError): TRPCError {
   const code = error instanceof ModerationTargetUnavailableError ? 'NOT_FOUND' : 'BAD_REQUEST';
@@ -62,8 +66,9 @@ async function present<T>(operation: () => Promise<T>): Promise<T> {
  * exclusion to be computed — and, for reports, a surface an author might one day be
  * pointed at (M2-AC10, B9).
  *
- * **No procedure takes an identifier for its caller.** Both take `bulletinId` and
- * nothing else; the acting viewer is `ctx.actor.userId` (ADR-0002:180-181, B14).
+ * **No procedure takes an identifier for its caller.** `report` takes a bulletin, a
+ * reason and an account; `dismiss` takes a bulletin and nothing else; neither takes a
+ * reporter — the acting viewer is `ctx.actor.userId` (ADR-0002:180-181, B14).
  *
  * Every procedure is `authenticatedProcedure`: each writes state attached to one actor
  * and changes what exactly one board shows, so there is no version of either a
@@ -72,20 +77,28 @@ async function present<T>(operation: () => Promise<T>): Promise<T> {
 export function createModerationRouter(dependencies: ModerationRouterDependencies) {
   return router({
     /**
-     * Privately report a bulletin. It leaves your board immediately, stays on
-     * everybody else's, and the author is never told (M2-AC10).
+     * Privately report a bulletin, saying what kind of abuse it is and what happened.
+     * It leaves your board immediately, stays on everybody else's, and the author is
+     * never told (M2-AC10).
      *
      * Idempotent: reporting the same bulletin twice returns the first `hiddenAt`
-     * (ADR-0005's matrix — one open report per reporter/bulletin).
+     * (ADR-0005's matrix — one open report per reporter/bulletin), and keeps the first
+     * reason and account rather than overwriting them.
+     *
+     * ⚠ The response is {@link PresentedHiddenBulletin} and echoes back neither the
+     * reason nor the account. A client already knows what it sent, and a field on the
+     * response is a field a log, a cache, or an offline mirror then carries.
      */
     report: authenticatedProcedure
-      .input(moderationTargetInput)
+      .input(moderationReportInput)
       .mutation(async ({ ctx, input }): Promise<PresentedHiddenBulletin> =>
         present(async () =>
           presentHiddenBulletin(
             await dependencies.reportBulletin.report({
               actorId: ctx.actor.userId,
               bulletinId: input.bulletinId,
+              reason: input.reason,
+              detail: input.detail,
             }),
           ),
         ),

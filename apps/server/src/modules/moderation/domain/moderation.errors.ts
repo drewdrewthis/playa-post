@@ -49,3 +49,30 @@ export class CannotReportOwnBulletinError extends ApplicationError {
     this.name = 'CannotReportOwnBulletinError';
   }
 }
+
+/**
+ * The account of what happened is blank, or too long.
+ *
+ * A **bad request** and safely distinguishable, for the same reason
+ * {@link CannotReportOwnBulletinError} is: it describes the caller's own submission and
+ * discloses nothing about the bulletin. That safety depends on the ordering
+ * `report-bulletin.service.ts` enforces — authorization is resolved *before* the detail
+ * is looked at — so a caller who may not see the bulletin gets
+ * {@link ModerationTargetUnavailableError} whatever they typed. Reverse those two and
+ * this error becomes the existence oracle the other one exists to close.
+ *
+ * ⚠ Its own code rather than a reuse of `BULLETIN_CONTENT_INVALID`: that code's contract
+ * is about a *bulletin's* text, and a client branching on it would show a compose-form
+ * message to someone filing a report.
+ */
+export class ReportDetailInvalidError extends ApplicationError {
+  static readonly code = 'REPORT_DETAIL_INVALID';
+
+  constructor(maxLength: number) {
+    super(
+      ReportDetailInvalidError.code,
+      `A report needs an account of what happened, of 1 to ${String(maxLength)} characters.`,
+    );
+    this.name = 'ReportDetailInvalidError';
+  }
+}

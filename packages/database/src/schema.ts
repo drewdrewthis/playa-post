@@ -46,7 +46,15 @@ export interface AppBulletinDismissals {
 export interface AppBulletinReports {
   bulletin_id: string;
   created_at: Timestamp;
+  /**
+   * The reporter's own account of what happened, trimmed and non-empty for every report filed through the sheet; '' for rows filed before it asked. Steward-facing only — never selected by any read the reported author can reach (M2-AC10, B9).
+   */
+  detail: string;
   id: Generated<string>;
+  /**
+   * What kind of abuse the reporter chose: harassment | scam-or-fraud | impersonation | spam | safety-risk, or the legacy 'unspecified' for rows filed before the sheet asked. Enforced in the application, not by a check constraint — see modules/moderation/domain/report-reason.ts.
+   */
+  reason: string;
   reporter_id: string;
 }
 

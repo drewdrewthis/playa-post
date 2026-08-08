@@ -40,13 +40,20 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  state,tests}. Shell/router/providers/auth/api client/offline queue in
                  src/app/{routes,auth,api,offline,shell} (the M2 frontend). Shared UI in src/shared/.
                  A screen whose pieces outgrow one route file gets a sibling feature directory —
-                 src/app/{people,notifications,bulletins,graph}/ — holding its components, its own
-                 <feature>.css, and any pure logic worth unit-testing on its own (src/app/bulletins/
+                 src/app/{people,notifications,bulletins,graph,moderation}/ — holding its components,
+                 its own <feature>.css, and any pure logic worth unit-testing on its own
+                 (src/app/bulletins/
                  is the board: card, detail sheet, search bar, the query builder and the relative-time
                  formatter; src/app/graph/ is the network canvas: graph-layout.ts seeded from person
                  ids, graph-viewport.ts pan/zoom arithmetic, graph-node-identity.ts §6a for dots,
-                 graph-counts.ts, graph-network.tsx, graph-viz.css). A feature stylesheet is imported
+                 graph-counts.ts, graph-network.tsx, graph-viz.css; src/app/moderation/ is the report
+                 sheet: report-abuse-draft.ts holds the reason vocabulary and the send gate,
+                 report-abuse-sheet.tsx renders them). A feature stylesheet is imported
                  by the component that owns it, never added to screens.css.
+                 ⚠ The unit project runs in environment: 'node' and there is no component-test
+                 harness, so logic left inside a component is logic no test can reach — extract it
+                 to a sibling module, as compose-bulletin-draft.ts, report-abuse-draft.ts and
+                 auth/sign-in-failure.ts all do.
                  src/app/theme/ is the design system: tokens.css (two token sets, light on :root and
                  dark on [data-theme='dark']), screens.css (the column and every shared screen
                  element), typefaces.ts (the self-hosted font imports, which double as the service

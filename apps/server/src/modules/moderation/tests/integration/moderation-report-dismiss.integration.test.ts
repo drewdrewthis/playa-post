@@ -143,6 +143,32 @@ describe('moderation report and dismiss (moderation-report-dismiss.feature, M2-A
     return Number(rows[0]?.count ?? '0');
   }
 
+  /**
+   * What every report in this suite says, so no scenario has to invent it.
+   *
+   * A report now carries a reason and an account of what happened
+   * (`design/Playa Post.dc.html:337-356`); both are required, and the scenarios below
+   * are about *authorization and visibility*, not about the words. Naming the fixture
+   * once keeps that distinction visible — the one scenario that is about the words
+   * asserts them explicitly.
+   */
+  const A_REPORT = {
+    reason: 'harassment',
+    detail: 'They would not take no for an answer.',
+  } as const;
+
+  /** The reason and account as actually stored for one reporter's report. */
+  async function storedReport(
+    bulletinId: string,
+    reporterId: string,
+  ): Promise<{ reason: string; detail: string } | undefined> {
+    const { rows } = await testDatabase.client.query<{ reason: string; detail: string }>(
+      'select reason, detail from app.bulletin_reports where bulletin_id = $1 and reporter_id = $2',
+      [bulletinId, reporterId],
+    );
+    return rows[0];
+  }
+
   /** A context that skips JWT verification, for scenarios that only need an `Actor`. */
   function contextForActor(actor: { userId: string; handle: string }): RequestContext {
     const outcome: AuthenticationOutcome = {
@@ -230,10 +256,139 @@ describe('moderation report and dismiss (moderation-report-dismiss.feature, M2-A
       const beforeReport = await callerV.bulletins.board({});
       expect(beforeReport.items.some((item) => item.id === created.id)).toBe(true);
 
-      await callerV.moderation.report({ bulletinId: created.id });
+      await callerV.moderation.report({ bulletinId: created.id, ...A_REPORT });
 
       const afterReport = await callerV.bulletins.board({});
       expect(afterReport.items.some((item) => item.id === created.id)).toBe(false);
+    });
+  });
+
+  /**
+   * The reason and the account, end to end through the real procedure and into the
+   * real column — the half of the report sheet that has nowhere else to be proven.
+   *
+   * The unit suite proves the service passes them on and the policy trims them; only a
+   * real database can show that `app.bulletin_reports` accepted them, that the `not
+   * null` columns the migration added are satisfied by an ordinary report, and that the
+   * repeat is a converging no-op which keeps the *first* account rather than the second.
+   */
+  describe('Scenario: A report carries what the reporter said (@integration, report sheet)', () => {
+    it('stores the chosen reason and the trimmed account, and a repeat does not overwrite them', async () => {
+      const bulletinsModule: BulletinsModule = createBulletinsModule({
+        database,
+        hiddenBulletins: createPostgresModerationRepository({ database }),
+      });
+      const moderationModule: ModerationModule = createModerationModule({
+        database,
+        findVisibleBulletin: findVisibleBulletinViaRouter(bulletinsModule),
+      });
+      const createCaller = createCallerFactory(
+        router({ bulletins: bulletinsModule.router, moderation: moderationModule.router }),
+      );
+
+      const userA = await seedOnboardedUser('dusty_mod_reason_a');
+      const viewerV = await seedOnboardedUser('dusty_mod_reason_v');
+      await seedAcceptedConnection(userA.userId, viewerV.userId);
+
+      const created = await createCaller(contextForActor(userA)).bulletins.create({
+        type: 'request',
+        title: 'Cheap generator, cash only',
+        body: 'Meet me at the gate.',
+      });
+
+      const viewerCaller = createCaller(contextForActor(viewerV));
+
+      const first = await viewerCaller.moderation.report({
+        bulletinId: created.id,
+        reason: 'scam-or-fraud',
+        detail: '  They wanted the cash before showing the generator.  ',
+      });
+
+      expect(await storedReport(created.id, viewerV.userId)).toEqual({
+        reason: 'scam-or-fraud',
+        detail: 'They wanted the cash before showing the generator.',
+      });
+
+      // ADR-0005's matrix: a second report of the same pair is an applied no-op. The
+      // first account is what the reporter filed and what a steward may already have
+      // read, so it survives — and the response still carries the original `hiddenAt`.
+      const second = await viewerCaller.moderation.report({
+        bulletinId: created.id,
+        reason: 'spam',
+        detail: 'Actually it is just spam.',
+      });
+
+      expect(second.hiddenAt).toBe(first.hiddenAt);
+      expect(await bulletinReportsRowCount()).toBe(1);
+      expect(await storedReport(created.id, viewerV.userId)).toEqual({
+        reason: 'scam-or-fraud',
+        detail: 'They wanted the cash before showing the generator.',
+      });
+    });
+
+    it('refuses a report with a blank account, and writes no row', async () => {
+      const bulletinsModule: BulletinsModule = createBulletinsModule({ database });
+      const moderationModule: ModerationModule = createModerationModule({
+        database,
+        findVisibleBulletin: findVisibleBulletinViaRouter(bulletinsModule),
+      });
+      const createCaller = createCallerFactory(
+        router({ bulletins: bulletinsModule.router, moderation: moderationModule.router }),
+      );
+
+      const userA = await seedOnboardedUser('dusty_mod_blank_a');
+      const viewerV = await seedOnboardedUser('dusty_mod_blank_v');
+      await seedAcceptedConnection(userA.userId, viewerV.userId);
+
+      const created = await createCaller(contextForActor(userA)).bulletins.create({
+        type: 'request',
+        title: 'A bulletin',
+        body: 'V is about to file an empty report.',
+      });
+      const outboxBefore = await outboxRowCount();
+
+      await expect(
+        createCaller(contextForActor(viewerV)).moderation.report({
+          bulletinId: created.id,
+          reason: 'spam',
+          detail: '   ',
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+      expect(await bulletinReportsRowCount()).toBe(0);
+      expect(await outboxRowCount()).toBe(outboxBefore);
+    });
+
+    it('refuses a reason outside the closed vocabulary', async () => {
+      const bulletinsModule: BulletinsModule = createBulletinsModule({ database });
+      const moderationModule: ModerationModule = createModerationModule({
+        database,
+        findVisibleBulletin: findVisibleBulletinViaRouter(bulletinsModule),
+      });
+      const createCaller = createCallerFactory(
+        router({ bulletins: bulletinsModule.router, moderation: moderationModule.router }),
+      );
+
+      const userA = await seedOnboardedUser('dusty_mod_vocab_a');
+      const viewerV = await seedOnboardedUser('dusty_mod_vocab_v');
+      await seedAcceptedConnection(userA.userId, viewerV.userId);
+
+      const created = await createCaller(contextForActor(userA)).bulletins.create({
+        type: 'request',
+        title: 'A bulletin',
+        body: 'V is about to invent a category.',
+      });
+
+      await expect(
+        createCaller(contextForActor(viewerV)).moderation.report({
+          bulletinId: created.id,
+          // The legacy backfill value, which no request may ever write.
+          reason: 'unspecified' as 'spam',
+          detail: 'Trying to file under the sentinel.',
+        }),
+      ).rejects.toBeInstanceOf(Error);
+
+      expect(await bulletinReportsRowCount()).toBe(0);
     });
   });
 
@@ -264,7 +419,7 @@ describe('moderation report and dismiss (moderation-report-dismiss.feature, M2-A
         body: 'Reported by V, still fine for W.',
       });
 
-      await reportBulletin.report({ actorId: viewerV.userId, bulletinId: created.id });
+      await reportBulletin.report({ actorId: viewerV.userId, bulletinId: created.id, ...A_REPORT });
 
       const boardForW = await createCallerFactory(router({ bulletins: bulletinsModule.router }))(
         contextForActor(viewerW),
@@ -296,7 +451,7 @@ describe('moderation report and dismiss (moderation-report-dismiss.feature, M2-A
       });
       const outboxBeforeReport = await outboxRowCount();
 
-      await reportBulletin.report({ actorId: viewerV.userId, bulletinId: created.id });
+      await reportBulletin.report({ actorId: viewerV.userId, bulletinId: created.id, ...A_REPORT });
 
       const readAsAuthor = await authorCaller.bulletins.getById({ bulletinId: created.id });
       const ownList = await authorCaller.bulletins.listMine();
@@ -385,7 +540,7 @@ describe('moderation report and dismiss (moderation-report-dismiss.feature, M2-A
       });
 
       await expect(
-        reportBulletin.report({ actorId: userA.userId, bulletinId: created.id }),
+        reportBulletin.report({ actorId: userA.userId, bulletinId: created.id, ...A_REPORT }),
       ).rejects.toMatchObject({ code: CannotReportOwnBulletinError.code });
     });
   });
@@ -418,7 +573,7 @@ describe('moderation report and dismiss (moderation-report-dismiss.feature, M2-A
       const outboxBefore = await outboxRowCount();
 
       await expect(
-        reportBulletin.report({ actorId: actorC.userId, bulletinId: created.id }),
+        reportBulletin.report({ actorId: actorC.userId, bulletinId: created.id, ...A_REPORT }),
       ).rejects.toBeInstanceOf(Error);
 
       expect(await bulletinReportsRowCount()).toBe(0);
@@ -447,10 +602,10 @@ describe('moderation report and dismiss (moderation-report-dismiss.feature, M2-A
       });
 
       const invisible: unknown = await reportBulletin
-        .report({ actorId: viewerC.userId, bulletinId: created.id })
+        .report({ actorId: viewerC.userId, bulletinId: created.id, ...A_REPORT })
         .catch((error: unknown) => error);
       const nonExistent: unknown = await reportBulletin
-        .report({ actorId: viewerC.userId, bulletinId: randomUUID() })
+        .report({ actorId: viewerC.userId, bulletinId: randomUUID(), ...A_REPORT })
         .catch((error: unknown) => error);
 
       expect(invisible).toBeInstanceOf(ModerationTargetUnavailableError);
