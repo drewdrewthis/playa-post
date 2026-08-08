@@ -9,8 +9,15 @@ import type { Person } from '@playa-post/contracts';
  * a subtitle, so the strip carries the two counts the graph itself already answers.
  */
 
-/** The degree the viewer carries on their own graph. */
-const VIEWER_DEGREE = 0;
+/**
+ * The degree the viewer carries on their own graph.
+ *
+ * Exported because the You screen needs the same rule to find the viewer's own row, and a
+ * fourth private copy of `= 0` is a fourth place for "which row is me" to be decided.
+ * `graph-network.tsx` and `graph-layout.ts` still declare their own; folding those in is a
+ * change to files this screen does not otherwise touch.
+ */
+export const VIEWER_DEGREE = 0;
 
 /** The comp's threshold for "trusted": half the scale, and it is a product decision, not a guess. */
 export const TRUSTED_THRESHOLD = 50;

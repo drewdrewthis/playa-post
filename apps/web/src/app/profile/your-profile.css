@@ -1,0 +1,235 @@
+/*
+ * The You screen: the identity card, the CONNECT card, and the sync queue
+ * (`design/Playa Post.dc.html`, the `data-screen-label="You"` block).
+ *
+ * Every colour is a `--pp-*` token, which is what makes both themes one stylesheet rather
+ * than two — see `app/theme/tokens.css`. The three declared below are the exception the
+ * graph's stylesheet already establishes: the comp's `youBg`/`youFg`/`youGlow` are not in
+ * the global set because until now only the graph's viewer node used them, so they are
+ * declared here in both themes, values lifted verbatim from the comp's `theme()`.
+ *
+ * ⚠ This file is reached through the router, so it lands in the bundle *before*
+ * `screens.css`. Nothing here relies on source order to win: every selector is either a
+ * new class or deliberately more specific than the shared rule it adjusts.
+ */
+
+:root {
+  /* The comp's light `youBg` / `youFg` / `youGlow` (Playa Post.dc.html:582). */
+  --pp-profile-avatar-bg: #2e2418;
+  --pp-profile-avatar-fg: #f6efe2;
+  --pp-profile-avatar-glow: 0 0 0 4px #f6efe2, 0 0 0 6px #2e2418;
+}
+
+[data-theme='dark'] {
+  /* Playa Post.dc.html:593. */
+  --pp-profile-avatar-bg: #ffe9dc;
+  --pp-profile-avatar-fg: #241533;
+  --pp-profile-avatar-glow: 0 0 24px rgb(255 236 214 / 70%);
+}
+
+/* Identity card ----------------------------------------------------------- */
+
+.profile__identity {
+  display: flex;
+  align-items: center;
+  gap: var(--pp-space-4);
+  padding: var(--pp-space-4);
+  border: 1px solid var(--pp-card-border);
+  border-radius: var(--pp-radius-lg);
+  background: var(--pp-card);
+}
+
+.profile__avatar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.375rem;
+  height: 3.375rem;
+  border-radius: 50%;
+  background: var(--pp-profile-avatar-bg);
+  color: var(--pp-profile-avatar-fg);
+  box-shadow: var(--pp-profile-avatar-glow);
+  font-weight: 700;
+  font-size: var(--pp-text-xl);
+  line-height: 1;
+}
+
+.profile__identity-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-1);
+  min-width: 0;
+}
+
+.profile__name {
+  margin: 0;
+  font-family: var(--pp-font-display);
+  font-weight: 400;
+  font-size: var(--pp-text-xl);
+  line-height: 1.15;
+  color: var(--pp-ink);
+}
+
+.profile__counts {
+  margin: 0;
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-sub);
+}
+
+/* Sections ---------------------------------------------------------------- */
+
+.profile__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+}
+
+/** The comp's 10.5px tracked caps above each group. */
+.profile__section-label {
+  margin: 0;
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pp-faint);
+}
+
+/* CONNECT ----------------------------------------------------------------- */
+
+.profile__connect {
+  display: flex;
+  align-items: center;
+  gap: var(--pp-space-4);
+  padding: var(--pp-space-3) var(--pp-space-4);
+  border: 1px solid var(--pp-card-border);
+  border-radius: var(--pp-radius);
+  background: var(--pp-card);
+}
+
+.profile__connect-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+  min-width: 0;
+}
+
+/** Mono, because a link a person may have to read out or retype is read character by character. */
+.profile__invite-link {
+  overflow: hidden;
+  font-family: var(--pp-font-mono);
+  font-weight: 500;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-accent);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile__share {
+  padding: var(--pp-space-3);
+  border: none;
+  border-radius: var(--pp-radius-pill);
+
+  /* `background`, never `background-color`: this token is a gradient in dark. */
+  background: var(--pp-fab-bg);
+  box-shadow: var(--pp-fab-glow);
+  color: var(--pp-fab-fg);
+  font-weight: 700;
+  font-size: var(--pp-text-xs);
+  letter-spacing: 0.03em;
+  text-align: center;
+}
+
+.profile__share:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* A row: text on the left, a pill on the right ----------------------------- */
+
+.profile__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pp-space-3);
+  padding: var(--pp-space-3) var(--pp-space-4);
+  border: 1px solid var(--pp-card-border);
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-card);
+}
+
+/* SYNC -------------------------------------------------------------------- */
+
+/* The same reset `.person-list` / `.board-list` / `.notifications__list` carry: these
+   rows are cards, and a browser's disc and indent would sit outside every one of them. */
+.profile__queue {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+}
+
+.profile__queue-text {
+  overflow: hidden;
+  font-weight: 500;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-sub);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile__pill {
+  flex: none;
+  padding: 0.1875rem var(--pp-space-2);
+  border-radius: var(--pp-radius-pill);
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.06em;
+}
+
+.profile__pill--waiting {
+  background: var(--pp-warn-bg);
+  color: var(--pp-warn);
+}
+
+.profile__pill--good {
+  background: var(--pp-ok-bg);
+  color: var(--pp-ok);
+}
+
+/*
+ * `failed` and `conflicted`. Not the warn amber the comp uses for everything unsettled:
+ * these two do not resolve themselves, and an amber that means "still working on it" is
+ * the wrong promise to make about a write that has stopped.
+ */
+.profile__pill--bad {
+  background: var(--pp-card);
+  border: 1px solid var(--pp-danger-border);
+  color: var(--pp-danger);
+}
+
+/** The comp's italic-serif quiet line, at row scale rather than as a full empty state. */
+.profile__quiet {
+  margin: 0;
+  padding: var(--pp-space-1) 0 var(--pp-space-2);
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-faint);
+}
+
+/* Sign out ---------------------------------------------------------------- */
+
+/**
+ * Last, and quiet. The comp has no sign-out at all — it lives here because the chrome
+ * carries a wordmark and two icons and nothing else, and an account control belongs on
+ * the account screen.
+ */
+.profile__sign-out {
+  align-self: flex-start;
+  margin-top: var(--pp-space-2);
+}
