@@ -154,6 +154,10 @@ export interface AppNotifyMeQueries {
   ast_version: number;
   owner_id: string;
   source_text: string;
+  /**
+   * The app.saved_views row this query was designated from, or NULL when it was written directly through views.notifyMe.update. D1: there is at most one Notify Me query per user, so lighting the bell on a second view MOVES the designation rather than adding one — which is this table's primary key on owner_id doing the enforcing, not a check some service performs first.
+   */
+  source_view_id: string | null;
   updated_at: Timestamp;
   /**
    * ADR-0005 optimistic-concurrency version. notifyMe.update is expectedVersion: yes — mismatch is a conflict, never a silent overwrite of a deliberate change.
@@ -183,6 +187,24 @@ export interface AppPushSubscriptions {
   endpoint: string;
   owner_id: string;
   p256dh_key: string;
+}
+
+export interface AppSavedViews {
+  /**
+   * The validated AST, ADR-0007's restricted filter grammar compiled by modules/views. Never raw SQL, never a second grammar — the same shape the board and Notify Me use.
+   */
+  ast: Json;
+  ast_version: number;
+  created_at: Timestamp;
+  id: Generated<string>;
+  name: string;
+  owner_id: string;
+  source_text: string;
+  updated_at: Timestamp;
+  /**
+   * ADR-0005 optimistic-concurrency version. view.save is expectedVersion: yes — a mismatch is a conflict, never a silent overwrite of a deliberate rename.
+   */
+  version: Generated<number>;
 }
 
 export interface AppUsers {
@@ -218,5 +240,6 @@ export interface DB {
   "app.notify_me_queries": AppNotifyMeQueries;
   "app.outbox_events": AppOutboxEvents;
   "app.push_subscriptions": AppPushSubscriptions;
+  "app.saved_views": AppSavedViews;
   "app.users": AppUsers;
 }
