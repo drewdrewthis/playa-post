@@ -1,40 +1,55 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useState, type JSX } from 'react';
-
-import type { BulletinAuthor } from '@playa-post/contracts';
+import { useCallback, useEffect, useState, type JSX } from 'react';
 
 import { useApi } from '../api/api-provider';
+import { applicationErrorCode } from '../api/client';
+import type { BoardCardView } from '../bulletins/board-card-view';
+import { buildBoardQuery, type BoardTypeFilter } from '../bulletins/board-query';
+import { BoardSearch } from '../bulletins/board-search';
+import { BulletinCard } from '../bulletins/bulletin-card';
+import { BulletinDetailSheet } from '../bulletins/bulletin-detail-sheet';
 import { useOffline } from '../offline/offline-provider';
 import { forgetBoardCard, queueMutation } from '../offline/pending-mutations';
-import { PersonIdentity } from '../people/person-identity';
 
 /**
- * One bulletin as this screen renders it.
+ * How long the board waits after a keystroke before asking the server again.
  *
- * `own` and `archived` come from `bulletins.listMine` (the author's read model, the
- * only one carrying `archivedAt`); `author` comes from `bulletins.board` (the eligible
- * viewer's read model, the only one carrying the §6a author card). Neither read model
- * has both, and this view keeps them side by side rather than inventing a merged
- * server type.
+ * The comp filters as you type and so does this, but each character is a round trip and
+ * a half-typed `type:` is a query the grammar refuses. A quarter of a second is below
+ * the threshold where typing feels laggy and above the rate at which anyone types.
  */
-interface BoardCardView {
-  readonly id: string;
-  readonly type: string;
-  readonly title: string;
-  readonly body: string;
-  readonly createdAt: string;
-  /**
-   * Carried, not yet rendered. The card's `◦ {loc} · {author}` meta line is issue #46's
-   * work; this view holds the two fields anyway because the optimistic-archive path
-   * below rebuilds a whole `Bulletin` from a card, and a field this view dropped would
-   * come back as `null` in the offline cache — a silent edit to somebody's own post.
-   */
-  readonly loc: string | null;
-  readonly expiresAt: string | null;
-  readonly own: boolean;
-  readonly archived: boolean;
-  readonly author?: BulletinAuthor;
+const SEARCH_DEBOUNCE_MS = 250;
+
+/** A value that follows `value`, but no faster than once every `delay` milliseconds. */
+function useDebounced<T>(value: T, delay: number): T {
+  const [settled, setSettled] = useState(value);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSettled(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [value, delay]);
+
+  return settled;
+}
+
+/**
+ * What to tell someone whose board did not load.
+ *
+ * A refused query is the *only* failure worth interrupting them for, and its message is
+ * the server's own — `parseBoardQuery` names the token it could not apply, which is the
+ * one thing that lets the person who typed it fix it (ADR-0007:53-56). Everything else
+ * is a transport failure, and this app's answer to those is the cache, not a banner.
+ */
+function boardErrorMessage(error: unknown): string {
+  return applicationErrorCode(error) === 'INVALID_BOARD_QUERY' && error instanceof Error
+    ? error.message
+    : 'The board could not be loaded. Check your connection and try again.';
 }
 
 /**
@@ -46,16 +61,35 @@ interface BoardCardView {
  * `archivedAt` — the only observable form of archived-ness — exists solely on that read
  * model. An archived bulletin stays rendered for its author, marked, instead of
  * vanishing; disappearing state is indistinguishable from a bug.
+ *
+ * ⚠ **That union is skipped the moment a query is active.** `bulletins.board` is the
+ * only thing that knows what a query means; unioning an unfiltered `listMine` into a
+ * filtered answer would put bulletins on screen that do not match what was asked, which
+ * is a broken filter rather than a generous one. A search shows the server's answer and
+ * nothing else — including nothing from the offline cache, because a write the server
+ * has not seen cannot have been matched against a query it never ran.
  */
 export function BoardRoute(): JSX.Element {
   const api = useApi();
   const queryClient = useQueryClient();
   const { database, syncRunner } = useOffline();
   const [hidden, setHidden] = useState<readonly string[]>([]);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<BoardTypeFilter>('all');
+  const [openBulletinId, setOpenBulletinId] = useState<string | null>(null);
+
+  const settledSearch = useDebounced(search, SEARCH_DEBOUNCE_MS);
+  const query = buildBoardQuery(filter, settledSearch);
+  const queryActive = query !== undefined;
 
   const board = useQuery({
-    queryKey: ['bulletins', 'board'],
-    queryFn: () => api.query('bulletins.board', {}),
+    queryKey: ['bulletins', 'board', query ?? null],
+    queryFn: () => api.query('bulletins.board', query === undefined ? {} : { query }),
+    // Every edit to the query is a new cache key, and without this the list would empty
+    // itself between keystrokes and flash "Nothing matches" at someone who is still
+    // typing. The previous answer stays on screen until the next one lands — briefly
+    // behind the field, never contradicting it for longer than one round trip.
+    placeholderData: keepPreviousData,
   });
 
   const mine = useQuery({
@@ -78,10 +112,10 @@ export function BoardRoute(): JSX.Element {
     },
   });
 
-  async function archive(bulletinId: string, card: BoardCardView): Promise<void> {
+  async function archive(card: BoardCardView): Promise<void> {
     await queueMutation(database, {
       mutationType: 'bulletin.archive',
-      payload: { bulletinId },
+      payload: { bulletinId: card.id },
       optimisticCard: {
         kind: 'own',
         bulletin: {
@@ -101,6 +135,16 @@ export function BoardRoute(): JSX.Element {
     await syncRunner.drain();
   }
 
+  const closeSheet = useCallback(() => {
+    setOpenBulletinId(null);
+  }, []);
+
+  function hideBulletin(card: BoardCardView, action: 'dismiss' | 'report'): void {
+    closeSheet();
+    setHidden((previous) => [...previous, card.id]);
+    hide.mutate({ bulletinId: card.id, action });
+  }
+
   const cards = new Map<string, BoardCardView>();
 
   for (const item of board.data?.items ?? []) {
@@ -118,44 +162,53 @@ export function BoardRoute(): JSX.Element {
     });
   }
 
-  for (const row of cached) {
-    if (row.card.kind !== 'own') {
-      continue;
+  if (!queryActive) {
+    for (const row of cached) {
+      if (row.card.kind !== 'own') {
+        continue;
+      }
+
+      const bulletin = row.card.bulletin;
+
+      cards.set(bulletin.id, {
+        id: bulletin.id,
+        type: bulletin.type,
+        title: bulletin.title,
+        body: bulletin.body,
+        createdAt: bulletin.createdAt,
+        loc: bulletin.loc,
+        expiresAt: bulletin.expiresAt,
+        own: true,
+        archived: bulletin.archivedAt !== null,
+      });
     }
 
-    const bulletin = row.card.bulletin;
-
-    cards.set(bulletin.id, {
-      id: bulletin.id,
-      type: bulletin.type,
-      title: bulletin.title,
-      body: bulletin.body,
-      createdAt: bulletin.createdAt,
-      loc: bulletin.loc,
-      expiresAt: bulletin.expiresAt,
-      own: true,
-      archived: bulletin.archivedAt !== null,
-    });
-  }
-
-  // Last, so the server's own-view wins over any optimistic copy of the same row.
-  for (const bulletin of mine.data ?? []) {
-    cards.set(bulletin.id, {
-      id: bulletin.id,
-      type: bulletin.type,
-      title: bulletin.title,
-      body: bulletin.body,
-      createdAt: bulletin.createdAt,
-      loc: bulletin.loc,
-      expiresAt: bulletin.expiresAt,
-      own: true,
-      archived: bulletin.archivedAt !== null,
-    });
+    // Last, so the server's own-view wins over any optimistic copy of the same row.
+    for (const bulletin of mine.data ?? []) {
+      cards.set(bulletin.id, {
+        id: bulletin.id,
+        type: bulletin.type,
+        title: bulletin.title,
+        body: bulletin.body,
+        createdAt: bulletin.createdAt,
+        loc: bulletin.loc,
+        expiresAt: bulletin.expiresAt,
+        own: true,
+        archived: bulletin.archivedAt !== null,
+      });
+    }
   }
 
   const visible = [...cards.values()]
     .filter((card) => !hidden.includes(card.id))
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+
+  // One clock reading per render, shared by every card and the sheet, so no two ages on
+  // screen are measured against different moments. Nothing re-reads it on a timer: the
+  // board refetches often enough that a minute's drift on an idle screen is invisible
+  // at this granularity.
+  const now = new Date();
+  const openCard = visible.find((card) => card.id === openBulletinId) ?? null;
 
   return (
     <section className="screen" data-testid="board">
@@ -164,79 +217,59 @@ export function BoardRoute(): JSX.Element {
         <h1 className="screen__title">The board</h1>
       </header>
 
-      {visible.length === 0 ? (
-        <p className="screen__empty">Nothing on your board yet. Quiet playa.</p>
+      <BoardSearch
+        search={search}
+        onSearchChange={setSearch}
+        filter={filter}
+        onFilterChange={setFilter}
+        matchCount={board.isSuccess ? visible.length : null}
+      />
+
+      {queryActive && board.isError ? (
+        <p className="form__error" data-testid="board-error">
+          {boardErrorMessage(board.error)}
+        </p>
+      ) : visible.length === 0 ? (
+        <p className="screen__empty">
+          {queryActive ? 'Nothing matches. Quiet playa.' : 'Nothing on your board yet. Quiet playa.'}
+        </p>
       ) : (
         <ul className="board-list">
           {visible.map((card) => (
             <li key={card.id}>
-              {/*
-                `data-type` drives the per-type tint in `screens.css`. A type with no
-                rule of its own still renders a tag, in the accent, rather than an
-                untinted one.
-              */}
-              <article
-                className="bulletin-card"
-                data-testid={`board-bulletin-card-${card.id}`}
-                data-archived={card.archived ? 'true' : 'false'}
-                data-type={card.type}
-              >
-                <p className="bulletin-card__type">{card.type}</p>
-                <h2 className="bulletin-card__title">{card.title}</h2>
-                <p className="bulletin-card__body">{card.body}</p>
-
-                {card.author === undefined ? null : (
-                  <p className="bulletin-card__author">
-                    <PersonIdentity identity={card.author} />
-                  </p>
-                )}
-
-                {card.archived ? <p className="bulletin-card__archived">Archived</p> : null}
-
-                <div className="bulletin-card__actions">
-                  {card.own ? (
-                    <button
-                      className="button button--quiet"
-                      data-testid="bulletin-archive-button"
-                      type="button"
-                      disabled={card.archived}
-                      onClick={() => {
-                        void archive(card.id, card);
-                      }}
-                    >
-                      Archive
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        className="button button--quiet"
-                        data-testid="bulletin-dismiss-button"
-                        type="button"
-                        onClick={() => {
-                          setHidden((previous) => [...previous, card.id]);
-                          hide.mutate({ bulletinId: card.id, action: 'dismiss' });
-                        }}
-                      >
-                        Dismiss
-                      </button>
-                      <button
-                        className="button button--quiet"
-                        data-testid="bulletin-report-button"
-                        type="button"
-                        onClick={() => {
-                          setHidden((previous) => [...previous, card.id]);
-                          hide.mutate({ bulletinId: card.id, action: 'report' });
-                        }}
-                      >
-                        Report
-                      </button>
-                    </>
-                  )}
-                </div>
-              </article>
+              <BulletinCard
+                card={card}
+                now={now}
+                onOpen={(opened) => {
+                  setOpenBulletinId(opened.id);
+                }}
+              />
             </li>
           ))}
         </ul>
+      )}
+
+      {/*
+       * Keyed off the card still being on screen rather than off the id alone: a
+       * bulletin dismissed from inside the sheet leaves `visible`, `openCard` becomes
+       * null, and the sheet closes itself instead of describing something that is gone.
+       */}
+      {openCard === null ? null : (
+        <BulletinDetailSheet
+          card={openCard}
+          now={now}
+          onClose={closeSheet}
+          onArchive={(card) => {
+            closeSheet();
+            void archive(card);
+          }}
+          onDismiss={(card) => {
+            hideBulletin(card, 'dismiss');
+          }}
+          onReport={(card) => {
+            hideBulletin(card, 'report');
+          }}
+        />
       )}
     </section>
   );
