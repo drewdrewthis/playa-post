@@ -34,6 +34,8 @@ export function BoardSearch({
   filter,
   onFilterChange,
   matchCount,
+  onSave,
+  saving,
 }: {
   readonly search: string;
   readonly onSearchChange: (search: string) => void;
@@ -45,6 +47,15 @@ export function BoardSearch({
    * has been told yet.
    */
   readonly matchCount: number | null;
+  /**
+   * Keep the current query as a saved view (issue #45).
+   *
+   * The board route owns what a saved view *is* — it composes the query and names it —
+   * because this component is stateless about what matches and must stay that way.
+   */
+  readonly onSave: () => void;
+  /** Whether a save is in flight, so the control cannot be tapped twice into two views. */
+  readonly saving: boolean;
 }): JSX.Element {
   const [helpOpen, setHelpOpen] = useState(false);
   const helpId = useId();
@@ -125,23 +136,21 @@ export function BoardSearch({
           </span>
 
           {/*
-           * ⚠ Disabled, and it stays disabled until there is somewhere for a saved view
-           * to go. `views.notifyMe.update` saves exactly one query per user, with no
-           * name, no list and no delete; the comp's library of named views is M5. The
-           * affordance is drawn because the comp draws it and the gap is worth seeing —
-           * but a control that appeared to work and saved nothing would be a lie, so it
-           * cannot be pressed and the title says why. The `title` sits on the wrapper
-           * because a disabled control shows no tooltip of its own.
+           * Live since `views.saved.save` shipped (issue #45). It was drawn and disabled
+           * for one milestone because the comp drew it and `views.notifyMe.update` — one
+           * unnamed query per user — was not somewhere a saved view could go; a control
+           * that appeared to work and saved nothing would have been a lie.
+           *
+           * Disabled only while a save is in flight, so a double tap cannot make two
+           * views out of one intent.
            */}
-          <span
-            className="board-search__save-slot"
-            title="Saved views arrive with the Saved tab — nothing can store this query yet."
-          >
+          <span className="board-search__save-slot">
             <button
               className="board-search__save"
               data-testid="board-search-save-button"
               type="button"
-              disabled
+              disabled={saving}
+              onClick={onSave}
             >
               ☆ Save as view
             </button>

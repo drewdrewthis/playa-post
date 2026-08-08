@@ -1,0 +1,166 @@
+/*
+ * The Saved tab's cards (issue #45), following `design/Playa Post.dc.html` lines 123-139.
+ *
+ * ⚠ **Every selector here is `saved-view*`-prefixed and none of them restates a class
+ * `screens.css` owns.** This file is reached through the router, so it lands in the
+ * bundle *before* `screens.css` and an equal-specificity override would silently lose.
+ * The lede is a case in point: the comp draws it as italic serif and `.screen__lede` is
+ * Karla, so this screen uses its own class rather than trying to win an override it
+ * cannot. Same rule as `board-search.css`.
+ *
+ * Every colour is a token, so light and dark are one declaration each — the chip pair in
+ * particular (`--pp-chip-on-*` / `--pp-chip-off-*`) is the same pair the board's filter
+ * chips use, which is what keeps the bell reading as the same kind of control in both
+ * themes.
+ */
+
+/*
+ * Italic serif, per the comp — this line is prose about the product's promise, not a
+ * subtitle, and the serif is what says so.
+ */
+.saved-views__lede {
+  margin: 0;
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  color: var(--pp-sub);
+}
+
+.saved-view-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-3);
+}
+
+.saved-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--pp-card-border);
+  border-radius: var(--pp-radius);
+  background: var(--pp-card);
+}
+
+.saved-view__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pp-space-3);
+}
+
+/*
+ * The name opens the view on the board, so it is a button — the comp's `onClick` on a
+ * `div`. Stripped back to text rather than styled as a control: it is the card's title
+ * first and an affordance second, and "OPEN ON BOARD →" below it is the explicit one.
+ */
+.saved-view__name {
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  font-family: var(--pp-font-display);
+  font-weight: 400;
+  font-size: 1.1875rem;
+  line-height: 1.2;
+  color: var(--pp-ink);
+}
+
+.saved-view__bell {
+  flex: none;
+  white-space: nowrap;
+  padding: 5px 10px;
+  border: 1px solid var(--pp-chip-off-border);
+  border-radius: var(--pp-radius-pill);
+  background: none;
+  color: var(--pp-chip-off-fg);
+  font-weight: 700;
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+}
+
+/*
+ * Lit state keys off `aria-pressed`, the same one-source-of-truth rule the tab bar and
+ * the board's filter chips use: a bell cannot look on while announcing that it is off.
+ */
+.saved-view__bell[aria-pressed='true'] {
+  border-color: var(--pp-chip-on-bg);
+  background: var(--pp-chip-on-bg);
+  color: var(--pp-chip-on-fg);
+}
+
+.saved-view__bell:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/*
+ * The query is monospaced because it is text a person reads and retypes character by
+ * character — the typeface rule this repo already made in `tokens.css`, and the same one
+ * the board's search field follows.
+ */
+.saved-view__query {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--pp-font-mono);
+  font-weight: 500;
+  font-size: 0.71875rem;
+  line-height: 1.5;
+  color: var(--pp-accent);
+}
+
+.saved-view__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pp-space-3);
+}
+
+.saved-view__count {
+  font-weight: 500;
+  font-size: 0.75rem;
+  color: var(--pp-sub);
+}
+
+.saved-view__delete {
+  flex: none;
+  padding: 4px;
+  border: none;
+  background: none;
+  font-weight: 700;
+  font-size: 0.625rem;
+  letter-spacing: 0.05em;
+  color: var(--pp-faint);
+}
+
+.saved-view__open {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  font-weight: 600;
+  font-size: var(--pp-text-xs);
+  letter-spacing: 0.04em;
+  color: var(--pp-accent);
+}
+
+/*
+ * The screen's own status line. `role="status"` on the element, so the message reaches a
+ * screen reader; it stays put rather than fading, because every message here reports a
+ * change the person cannot otherwise see (a bell moved, a view saved on another screen).
+ */
+.saved-views__status {
+  margin: 0;
+  padding: var(--pp-space-2) var(--pp-space-3);
+  border: 1px dashed var(--pp-card-border);
+  border-radius: var(--pp-radius-sm);
+  font-weight: 600;
+  font-size: var(--pp-text-xs);
+  color: var(--pp-sub);
+}
