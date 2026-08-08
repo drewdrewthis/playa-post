@@ -40,9 +40,9 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  state,tests}. Shell/router/providers/auth/api client/offline queue in
                  src/app/{routes,auth,api,offline,shell} (the M2 frontend). Shared UI in src/shared/.
                  A screen whose pieces outgrow one route file gets a sibling feature directory —
-                 src/app/{people,notifications,bulletins,graph,moderation}/ — holding its components,
-                 its own <feature>.css, and any pure logic worth unit-testing on its own
-                 (src/app/bulletins/
+                 src/app/{people,notifications,bulletins,graph,moderation,profile}/ — holding its
+                 components, its own <feature>.css, and any pure logic worth unit-testing on its
+                 own (src/app/bulletins/
                  is the board: card, detail sheet, search bar, the query builder and the relative-time
                  formatter; src/app/graph/ is the network canvas: graph-layout.ts seeded from person
                  ids, graph-viewport.ts pan/zoom arithmetic, graph-node-identity.ts §6a for dots,
