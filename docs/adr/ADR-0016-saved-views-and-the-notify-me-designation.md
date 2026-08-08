@@ -82,12 +82,39 @@ the character.** That is the test of this decision.
 `bulletins.board({ query })` per view, under the same react-query cache key `board.tsx`
 uses, and `httpBatchLink` folds them into a single HTTP request.
 
-Computing the count server-side would require `modules/views` to consume
-`modules/bulletins`, which already consumes this module's grammar (ADR-0013) — a module
-cycle — or a counting port injected at composition, which is a second implementation of
-"what does this query match". Neither is worth it, and the client-side version is strictly
-*more* correct: the number on a card is the number the board shows when that card's "OPEN
-ON BOARD" is tapped, page-size ceiling included, because it is literally the same read.
+Computing the count **in `modules/views`** would require it to consume `modules/bulletins`,
+which already consumes this module's grammar (ADR-0013) — a module cycle — or a counting
+port injected at composition, which is a second implementation of "what does this query
+match". The client-side version avoids both, and is strictly *more* correct: the number on
+a card is the number the board shows when that card's "OPEN ON BOARD" is tapped,
+page-size ceiling included, because it is literally the same read.
+
+⚠ **That is an argument for who computes the count, not for how much this costs, and the
+two were conflated when D2 was first written.** Two things it did not weigh:
+
+**A counting procedure inside `modules/bulletins` is a third option, and it has no module
+cycle.** `bulletins.countMatching({ queries })` sits in the module that already owns
+matching and already consumes this module's grammar, so the dependency direction is
+exactly today's — no new edge, and none of what the paragraph above rules out applies to
+it. It is still called by the client, still runs the one read that decides visibility, and
+returning `LEAST(count, BOARD_PAGE_SIZE)` preserves D2's actual load-bearing property. It
+is the "coordinating application service / shared contract" escape hatch CLAUDE.md names.
+
+**The batching claim is about round trips and says nothing about bytes.** `useQueries` +
+`httpBatchLink` genuinely fold N calls into one HTTP request, so 24 views cost 2 round
+trips rather than 25 — but each `bulletins.board` answers with up to `BOARD_PAGE_SIZE`
+(50) **complete** `VisibleBulletin` objects, bodies bounded at `BULLETIN_BODY_MAX_LENGTH`
+(4000). At the D3 cap that is 24 × 50 bulletins downloaded, parsed, and retained in the
+query cache to render **24 integers**; `saved-views.tsx`'s `select` narrows what the
+screen observes and deliberately does not narrow what the cache holds. Realistically
+high-hundreds-of-KB, and multiple MB at the contract ceiling — on the screen a
+poor-connectivity PWA opens most.
+
+**This decision stands as implemented**, because correctness-by-same-read is worth more
+than payload on a first cut and the cache sharing with `board.tsx` is real. But it stands
+on the record above rather than on a two-way choice that was never exhaustive; the
+`countMatching` procedure is the change to make if the payload is ever measured as a
+problem, and it is a follow-up rather than a rewrite.
 
 ### D3 — a soft cap of 24 views per owner
 
@@ -134,6 +161,7 @@ it. Widening the grammar is separate work.
 | **`ON DELETE SET NULL` on the designation, so deleting a view leaves the query notifying** | The person deleted the card the bell was on and would keep receiving pushes with no surface left to switch them off. Unstoppable notifications is the worse surprise. |
 | **`ON DELETE CASCADE`** | Correct behaviour, but this schema has no cascades anywhere and an implicit one would hide the clear from anybody reading the delete path. The explicit two-statement transaction says what happens; the FK backstops it. |
 | **Counts computed in `views.saved.list`** | See D2 — a module cycle or a second definition of what a query matches, in exchange for a number that could then differ from the board's. |
+| **A `bulletins.countMatching({ queries })` procedure in `modules/bulletins`** | **Not rejected on architecture — it adds no module edge**, since `modules/bulletins` already owns matching and already consumes this module's grammar. It would cut the response from 24 × 50 full bulletins to 24 integers. Deferred rather than dismissed: the shipped version shares a cache key with `board.tsx` and is provably the number the board will show, and no payload measurement has been taken yet. See D2's amendment for the cost this trades away. |
 | **A rename affordance on the card** | The comp draws none, and the design file is the owner-mandated SSOT for this screen. `views.saved.rename` exists behind the API (M5-AC16 covers update, and ADR-0005:102 gives it optimistic concurrency) but no control calls it yet. |
 | **Optimistic concurrency on the bell** | A designation is not a document and has nothing to merge; the last tap winning is what a switch means. `setNotify` takes the desired state rather than toggling, so two racing taps cannot land in an order nobody chose. |
 
@@ -164,9 +192,11 @@ it. Widening the grammar is separate work.
 | Lighting a second bell moves the designation instead of adding one (D1) | same file › "writes exactly one notify_me_queries row however many bells are tapped" |
 | Deleting the designated view stops the notifications | same file › "stops the notifications when the view the bell is on is deleted" |
 | A stale client cannot switch off a bell that has already moved | same file › "does not switch off a bell that has already moved" |
+| A write names **one** view, not every view its owner holds — the `id` predicate on `rename` and `delete` | same file › "renames only the view it was given" and "deletes only the view it was given". Both need an owner holding **two** views: with one row per owner, `WHERE owner_id = X` and `WHERE owner_id = X AND id = V` select the identical set and no assertion can tell them apart. The delete case carries no lit bell on purpose, so the composite FK cannot mask the missing predicate. |
+| Deleting one view does not switch off a bell lit on another | same file › "leaves a bell lit on another view alone when a different view is deleted" — the surviving designation still points at its own view and no `NotifyMeQueryCleared` is written. The identical predicate pair in `setNotify` was already pinned by the stale-client row above; `delete`'s copy was not. |
 | `views.notifyMe.update` still works and still owns its own query | same file › "leaves the designation clear when views.notifyMe.update writes a query of its own", plus the pre-existing `notify-me-query.integration.test.ts` unchanged and passing |
 | The saved query goes through the one grammar and a refused query stores nothing | same file › "parses the query through the one grammar and stores nothing when it is refused" |
 | The five new procedures are declared in `packages/contracts` and match the router | `tests/fitness/contracts-api-parity.fitness.test.ts`, at compile time and at run time |
 | No procedure accepts a caller-supplied owner identifier | `tests/fitness/viewer-id-provenance.fitness.test.ts` (B14) walks the built router including the new sub-router |
-| **Owed:** a B13 row for `view.save` in `tests/security/b-rows.manifest.json` | The manifest currently records `view.save` as "owed to its owning lane". The integration scenario above is the evidence; promoting it into the security suite is follow-up work, called out in this PR rather than silently left. |
+| An unrelated actor cannot save, rename, delete or re-point another owner's view through the write path (B13) | `tests/security/write-path-idor-bulletins.security.test.ts` › `describe('view.save')`. `tests/security/b-rows.manifest.json`'s B13 row is `"status": "live"` and names that file in `provenBy`; its assertion text records `view.save` as proven here alongside `bulletin.archive` and `notifyMe.update`. `view.save` is the first B13 case with a genuine unrelated-actor scenario rather than a by-construction one — a saved view has a client-suppliable id, so an unrelated actor really can name another owner's row, and the `owner_id` predicate on every statement is what fails it closed. |
 | **Owed:** rename has no UI | Recorded in the alternatives table. A later PR adds the control or removes the procedure. |
