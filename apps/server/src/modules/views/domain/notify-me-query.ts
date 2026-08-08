@@ -1,20 +1,6 @@
 import type { BoardQuery } from './board-query-grammar';
 
 /**
- * The shape version of the stored AST — ADR-0007:70-72's `ast_version`.
- *
- * It versions the **AST's shape**, never the row. A grammar change ships as a new
- * value here plus a migration that re-validates or re-parses stored queries; until
- * that migration runs, a query saved under an older version is simply not evaluated
- * by this grammar. That is the point: silently reinterpreting somebody's saved query
- * notifies them about the wrong things while they are not there to notice.
- *
- * ⚠ Bump this and you owe the migration. Leaving it unchanged after a grammar change
- * is the silent reinterpretation the column exists to prevent.
- */
-export const NOTIFY_ME_AST_VERSION = 1;
-
-/**
  * One person's saved Notify Me query — at most one per user (D1).
  *
  * "At most one" is a **primary key on `owner_id`** (ADR-0007:79), not a check a
@@ -33,8 +19,21 @@ export interface NotifyMeQuery {
   readonly sourceText: string;
   /** The validated AST — the same {@link BoardQuery} the board and saved views use. */
   readonly query: BoardQuery;
-  /** {@link NOTIFY_ME_AST_VERSION} as of the write that stored {@link query}. */
+  /**
+   * {@link import('./board-query-grammar').BOARD_QUERY_AST_VERSION} as of the write
+   * that stored {@link query}.
+   */
   readonly astVersion: number;
+  /**
+   * The `app.saved_views` row this query was designated from, or `null` when it was
+   * written directly through `views.notifyMe.update`.
+   *
+   * D1: exactly one Notify Me query per user, so lighting the bell on a second view
+   * **moves** the designation rather than adding one — which is this aggregate's primary
+   * key doing the enforcing (ADR-0016). A `null` here is not "no view yet"; it is a
+   * query that belongs to no view and therefore appears on no card's bell.
+   */
+  readonly sourceViewId: string | null;
   /**
    * ADR-0005 optimistic-concurrency version, bumped on every successful update.
    *

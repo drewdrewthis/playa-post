@@ -6,7 +6,8 @@ import type {
   NotifyMeQueryDirectory,
   SavedNotifyMeQuery,
 } from '../application/notify-me-query.directory';
-import { NOTIFY_ME_AST_VERSION, type NotifyMeQuery } from '../domain/notify-me-query';
+import { BOARD_QUERY_AST_VERSION } from '../domain/board-query-grammar';
+import type { NotifyMeQuery } from '../domain/notify-me-query';
 import { NotifyMeQueryConflictError } from '../domain/notify-me-query.errors';
 import { notifyMeQueryChanged, type NotifyMeQueryChanged } from '../domain/notify-me-query.events';
 import type {
@@ -72,6 +73,11 @@ export function createPostgresNotifyMeQueryRepository(
                   ast,
                   ast_version: write.astVersion,
                   updated_at: write.updatedAt,
+                  // `views.notifyMe.update` writes a query that belongs to no saved
+                  // view. Explicit rather than left to the column default so the two
+                  // write paths onto this table state the same field — the designation
+                  // is set only by `views.saved.setNotify` (ADR-0016).
+                  source_view_id: null,
                 })
                 // A row already existing IS the version mismatch: the caller said "I
                 // have none". `do nothing` rather than `do update` so a first-save
@@ -87,6 +93,10 @@ export function createPostgresNotifyMeQueryRepository(
                   ast_version: write.astVersion,
                   version: sql<number>`version + 1`,
                   updated_at: write.updatedAt,
+                  // Cleared, not preserved: the text just became something the
+                  // designated view does not say, so leaving the pointer would light a
+                  // bell on a card whose query is no longer the one being notified on.
+                  source_view_id: null,
                 })
                 .where('owner_id', '=', write.ownerId)
                 .where('version', '=', write.expectedVersion)
@@ -118,7 +128,7 @@ export function createPostgresNotifyMeQueryRepository(
         // Queries stored under another grammar are excluded rather than reinterpreted
         // (ADR-0007:70-72). Filtered in SQL so the exclusion cannot be forgotten by a
         // caller that maps rows itself.
-        .where('ast_version', '=', NOTIFY_ME_AST_VERSION)
+        .where('ast_version', '=', BOARD_QUERY_AST_VERSION)
         .execute();
 
       return rows.map((row) => ({ ownerId: row.owner_id, query: toBoardQuery(row.ast) }));

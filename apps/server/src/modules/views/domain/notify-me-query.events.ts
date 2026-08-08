@@ -40,3 +40,33 @@ export function notifyMeQueryChanged(query: NotifyMeQuery): NotifyMeQueryChanged
     version: query.version,
   };
 }
+
+/** Event type name, past tense (addendum §20). Stable — consumers subscribe to it. */
+export const NOTIFY_ME_QUERY_CLEARED = 'NotifyMeQueryCleared';
+
+/**
+ * Somebody no longer has a saved Notify Me query.
+ *
+ * ⚠ **A second event type rather than a `NotifyMeQueryChanged` with an empty query**,
+ * because that event carries a `version` "so a consumer can order its own state" and a
+ * removal has no version to carry — a zero or a repeat would be a number a consumer
+ * would order against and get wrong. Written when the Saved screen's bell is turned off,
+ * and when a view that was the designated Notify Me source is deleted (ADR-0016).
+ *
+ * Turning notifications *off* is a state change worth announcing for the same reason
+ * turning them on is: a consumer that cached "this person is notifying" would otherwise
+ * never learn that they stopped.
+ *
+ * Identifiers and routing data only — no source text, no AST (ADR-0006, M2-AC16).
+ */
+export interface NotifyMeQueryCleared {
+  readonly type: typeof NOTIFY_ME_QUERY_CLEARED;
+  readonly occurredAt: Date;
+  /** The aggregate — and the owner, because the two are the same thing here (D1). */
+  readonly ownerId: string;
+}
+
+/** Build the event for a query that has just been removed. */
+export function notifyMeQueryCleared(ownerId: string, occurredAt: Date): NotifyMeQueryCleared {
+  return { type: NOTIFY_ME_QUERY_CLEARED, occurredAt, ownerId };
+}
