@@ -40,11 +40,13 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  state,tests}. Shell/router/providers/auth/api client/offline queue in
                  src/app/{routes,auth,api,offline,shell} (the M2 frontend). Shared UI in src/shared/.
                  A screen whose pieces outgrow one route file gets a sibling feature directory —
-                 src/app/{people,notifications,bulletins}/ — holding its components, its own
+                 src/app/{people,notifications,bulletins,graph}/ — holding its components, its own
                  <feature>.css, and any pure logic worth unit-testing on its own (src/app/bulletins/
                  is the board: card, detail sheet, search bar, the query builder and the relative-time
-                 formatter). A feature stylesheet is imported by the component that owns it, never
-                 added to screens.css.
+                 formatter; src/app/graph/ is the network canvas: graph-layout.ts seeded from person
+                 ids, graph-viewport.ts pan/zoom arithmetic, graph-node-identity.ts §6a for dots,
+                 graph-counts.ts, graph-network.tsx, graph-viz.css). A feature stylesheet is imported
+                 by the component that owns it, never added to screens.css.
                  src/app/theme/ is the design system: tokens.css (two token sets, light on :root and
                  dark on [data-theme='dark']), screens.css (the column and every shared screen
                  element), typefaces.ts (the self-hosted font imports, which double as the service

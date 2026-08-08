@@ -1,0 +1,363 @@
+/*
+ * The graph screen's network canvas: the dots, the lines between them, and the frame
+ * they are dragged around inside.
+ *
+ * Every colour below is lifted verbatim from the settled UX prototype's `theme(dark)`
+ * (`design/Playa Post.dc.html`) — its `edge`/`edgeDash`/`youBg`/`youGlow`/`label*`
+ * entries plus the `avL` and `neon` node palettes on lines 566-567.
+ *
+ * ⚠ **The `--pp-graph-*` tokens are declared here rather than in `app/theme/tokens.css`
+ * on purpose.** They are read by this stylesheet and nothing else, and appending to the
+ * shared token file is how two screens being built in parallel collide. If a second
+ * surface ever needs the node palette, that is the moment to move them — until then a
+ * token nobody else reads belongs beside its only reader.
+ *
+ * ⚠ A custom property whose value contains `var()` resolves against the element it is
+ * *declared* on, not the element that uses it. `--pp-graph-node` is set per node by
+ * `[data-palette]`, so anything built from it — a fill, a glow — has to name it at the
+ * point of use, inside a rule that matches a node's own subtree. That is why the two
+ * themes differ by rule here and not purely by token.
+ */
+
+:root {
+  /* Edges: the comp's `edge` and `edgeDash` — dashed in light, solid in dark. */
+  --pp-graph-edge: #a08560;
+  --pp-graph-edge-dash: 5 6;
+  --pp-graph-edge-faint: 0.3;
+  --pp-graph-edge-mid: 0.55;
+  --pp-graph-edge-strong: 0.8;
+
+  /* Nodes: the comp's `avL`, a flat fill with a soft drop shadow and a cream glyph. */
+  --pp-graph-node-0: #8a6b4a;
+  --pp-graph-node-1: #b45336;
+  --pp-graph-node-2: #c58a2a;
+  --pp-graph-node-3: #77743a;
+  --pp-graph-node-4: #5f7d7b;
+  --pp-graph-node-5: #9c5a68;
+  --pp-graph-node-bg: transparent;
+  --pp-graph-glyph: #f8f2e4;
+
+  /* You: the comp's static double ring, `0 0 0 4px bg, 0 0 0 6px ink`. */
+  --pp-graph-you-fill: #2e2418;
+  --pp-graph-you-glyph: #f6efe2;
+  --pp-graph-you-ring-inner: #f6efe2;
+  --pp-graph-you-ring-outer: #2e2418;
+  --pp-graph-you-halo: transparent;
+  --pp-graph-you-halo-opacity: 0;
+
+  /* Labels: the comp's `labelFg` on `labelBg`, drawn as a halo rather than a pill. */
+  --pp-graph-label-ink: #5a4a34;
+  --pp-graph-label-halo: rgb(246 239 226 / 85%);
+}
+
+[data-theme='dark'] {
+  --pp-graph-edge: #b48cff;
+  --pp-graph-edge-dash: none;
+  --pp-graph-edge-faint: 0.22;
+  --pp-graph-edge-mid: 0.45;
+  --pp-graph-edge-strong: 0.75;
+
+  /* The comp's `neon`: an unlit dot, outlined and lit from within by its own colour. */
+  --pp-graph-node-0: #ffe9dc;
+  --pp-graph-node-1: #ff6a3d;
+  --pp-graph-node-2: #56e0c0;
+  --pp-graph-node-3: #ffc466;
+  --pp-graph-node-4: #ff7eb6;
+  --pp-graph-node-5: #c99aff;
+  --pp-graph-node-bg: #251838;
+
+  --pp-graph-you-fill: #ffe9dc;
+  --pp-graph-you-glyph: #241533;
+  --pp-graph-you-ring-inner: transparent;
+  --pp-graph-you-ring-outer: transparent;
+  --pp-graph-you-halo: #ffe9dc;
+  --pp-graph-you-halo-opacity: 0.3;
+
+  --pp-graph-label-ink: #c9bcdd;
+  --pp-graph-label-halo: rgb(18 10 26 / 70%);
+}
+
+/* The canvas and its furniture ------------------------------------------- */
+
+/*
+ * A bounded panel rather than the comp's full-bleed screen: this screen keeps a
+ * heading, an invite action and a counts strip above the picture, so the network needs
+ * an edge to be draggable *inside*.
+ *
+ * The height is "whatever the column has left" — 19rem is the chrome, heading, counts
+ * strip and tab bar above and below it — clamped so it stays usable on a short window
+ * and stops growing on a tall one. Sized here rather than by stretching, because the
+ * screen this sits in is content-height inside a scrolling region and has no height of
+ * its own to divide up.
+ */
+.graph-viz {
+  position: relative;
+  /* The screen is a flex column; without this the canvas is squeezed by its siblings. */
+  flex: none;
+  width: 100%;
+  height: clamp(17rem, calc(100dvh - 19rem), 32rem);
+  overflow: hidden;
+  border: 1px solid var(--pp-card-border);
+  border-radius: var(--pp-radius-lg);
+  background: var(--pp-card);
+}
+
+/*
+ * `touch-action: none` is what makes a one-finger drag pan the graph instead of
+ * scrolling the screen behind it — the comp sets the same thing on its graph wrapper.
+ */
+.graph-viz__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+
+.graph-viz__canvas:active {
+  cursor: grabbing;
+}
+
+/* The comp's floating +/−/◎ column. `.icon-button` is already this exact 38px circle. */
+.graph-viz__zoom {
+  position: absolute;
+  right: var(--pp-space-3);
+  bottom: var(--pp-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+}
+
+/* Centred on the canvas, not on the panel: the right inset clears the zoom column. */
+.graph-viz__caption {
+  position: absolute;
+  right: 3.75rem;
+  bottom: var(--pp-space-2);
+  left: 0;
+  margin: 0;
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-faint);
+  text-align: center;
+  pointer-events: none;
+}
+
+/* The counts strip above the canvas — the comp's `headerSub`. */
+.graph-counts {
+  margin: 0;
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.08em;
+  color: var(--pp-faint);
+}
+
+/* Edges ------------------------------------------------------------------- */
+
+.graph-viz__edge {
+  stroke: var(--pp-graph-edge);
+  stroke-width: 1;
+  stroke-dasharray: var(--pp-graph-edge-dash);
+  opacity: var(--pp-graph-edge-faint);
+}
+
+/*
+ * The comp's ramp is 1/2/3.5, drawn on a canvas far wider relative to a node than this
+ * one — its 1200 units hold a hundred people, a real first-degree graph holds a dozen —
+ * so the same stroke covers much more of the picture here. Scaled back so a strongly
+ * trusted line still reads as the heaviest thing on the ring without being the first
+ * thing you see.
+ */
+.graph-viz__edge[data-strength='2'] {
+  stroke-width: 1.75;
+  opacity: var(--pp-graph-edge-mid);
+}
+
+.graph-viz__edge[data-strength='3'] {
+  stroke-width: 2.75;
+  opacity: var(--pp-graph-edge-strong);
+}
+
+/* Nodes ------------------------------------------------------------------- */
+
+.graph-viz__node[data-palette='0'] {
+  --pp-graph-node: var(--pp-graph-node-0);
+}
+
+.graph-viz__node[data-palette='1'] {
+  --pp-graph-node: var(--pp-graph-node-1);
+}
+
+.graph-viz__node[data-palette='2'] {
+  --pp-graph-node: var(--pp-graph-node-2);
+}
+
+.graph-viz__node[data-palette='3'] {
+  --pp-graph-node: var(--pp-graph-node-3);
+}
+
+.graph-viz__node[data-palette='4'] {
+  --pp-graph-node: var(--pp-graph-node-4);
+}
+
+.graph-viz__node[data-palette='5'] {
+  --pp-graph-node: var(--pp-graph-node-5);
+}
+
+.graph-viz__dot {
+  fill: var(--pp-graph-node);
+  stroke: none;
+  filter: drop-shadow(0 2px 3px rgb(70 50 20 / 28%));
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.15s ease;
+}
+
+[data-theme='dark'] .graph-viz__dot {
+  fill: var(--pp-graph-node-bg);
+  stroke: var(--pp-graph-node);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 5px var(--pp-graph-node));
+}
+
+.graph-viz__dot[role='link']:hover {
+  transform: scale(1.12);
+}
+
+.graph-viz__dot:focus-visible {
+  outline: 2px solid var(--pp-accent);
+  outline-offset: 3px;
+}
+
+/*
+ * A connection whose identity §6a withheld. Dashed and dimmed rather than the comp's
+ * blur, because these are real people the viewer is really connected to — a blurred dot
+ * reads as something still loading, a dashed one reads as something deliberately not
+ * shown. There is no glyph and no name inside it, which is the whole point.
+ */
+.graph-viz__node[data-private='true'] .graph-viz__dot {
+  fill: none;
+  stroke: var(--pp-graph-node);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 4;
+  filter: none;
+  opacity: 0.6;
+}
+
+.graph-viz__node[data-you='true'] .graph-viz__dot {
+  fill: var(--pp-graph-you-fill);
+  stroke: none;
+}
+
+[data-theme='dark'] .graph-viz__node[data-you='true'] .graph-viz__dot {
+  filter: drop-shadow(0 0 8px var(--pp-graph-you-fill));
+}
+
+.graph-viz__you-ring {
+  fill: none;
+  pointer-events: none;
+}
+
+.graph-viz__you-ring--inner {
+  stroke: var(--pp-graph-you-ring-inner);
+  stroke-width: 4;
+}
+
+.graph-viz__you-ring--outer {
+  stroke: var(--pp-graph-you-ring-outer);
+  stroke-width: 2;
+}
+
+/*
+ * The comp's `youpulse`, which it runs in dark only — light gets the static double ring
+ * above instead. Scaling the halo rather than animating a `filter` keeps the pulse on
+ * the compositor.
+ */
+.graph-viz__halo {
+  fill: var(--pp-graph-you-halo);
+  opacity: var(--pp-graph-you-halo-opacity);
+  pointer-events: none;
+}
+
+[data-theme='dark'] .graph-viz__halo {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pp-youpulse 2.6s ease-in-out infinite alternate;
+}
+
+@keyframes pp-youpulse {
+  from {
+    opacity: 0.18;
+    transform: scale(0.82);
+  }
+
+  to {
+    opacity: 0.48;
+    transform: scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme='dark'] .graph-viz__halo {
+    animation: none;
+  }
+
+  .graph-viz__dot {
+    transition: none;
+  }
+}
+
+/* Type on the canvas ------------------------------------------------------ */
+
+/*
+ * `pointer-events: none` on both: a tap that lands on the letter inside a dot has to
+ * reach the dot, and a name is a label, not a target.
+ */
+.graph-viz__initial,
+.graph-viz__label {
+  pointer-events: none;
+  user-select: none;
+}
+
+.graph-viz__initial {
+  fill: var(--pp-graph-glyph);
+  font-family: var(--pp-font-body);
+  font-weight: 700;
+  font-size: 10px;
+  text-anchor: middle;
+}
+
+[data-theme='dark'] .graph-viz__initial {
+  fill: var(--pp-graph-node);
+}
+
+/* The comp's size ramp: 15px inside a you/first-degree dot, 12px at second, 10px past that. */
+.graph-viz__node[data-degree='2'] .graph-viz__initial {
+  font-size: 12px;
+}
+
+.graph-viz__node[data-degree='0'] .graph-viz__initial,
+.graph-viz__node[data-degree='1'] .graph-viz__initial {
+  font-size: 15px;
+}
+
+.graph-viz__node[data-you='true'] .graph-viz__initial {
+  fill: var(--pp-graph-you-glyph);
+}
+
+/*
+ * The comp sets a background pill behind each name. SVG text has no background, and
+ * measuring one would mean measuring the text; a painted-under stroke does the same job
+ * — legible over an edge, a dot, or the canvas — with no measurement at all.
+ */
+.graph-viz__label {
+  fill: var(--pp-graph-label-ink);
+  paint-order: stroke;
+  stroke: var(--pp-graph-label-halo);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  font-family: var(--pp-font-body);
+  font-weight: 600;
+  font-size: 11px;
+  text-anchor: middle;
+}
