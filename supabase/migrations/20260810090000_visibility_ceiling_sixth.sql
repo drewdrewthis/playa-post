@@ -17,12 +17,16 @@
 alter table app.users
   alter column visible_to_distance set default 'sixth';
 
+-- The old constraint must go BEFORE the rewrite: it still lists 'anyone' and not
+-- 'sixth', so updating a real 'anyone' row to 'sixth' under it fails the whole
+-- migration. A fresh replay has zero such rows and never notices — only a populated
+-- database does.
+alter table app.users
+  drop constraint users_visible_to_distance_check;
+
 update app.users
    set visible_to_distance = 'sixth'
  where visible_to_distance = 'anyone';
-
-alter table app.users
-  drop constraint users_visible_to_distance_check;
 
 alter table app.users
   add constraint users_visible_to_distance_check
