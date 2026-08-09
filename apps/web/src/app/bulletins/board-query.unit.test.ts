@@ -72,16 +72,23 @@ describe('BOARD_FILTER_CHIPS', () => {
     expect(BOARD_FILTER_CHIPS[0]).toEqual({ filter: 'all', label: 'All' });
   });
 
-  // The comp draws eight chips. Only the types a client can actually post exist, and a
-  // chip for a type nothing can be written as would filter to a permanently empty board.
+  // The comp draws eight chips. Only the six postable types get one (#87): a chip for
+  // `update` would filter to a permanently empty board, and `note` is never a value.
   it('carries one chip per postable bulletin type and no others', () => {
     expect(BOARD_FILTER_CHIPS.slice(1).map((chip) => chip.filter)).toEqual(
       Object.values(BULLETIN_TYPE),
     );
   });
 
-  it('labels each type chip in the comp\'s plural form', () => {
-    expect(BOARD_FILTER_CHIPS.slice(1).map((chip) => chip.label)).toEqual(['Requests']);
+  it("labels each type chip in the comp's plural form", () => {
+    expect(BOARD_FILTER_CHIPS.slice(1).map((chip) => chip.label)).toEqual([
+      'Offers',
+      'Requests',
+      'Events',
+      'Collabs',
+      'Thanks',
+      'Intros',
+    ]);
   });
 });
 
