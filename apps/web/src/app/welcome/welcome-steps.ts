@@ -8,6 +8,8 @@
  * step leads with the principles it grounds; the closing step names all eleven, each
  * glossed by the concrete behaviour that honours it — every gloss is a claim about
  * something the app actually does, so if a feature changes, its gloss owes an edit.
+ * The roll-call runs in Burning Man's own published order with Consent appended last,
+ * so it is deliberately not alphabetical — do not tidy it.
  *
  * The flag lives in `localStorage` under the comp's own key (`playapost-onboarded`) —
  * device-scoped on purpose. Welcome is a pitch to somebody who may never sign in, so
@@ -55,12 +57,12 @@ export const WELCOME_STEPS: readonly WelcomeStep[] = [
   {
     icon: '✶',
     title: 'Included, by consent',
-    body: 'Everyone is welcome; no one is exposed. Each connection is offered and accepted, never scraped, and your reach dial decides exactly how far your presence carries. Nothing travels further than its owner chose.',
+    body: 'Everyone is welcome; no one is exposed. Each connection is offered and accepted, never scraped, and your reach dial bounds how far your presence carries. Nothing travels further than its owner chose. Everyone answers to their neighbours, too: anything harmful can be reported.',
     code: null,
     principles: null,
   },
   {
-    icon: '⚘',
+    icon: '✿',
     title: 'Gifts, not products',
     body: 'A bulletin is an offer to your neighbours; a note is a gift left on one board. No ads, no follower counts, no ranking algorithm — nothing here is for sale, least of all your attention.',
     code: null,
@@ -74,9 +76,9 @@ export const WELCOME_STEPS: readonly WelcomeStep[] = [
     principles: null,
   },
   {
-    icon: '♲',
+    icon: '◇',
     title: 'Leave no trace',
-    body: 'Expired means gone, and a severed connection takes its author’s trace with it. The network keeps the least it needs to run; your words belong to the people you gave them to.',
+    body: 'Expired bulletins leave every board, and nothing you post is broadcast beyond your reach. Your words belong to the people you gave them to.',
     code: null,
     principles: null,
   },
@@ -86,16 +88,16 @@ export const WELCOME_STEPS: readonly WelcomeStep[] = [
     body: 'Playa Post is built on the culture that built Black Rock City.',
     code: null,
     principles: [
-      { name: 'Radical Inclusion', gloss: 'anyone may join; someone welcomes them in' },
+      { name: 'Radical Inclusion', gloss: 'someone who trusts you welcomes you in' },
       { name: 'Gifting', gloss: 'notes and bulletins ask for nothing back' },
-      { name: 'Decommodification', gloss: 'no ads, no metrics, ever' },
-      { name: 'Radical Self-reliance', gloss: 'works offline; your device is your camp' },
+      { name: 'Decommodification', gloss: 'no ads, no follower counts, nothing for sale' },
+      { name: 'Radical Self-reliance', gloss: 'posts written offline queue and sync when you return' },
       { name: 'Radical Self-expression', gloss: 'your board, your words, six ways to post' },
       { name: 'Communal Effort', gloss: 'the graph is built two people at a time' },
-      { name: 'Civic Responsibility', gloss: 'you choose what you disclose, and to whom' },
-      { name: 'Leaving No Trace', gloss: 'what expires is truly gone' },
+      { name: 'Civic Responsibility', gloss: 'harm can be reported; boards answer to their people' },
+      { name: 'Leaving No Trace', gloss: 'expired bulletins leave every board' },
       { name: 'Participation', gloss: 'the board exists because you pin to it' },
-      { name: 'Immediacy', gloss: 'here and now, then gone' },
+      { name: 'Immediacy', gloss: 'here and now, then off the board' },
       { name: 'Consent', gloss: 'nothing is seen beyond the reach its owner set' },
     ],
   },

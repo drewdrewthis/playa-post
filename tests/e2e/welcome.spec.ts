@@ -11,8 +11,9 @@ import { expect, test } from '@playwright/test';
  * Both exits stamp `playapost-onboarded` and land on `/signin`, and the replay
  * assertion proves the stamp sticks: the second anonymous visit skips the flow.
  *
- * Writes `docs/engineering/screenshots/m5-welcome-step-{1,3}.png` when
- * `E2E_WELCOME_SCREENSHOT_DIR` is set — the same opt-in shape as
+ * Writes `docs/engineering/screenshots/m5-welcome-step-{1..8}.png` — one per step, the
+ * first before the walk and the rest as the walk advances — when
+ * `E2E_WELCOME_SCREENSHOT_DIR` is set: the same opt-in shape as
  * `E2E_YOU_SCREENSHOT_DIR` in `you-screen.spec.ts`, so a normal run writes nothing.
  *
  * Advisory, like the rest of `test:e2e` (`docs/engineering/l5-plan.md` D2).
@@ -54,10 +55,7 @@ test.describe('the welcome flow', () => {
     }
     await expect(page.getByTestId('welcome-next')).toHaveText('Get started');
     // The closing step carries the full principle roll-call, ten plus consent.
-    await expect(page.locator('.welcome__principle')).toHaveCount(11);
-    if (directory !== undefined && directory !== '') {
-      await page.screenshot({ path: `${directory}/m5-welcome-step-8.png`, fullPage: true });
-    }
+    await expect(page.getByTestId('welcome-principle')).toHaveCount(11);
 
     await page.getByTestId('welcome-next').click();
     await expect(page).toHaveURL(/\/signin$/);

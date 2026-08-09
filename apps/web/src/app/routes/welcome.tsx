@@ -38,7 +38,9 @@ export function WelcomeRoute(): JSX.Element {
   return (
     <div className="app-frame">
       <main className="app-column" data-testid="welcome">
-        <div className="screen screen--fill screen--centred welcome">
+        {/* Not `screen--centred`: its plain `center` lands later in the cascade and
+            would override the `safe center` that keeps the tall roll-call scrollable. */}
+        <div className="screen screen--fill welcome">
           <button className="welcome__skip" type="button" onClick={finish}>
             Skip
           </button>
@@ -50,14 +52,25 @@ export function WelcomeRoute(): JSX.Element {
           <p className="welcome__body">{current.body}</p>
           {current.code === null ? null : <code className="welcome__code">{current.code}</code>}
           {current.principles === null ? null : (
-            <ul className="welcome__principles">
-              {current.principles.map((principle) => (
-                <li key={principle.name} className="welcome__principle">
-                  <strong className="welcome__principle-name">{principle.name}</strong>
-                  <span className="welcome__principle-gloss">{principle.gloss}</span>
-                </li>
+            <dl className="welcome__principles">
+              {current.principles.map(({ name, gloss }, index, all) => (
+                // The +1 — Consent — is marked here rather than matched with a
+                // `:last-child` rule, so the stylesheet styles the extra principle
+                // instead of whichever one happens to be eleventh.
+                <div
+                  key={name}
+                  className={
+                    index === all.length - 1
+                      ? 'welcome__principle welcome__principle--plus-one'
+                      : 'welcome__principle'
+                  }
+                  data-testid="welcome-principle"
+                >
+                  <dt className="welcome__principle-name">{name}</dt>
+                  <dd className="welcome__principle-gloss">{gloss}</dd>
+                </div>
               ))}
-            </ul>
+            </dl>
           )}
 
           <div className="welcome__dots" aria-hidden="true">
