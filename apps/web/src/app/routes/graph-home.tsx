@@ -70,43 +70,47 @@ export function GraphHomeRoute(): JSX.Element {
   }, [network, selectedPerson]);
 
   return (
-    <section className="screen" data-testid="graph-home">
-      <header className="screen__header">
-        <h1 className="screen__title">Your graph</h1>
-        {/* Composing is the shell's FAB now, on every screen — see `tab-bar.tsx`. */}
-        <div className="screen__actions">
-          <button
-            className="button button--primary"
-            data-testid="invite-create-button"
-            type="button"
-            onClick={() => invite.mutate()}
-            disabled={invite.isPending}
-          >
-            Create an invite
-          </button>
-        </div>
-      </header>
+    <section className="screen screen--canvas" data-testid="graph-home">
+      <div className="screen__chrome">
+        <header className="screen__header">
+          <h1 className="screen__title">Your graph</h1>
+          {/* Composing is the shell's FAB now, on every screen — see `tab-bar.tsx`. */}
+          <div className="screen__actions">
+            <button
+              className="button button--primary"
+              data-testid="invite-create-button"
+              type="button"
+              onClick={() => invite.mutate()}
+              disabled={invite.isPending}
+            >
+              Create an invite
+            </button>
+          </div>
+        </header>
 
-      {network === undefined ? null : (
-        <p className="graph-counts" data-testid="graph-counts">
-          {summary.people} PEOPLE · {summary.trusted} TRUSTED
-        </p>
-      )}
+        {network === undefined ? null : (
+          <p className="graph-counts" data-testid="graph-counts">
+            {summary.people} PEOPLE · {summary.trusted} TRUSTED
+          </p>
+        )}
 
-      {invite.data === undefined ? null : (
-        <p className="invite-token">
-          <span className="invite-token__label">Share this invite</span>
-          <code className="invite-token__value" data-testid="invite-token-display">
-            {invite.data.token}
-          </code>
-        </p>
-      )}
+        {invite.data === undefined ? null : (
+          <p className="invite-token">
+            <span className="invite-token__label">Share this invite</span>
+            <code className="invite-token__value" data-testid="invite-token-display">
+              {invite.data.token}
+            </code>
+          </p>
+        )}
 
-      {network === undefined || summary.people === 0 ? (
-        <p className="screen__empty">
-          Nobody yet. Create an invite and send it to someone you know.
-        </p>
-      ) : (
+        {network === undefined || summary.people === 0 ? (
+          <p className="screen__empty">
+            Nobody yet. Create an invite and send it to someone you know.
+          </p>
+        ) : null}
+      </div>
+
+      {network === undefined || summary.people === 0 ? null : (
         <GraphNetwork graph={network} onOpenPerson={setSelectedPerson} />
       )}
 

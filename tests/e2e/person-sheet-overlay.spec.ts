@@ -60,6 +60,20 @@ test.describe('tapping a graph node', () => {
       await expect(pageB.getByTestId('connection-accepted-banner')).toBeVisible();
 
       await pageA.goto('/graph');
+
+      // Screenshot of the bare graph screen only when `E2E_GRAPH_SCREENSHOT_DIR` is
+      // set — the same opt-in shape as `E2E_YOU_SCREENSHOT_DIR`; a normal run writes
+      // nothing.
+      const graphDirectory = process.env['E2E_GRAPH_SCREENSHOT_DIR'];
+      if (graphDirectory !== undefined && graphDirectory !== '') {
+        await expect(pageA.getByTestId(`graph-connection-node-${userBHandle}`)).toBeVisible();
+        await pageA.screenshot({
+          path: `${graphDirectory}/graph-home.png`,
+          fullPage: true,
+          animations: 'disabled',
+        });
+      }
+
       await pageA.getByTestId(`graph-connection-node-${userBHandle}`).click();
 
       // The sheet is up — and the graph did not go anywhere. These two assertions are

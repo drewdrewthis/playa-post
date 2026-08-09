@@ -80,26 +80,17 @@
 /* The canvas and its furniture ------------------------------------------- */
 
 /*
- * A bounded panel rather than the comp's full-bleed screen: this screen keeps a
- * heading, an invite action and a counts strip above the picture, so the network needs
- * an edge to be draggable *inside*.
- *
- * The height is "whatever the column has left" — 19rem is the chrome, heading, counts
- * strip and tab bar above and below it — clamped so it stays usable on a short window
- * and stops growing on a tall one. Sized here rather than by stretching, because the
- * screen this sits in is content-height inside a scrolling region and has no height of
- * its own to divide up.
+ * Full-bleed, like the comp: the graph screen (`.screen--canvas`) pins to the shell's
+ * height and this panel absorbs everything below the chrome, edge to edge, on the
+ * app's own background — no border, no card. `min-height: 0` is what lets a flex
+ * child actually shrink to the space the column has left instead of overflowing it.
  */
 .graph-viz {
   position: relative;
-  /* The screen is a flex column; without this the canvas is squeezed by its siblings. */
-  flex: none;
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  height: clamp(17rem, calc(100dvh - 19rem), 32rem);
   overflow: hidden;
-  border: 1px solid var(--pp-card-border);
-  border-radius: var(--pp-radius-lg);
-  background: var(--pp-card);
 }
 
 /*
