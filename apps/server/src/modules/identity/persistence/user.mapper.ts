@@ -1,6 +1,7 @@
 import type { Database, Selectable } from '@playa-post/database';
 
 import type { User } from '../domain/user';
+import { toVisibleToDistance } from '../domain/visible-to-distance';
 
 /**
  * One `app.users` row as the generated schema describes it.
@@ -30,6 +31,7 @@ export function toUser(row: UserRow): User {
     displayName: row.display_name,
     avatarPath: row.avatar_path,
     status: row.status,
+    visibleToDistance: toVisibleToDistance(row.visible_to_distance),
     createdAt: row.created_at,
     deactivatedAt: row.deactivated_at,
     erasedAt: row.erased_at,

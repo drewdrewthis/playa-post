@@ -1,3 +1,5 @@
+import type { VisibleToDistance } from './visible-to-distance';
+
 /**
  * The lifecycle states ADR-0008's table names.
  *
@@ -45,6 +47,14 @@ export interface User {
    * is the behaviour ADR-0002 B11 wants from a state it has never seen.
    */
   readonly status: string;
+  /**
+   * How far away somebody may stand and still see this user at all.
+   *
+   * Narrowed here, unlike {@link User.status}, because {@link toVisibleToDistance}
+   * fails closed on an unrecognised value rather than throwing — so the narrowing costs
+   * nothing and buys exhaustiveness at every call site.
+   */
+  readonly visibleToDistance: VisibleToDistance;
   readonly createdAt: Date;
   readonly deactivatedAt: Date | null;
   readonly erasedAt: Date | null;

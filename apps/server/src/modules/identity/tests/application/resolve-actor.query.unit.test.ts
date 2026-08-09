@@ -32,6 +32,7 @@ function userWith(status: string): User {
     displayName: 'Dusty Rhodes',
     avatarPath: null,
     status,
+    visibleToDistance: 'anyone',
     createdAt: new Date('2026-08-05T00:00:00.000Z'),
     deactivatedAt: null,
     erasedAt: null,
@@ -46,7 +47,10 @@ function repositoryHolding(user: User | null): UserRepository {
       Promise.resolve(user !== null && user.authUserId === authUserId ? user : null),
     findByHandle: () => Promise.resolve(null),
     findByConfusableSkeleton: () => Promise.resolve(null),
+    findById: (userId) => Promise.resolve(user !== null && user.id === userId ? user : null),
     add: (_newUser: NewUser) =>
+      Promise.reject(new Error('resolving an actor must never write')),
+    setVisibleToDistance: () =>
       Promise.reject(new Error('resolving an actor must never write')),
   };
 }

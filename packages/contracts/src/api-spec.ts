@@ -2,7 +2,12 @@ import type { CreateBulletinRequest, BulletinIdRequest, Bulletin, Board, BoardRe
 import type { GetConnectionRequest, Connection, Invite, InviteTokenRequest, OpenedInvite, SetTrustRequest } from './connections';
 import type { Graph } from './graph';
 import type { Health } from './health';
-import type { CompleteOnboardingRequest, OnboardedUser } from './identity';
+import type {
+  CompleteOnboardingRequest,
+  OnboardedUser,
+  SetVisibilityRequest,
+  VisibilitySetting,
+} from './identity';
 import type {
   HiddenBulletin,
   ModerationTargetRequest,
@@ -75,6 +80,8 @@ export interface PlayaPostApi {
   'health.check': QuerySpec<void, Health>;
 
   'identity.completeOnboarding': MutationSpec<CompleteOnboardingRequest, OnboardedUser>;
+  'identity.visibility.get': QuerySpec<void, VisibilitySetting>;
+  'identity.visibility.set': MutationSpec<SetVisibilityRequest, VisibilitySetting>;
 
   'connections.invitations.create': MutationSpec<void, Invite>;
   'connections.invitations.open': QuerySpec<InviteTokenRequest, OpenedInvite>;

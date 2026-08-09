@@ -1,3 +1,48 @@
+-- Multi-hop visibility, and the setting that bounds it.
+--
+-- Two changes that only make sense together:
+--
+-- 1. `app.visible_people` stops clamping the traversal to one hop. ADR-0004 decision 2
+--    says there is no product depth cap and that `max_depth` is an operational safety
+--    bound; the `least(max_depth, 1)` installed by 20260805234326 was M2's feature scope,
+--    which the ADR said M5 would delete rather than raise. It is deleted here.
+--
+-- 2. `app.users` gains `visible_to_distance` — the person's own answer to "who can see me
+--    at all", enforced inside the same function. Without it, lifting the cap would put
+--    every person in the network into every other person's result with no way to opt out.
+--
+-- ⚠ **Known, accepted deviation from ADR-0004 decision 4.** Ghost surrogate IDs are still
+-- not implemented, so a `topology_only` person is returned carrying their real
+-- `app.users.id` and is correlatable across views. Before the cap was lifted this only
+-- reached first-degree connections the viewer already knew; it now reaches everyone within
+-- `max_depth` who has not narrowed their own setting. The product owner was shown this
+-- specific trade and took it deliberately to get multi-hop visibility into alpha. It is
+-- recorded here so the next reader finds a decision rather than a bug. Closing it is M5 B1.
+--
+-- Forward-only: 20260805234326 keeps its original text and is never edited. This migration
+-- carries the new body, and visible-people-migration.integration.test.ts asserts the
+-- checked-in modules/graph/persistence/sql/visible-people.sql appears verbatim in exactly
+-- one migration — which, once this lands, is this one.
+
+-- `text` with a check constraint rather than an enum: ADR-0012 §2 already models
+-- disclosure as a text vocabulary, and widening a check constraint is a plain DDL
+-- statement where widening an enum is a type change other objects depend on.
+--
+-- `default 'anyone'` is a product decision, not a neutral one. The prototype's dial
+-- defaults to a narrower setting, but this column lands on an existing network whose
+-- members never chose anything — and silently hiding people who had been visible would
+-- read as data loss rather than as privacy. New accounts start open and narrow by choice;
+-- when real users arrive that default deserves revisiting.
+alter table app.users
+  add column visible_to_distance text not null default 'anyone';
+
+-- Named, so a future migration can widen it by name rather than by hunting for a
+-- system-generated constraint. The four values are the dial in design/Playa Post.dc.html,
+-- least-restrictive last so the ordering reads as distance.
+alter table app.users
+  add constraint users_visible_to_distance_check
+  check (visible_to_distance in ('first', 'second', 'third', 'anyone'));
+
 -- app.visible_people — the one definition of "who can this viewer reach".
 --
 -- ADR-0004 decisions 1-8, ADR-0002 §5 (viewer_id passed explicitly), §6 (one
