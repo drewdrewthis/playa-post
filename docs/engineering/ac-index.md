@@ -12,3 +12,4 @@ it, and the file where that proof lives. CI fails if an AC in the plan has no ro
 | M2-AC16 (log hygiene) | `test:integration` | `tests/integration/vertical-slice-log-hygiene.integration.test.ts` | |
 | M2-AC20 (viewerId provenance, B14) | `test:security` | `viewer-id-provenance.security.test.ts` | |
 | M2-AC26 (regression) | `lint:boundaries` | `b-rows.manifest.json` | Also covered by `test:security`'s manifest check |
+| M5-B1a (multi-hop reach + who-can-see-you radius) | `test:integration` | `modules/identity/tests/integration/visible-to-distance.integration.test.ts` | Degree ≥2 reach; absence-not-anonymity beyond a person's own limit; service round-trip. Ghost surrogate IDs remain open ([ADR-0004] decision 4 deviation, recorded in migration 20260809140000) |
