@@ -86,6 +86,10 @@ test.describe('tapping a graph node', () => {
       await expect(pageA.getByTestId('person-sheet')).not.toBeVisible();
       await expect(pageA).toHaveURL(/\/graph$/);
       await expect(pageA.getByTestId(`graph-connection-node-${userBHandle}`)).toBeVisible();
+
+      // Focus returns to the node the sheet opened from, so a keyboard user lands on
+      // the circle they tapped rather than at the top of the document.
+      await expect(pageA.getByTestId(`graph-connection-node-${userBHandle}`)).toBeFocused();
     } finally {
       await contextA.close();
       await contextB.close();

@@ -77,12 +77,19 @@ export function PersonSheet({
   }, [onClose]);
 
   // Focus moves into the sheet on open, so a keyboard user's next Tab is inside it and
-  // Escape reaches this handler rather than the node they came from.
+  // Escape reaches this handler rather than the node they came from. On close, focus
+  // returns to that node — an SVG circle, hence the SVGElement arm — so closing the
+  // sheet does not dump a keyboard user at the top of the document.
   useEffect(() => {
+    const opener = document.activeElement;
     sheetRef.current?.focus();
-  }, []);
 
-  const connected = connection.data !== undefined;
+    return () => {
+      if (opener instanceof HTMLElement || opener instanceof SVGElement) {
+        opener.focus();
+      }
+    };
+  }, []);
 
   return (
     <>
@@ -127,7 +134,22 @@ export function PersonSheet({
           </button>
         </div>
 
-        {connected ? (
+        {/*
+         * Four states, told apart on purpose: a query still in flight or failed must
+         * not read as "not connected" — that message is the server's resolved `null`
+         * (B6) and nothing else.
+         */}
+        {connection.isPending ? null : connection.isError ? (
+          <p className="person-sheet__notice" role="alert">
+            That did not load. Close the sheet and try again.
+          </p>
+        ) : connection.data === null ? (
+          <p className="person-sheet__notice">
+            {/* The comp's "connect first to set trust": a tappable node past the first
+                degree is somebody the viewer can see, not somebody they hold trust in. */}
+            You are not connected to this person, so there is nothing to set.
+          </p>
+        ) : (
           <>
             <p className="person-sheet__lede">
               Trust is private and one-directional. They never see it, and neither does
@@ -165,12 +187,6 @@ export function PersonSheet({
               Save trust
             </button>
           </>
-        ) : (
-          <p className="person-sheet__notice">
-            {/* The comp's "connect first to set trust": a tappable node past the first
-                degree is somebody the viewer can see, not somebody they hold trust in. */}
-            You are not connected to this person, so there is nothing to set.
-          </p>
         )}
 
         {saveTrust.error === null ? null : (
