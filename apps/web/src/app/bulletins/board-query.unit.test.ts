@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { BULLETIN_TYPE } from '@playa-post/contracts';
-
 import {
   BOARD_FILTER_CHIPS,
   buildBoardQuery,
@@ -72,16 +70,31 @@ describe('BOARD_FILTER_CHIPS', () => {
     expect(BOARD_FILTER_CHIPS[0]).toEqual({ filter: 'all', label: 'All' });
   });
 
-  // The comp draws eight chips. Only the types a client can actually post exist, and a
-  // chip for a type nothing can be written as would filter to a permanently empty board.
-  it('carries one chip per postable bulletin type and no others', () => {
-    expect(BOARD_FILTER_CHIPS.slice(1).map((chip) => chip.filter)).toEqual(
-      Object.values(BULLETIN_TYPE),
-    );
+  // The comp draws eight chips. Only the six postable types get one (#87): a chip for
+  // `update` would filter to a permanently empty board, and `note` is never a value.
+  // Spelled out literally, in the comp's order — the chip row is *built* from
+  // `Object.values(BULLETIN_TYPE)`, so comparing against that expression would restate
+  // the implementation and green-light any vocabulary forever.
+  it('carries one chip per postable bulletin type, in comp order, and no others', () => {
+    expect(BOARD_FILTER_CHIPS.slice(1).map((chip) => chip.filter)).toEqual([
+      'offer',
+      'request',
+      'event',
+      'collab',
+      'thanks',
+      'intro',
+    ]);
   });
 
-  it('labels each type chip in the comp\'s plural form', () => {
-    expect(BOARD_FILTER_CHIPS.slice(1).map((chip) => chip.label)).toEqual(['Requests']);
+  it("labels each type chip in the comp's plural form", () => {
+    expect(BOARD_FILTER_CHIPS.slice(1).map((chip) => chip.label)).toEqual([
+      'Offers',
+      'Requests',
+      'Events',
+      'Collabs',
+      'Thanks',
+      'Intros',
+    ]);
   });
 });
 

@@ -44,9 +44,10 @@ export const BOARD_QUERY_LIMITS = {
  * vocabulary rather than "whatever this milestone can create".
  *
  * Deliberately **not** shared with `modules/bulletins`' `BULLETIN_TYPE`, which names
- * what M2 can *write* (`request` alone). They answer different questions: a filter for
- * a type nothing has been written as yet must return zero rows, not a validation
- * error — an error would make the grammar an oracle for what the product has shipped.
+ * what a person can *post* (six of these seven — `update` is the system's, #87). They
+ * answer different questions: a filter for a type nothing has been written as yet must
+ * return zero rows, not a validation error — an error would make the grammar an oracle
+ * for what the product has shipped.
  */
 export const BOARD_BULLETIN_TYPES = [
   'offer',

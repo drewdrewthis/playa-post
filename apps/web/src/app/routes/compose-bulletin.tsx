@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router';
 
 import { BULLETIN_TYPE, type BulletinType } from '@playa-post/contracts';
 
+import { TYPE_CHIP_LABELS } from '../bulletins/board-query';
 import {
   buildCreateBulletinPayload,
   BULLETIN_BODY_MAX_LENGTH,
@@ -147,7 +148,7 @@ export function ComposeBulletinRoute(): JSX.Element {
           >
             {BULLETIN_TYPES.map((candidate) => (
               <option key={candidate} value={candidate}>
-                {candidate}
+                {TYPE_CHIP_LABELS[candidate]}
               </option>
             ))}
           </select>

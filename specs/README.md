@@ -1,9 +1,10 @@
-# Specs — M2 vertical-slice BDD feature files
+# Specs — BDD feature files
 
-This directory holds the BDD feature files for milestone M2 (`docs/engineering/implementation-plan.md`
-§"M2 — First production vertical slice"), which implements the addendum §23 flow exactly. If a behavior
-is not captured in a scenario below, it is not in M2 scope — the inverse also holds: every M2-AC1…AC26
-is captured here or explicitly named as not cleanly mappable.
+This directory began as the milestone-M2 vertical-slice suite (`docs/engineering/implementation-plan.md`
+§"M2 — First production vertical slice", the addendum §23 flow exactly) and now also carries feature
+files for later-milestone work (`bulletin-post-types.feature`, #87). For M2 the completeness claim
+holds both ways: if a behavior is not captured in an M2 scenario below, it is not in M2 scope, and
+every M2-AC1…AC26 is captured here or explicitly named as not cleanly mappable.
 
 Sources of truth, in precedence order: `docs/engineering/implementation-plan.md` (M2 ACs) →
 `docs/engineering/architecture-addendum.md` §21 (test levels) + §23 (slice flow) →
@@ -28,11 +29,14 @@ non-authors but retained for the author" and "Archiving an already-archived bull
 Rule followed throughout: exactly one tag per scenario, one invariant per scenario, scenarios are
 independent, no cross-level duplication of the same invariant.
 
-`@e2e` scenarios are reserved for the addendum §21 list, restricted to the rows M2 actually exercises:
+For M2 files, `@e2e` scenarios are reserved for the addendum §21 list, restricted to the rows M2
+actually exercises:
 Invite and connection acceptance · Directional trust changes · Graph visibility · Hidden identities ·
 Bulletin visibility · Bulletin reporting · Viewer-controlled dismissal · Notify Me matching · Offline
 mutation replay · Event idempotency. (Blocking and Account erasure are M5 — not tagged `@e2e` anywhere
-in this directory because they are out of M2 scope entirely.) `vertical-slice-e2e.feature` is the
+in this directory because they are out of M2 scope entirely.) Later-milestone files tag `@e2e` only
+where a browser-level Playwright spec exists — `bulletin-post-types.feature` (#87) tags exactly its
+round-trip scenario, proved by `tests/e2e/bulletin-post-types.spec.ts`. `vertical-slice-e2e.feature` is the
 composite Playwright proof point for M2-AC1; the other `@e2e` scenarios decompose the same flow
 per-module for independent module-level suites — this is deliberate duplication of *flow lines*, not of
 *invariants*, since each proves a different module's contract.
@@ -52,7 +56,8 @@ per-module for independent module-level suites — this is deliberate duplicatio
 | `moderation-report-dismiss.feature` | Private report + viewer-local dismissal | 2 e2e, 5 integration |
 | `offline-replay.feature` | Mutation envelope replay, actorship precedence | 1 e2e, 2 integration |
 | `vertical-slice-e2e.feature` | Composite M2-AC1 proof + log hygiene | 1 e2e, 1 integration |
-| **Total** | | **12 e2e, 44 integration, 10 unit — 66 scenarios** |
+| `bulletin-post-types.feature` | The six postable types; filterable ≠ postable (#87, M5) | 1 e2e, 3 integration |
+| **Total** | | **13 e2e, 47 integration, 10 unit — 70 scenarios** |
 
 ## AC → scenario traceability
 

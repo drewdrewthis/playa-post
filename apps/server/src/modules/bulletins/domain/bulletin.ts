@@ -1,18 +1,21 @@
 /**
- * The bulletin types this milestone can write.
- *
- * One value. The other six PDF types are M5 (`bulletin-request-lifecycle.feature`'s
- * own scope comment), and they arrive as values here.
+ * The bulletin types a person can **post** — the comp's compose vocabulary, in the
+ * comp's chip order (#87, `bulletin-post-types.feature`).
  *
  * ⚠ Deliberately **not** the same list as
  * {@link import('../../views/domain/board-query-grammar').BOARD_BULLETIN_TYPES}, which
- * is the `type:` filter's vocabulary and carries all seven. Filtering for a type
- * nothing has been written as yet must return zero rows; refusing it would make the
- * grammar an oracle for what the product has shipped, and merging the two lists is how
- * that happens by accident.
+ * is the `type:` filter's vocabulary and carries seven: `update` is filterable but
+ * never postable, because a network update is something the system writes, not
+ * something a person composes. Merging the two lists is how the write surface widens
+ * by accident — `bulletin-post-types.feature`'s refusal scenario fails on exactly that.
  */
 export const BULLETIN_TYPE = {
+  offer: 'offer',
   request: 'request',
+  event: 'event',
+  collab: 'collab',
+  thanks: 'thanks',
+  intro: 'intro',
 } as const;
 
 /** One of {@link BULLETIN_TYPE}'s values. */

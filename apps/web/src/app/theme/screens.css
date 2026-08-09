@@ -451,25 +451,47 @@
 }
 
 /*
- * The type label is a tinted dashed tag, tinted per bulletin type. The default is the
- * accent so an unrecognised type still renders as a tag rather than as nothing; each
- * known type overrides it below.
+ * The type label is a tinted dashed tag, tinted per bulletin type. The default is
+ * `--pp-sub` — muted, so an unrecognised type still renders as a tag rather than as
+ * nothing, without masquerading as a request (the light accent is byte-identical to
+ * `--pp-tint-request`); each known type overrides it below. The per-type rule set is
+ * kept complete by `tests/fitness/bulletin-type-parity.fitness.test.ts`.
  */
 .bulletin-card__type {
   align-self: flex-start;
   margin: 0;
   padding: 3px 7px;
-  border: 1px dashed var(--pp-bulletin-tint, var(--pp-accent));
+  border: 1px dashed var(--pp-bulletin-tint, var(--pp-sub));
   border-radius: 3px;
   font-weight: 700;
   font-size: var(--pp-text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--pp-bulletin-tint, var(--pp-accent));
+  color: var(--pp-bulletin-tint, var(--pp-sub));
+}
+
+.bulletin-card[data-type='offer'] {
+  --pp-bulletin-tint: var(--pp-tint-offer);
 }
 
 .bulletin-card[data-type='request'] {
   --pp-bulletin-tint: var(--pp-tint-request);
+}
+
+.bulletin-card[data-type='event'] {
+  --pp-bulletin-tint: var(--pp-tint-event);
+}
+
+.bulletin-card[data-type='collab'] {
+  --pp-bulletin-tint: var(--pp-tint-collab);
+}
+
+.bulletin-card[data-type='thanks'] {
+  --pp-bulletin-tint: var(--pp-tint-thanks);
+}
+
+.bulletin-card[data-type='intro'] {
+  --pp-bulletin-tint: var(--pp-tint-intro);
 }
 
 .bulletin-card__title {

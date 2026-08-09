@@ -148,6 +148,28 @@
   display: none;
 }
 
+/*
+ * Seven chips overflow the column at every viewport, and a hidden scrollbar leaves a
+ * plain mouse no way to reach Thanks/Intros (a trackpad or touch surface can swipe).
+ * Fine-pointer devices get a thin scrollbar back; touch keeps the comp's clean edge.
+ */
+@media (pointer: fine) {
+  .board-search__chips {
+    scrollbar-width: thin;
+    scrollbar-color: var(--pp-track) transparent;
+  }
+
+  .board-search__chips::-webkit-scrollbar {
+    display: block;
+    height: 5px;
+  }
+
+  .board-search__chips::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: var(--pp-track);
+  }
+}
+
 .board-search__chip {
   flex: none;
   white-space: nowrap;

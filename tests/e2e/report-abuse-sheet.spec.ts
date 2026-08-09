@@ -142,9 +142,9 @@ test.describe('the report-abuse sheet renders in both themes', () => {
       await pageA.getByTestId('person-sheet-close-button').click();
 
       await pageA.getByTestId('compose-bulletin-button').click();
-      // `BULLETIN_TYPE.request` rather than a literal: it is the *only* type M2 can
-      // write (`bulletins/domain/bulletin.ts` — the other six are M5), so a hard-coded
-      // `'offer'` waits out the full timeout on an option the product does not offer.
+      // `BULLETIN_TYPE.request` rather than a literal, so a rename in the contract's
+      // vocabulary (`bulletins/domain/bulletin.ts`) fails here at compile time instead
+      // of waiting out the full timeout on an option that no longer exists.
       await pageA.getByTestId('compose-bulletin-type-select').selectOption(BULLETIN_TYPE.request);
       await pageA.getByTestId('compose-bulletin-title-input').fill('Ride to the airport Sunday');
       await pageA

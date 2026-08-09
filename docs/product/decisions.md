@@ -22,6 +22,11 @@ Decision: **Implement operator moderation exactly per PDF §5 and addendum §16.
 Conflict: the comp (`design/Playa Post.dc.html`) draws the notifications button's mark as the text glyph ◔; owner directive #91 says the entry "should actually be a little bell icon."
 Decision: **Owner wins — inline SVG bell.** ◔ does not read as notifications at a glance, and an emoji bell cannot take the theme's ink colour; an inline SVG stroked in `currentColor` and sized in `em` follows `.icon-button`'s theme ink and font-size scaling like the glyph it replaced. Scope: a one-off override, not the start of an icon migration — the remaining chrome glyphs (☾/☀ theme toggle, tab bar, graph zoom) stay text glyphs until a reason arrives. If a second drawn icon lands, decide the chrome icon convention first (the precedent set here: inline SVG, `currentColor` stroke, `em`-sized) and consider a shared icon module at the third.
 
+## D5 — Six postable types; Network Update is system-written, label-only typing for now (2026-08-10)
+
+Conflict: D2 adopts the PDF's seven bulletin types including Network Update, but the prototype's compose surface offers only six (`design/Playa Post.dc.html:892` — no `update` chip), and nothing in v1 scope produces a network update.
+Decision: **The postable set is the prototype's six** — offer, request, event, collab, thanks, intro. `update` remains a member of the board grammar's `type:` vocabulary (ADR-0007) so the filter parses, but no person can compose one: a network update is something the *system* writes when that feature arrives, and until it does, `type:update` resolves to an empty board rather than an error. `create` refuses `update` (and `note`, per D2) by naming the field. Corollary, recorded so the model is deliberate rather than accidental: in M5 a bulletin's type is a *label* — classification, tint, and filter key — with no per-type structure (an `event` has no start time; `expiresAt` remains visibility-end for every type). The day a type grows structure, that is a discriminated-union change with its own decision, not a silent widening.
+
 ---
 
 Escalation threshold for future decisions: addendum §24. Anything touching user experience, trust/privacy model, irreversible data constraints, significant operational cost, or custom infrastructure goes back to the owner.

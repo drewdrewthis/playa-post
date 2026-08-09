@@ -48,7 +48,7 @@ const THEMES = ['light', 'dark'] as const;
  *
  * ⚠ **Two, and only one of them mentioning "propane", is a harness requirement rather
  * than set dressing** — see {@link saveViewFromBoard} for the race it closes. Both are
- * `request`s because that is the only type M2 can write.
+ * `request`s so the saved view's `type:` designation has one type to bite on.
  *
  * ⚠ **This text must not collide with any bulletin another `tests/e2e/*.spec.ts` file
  * writes.** `global-setup.ts` boots one Testcontainers Postgres for the whole
@@ -190,9 +190,9 @@ async function composeBulletin(
   bulletin: { readonly title: string; readonly body: string },
 ): Promise<void> {
   await page.getByTestId('compose-bulletin-button').click();
-  // `BULLETIN_TYPE.request` rather than a literal: it is the only type M2 can write
-  // (`bulletins/domain/bulletin.ts` — the other six are M5), so a hard-coded 'offer'
-  // waits out the full timeout on an option the product does not offer.
+  // `BULLETIN_TYPE.request` rather than a literal, so a rename in the contract's
+  // vocabulary (`bulletins/domain/bulletin.ts`) fails here at compile time instead of
+  // waiting out the full timeout on an option that no longer exists.
   await page.getByTestId('compose-bulletin-type-select').selectOption(BULLETIN_TYPE.request);
   await page.getByTestId('compose-bulletin-title-input').fill(bulletin.title);
   await page.getByTestId('compose-bulletin-body-input').fill(bulletin.body);
