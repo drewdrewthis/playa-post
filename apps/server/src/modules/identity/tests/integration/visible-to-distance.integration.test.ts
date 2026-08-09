@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import { createDatabaseConnection, type DatabaseConnection } from '@playa-post/database';
+import { createDatabaseConnection, sql, type DatabaseConnection } from '@playa-post/database';
 import { startPostgresTestDatabase, type PostgresTestDatabase } from '@playa-post/testing';
 
 import { createVisibilitySettingService } from '../../application/visibility-setting.service';
@@ -72,10 +72,12 @@ describe('visible_to_distance (who can see you at all)', () => {
     viewerId: string,
     { maxDepth = 4, nodeBudget = 1500 }: { maxDepth?: number; nodeBudget?: number } = {},
   ): Promise<ReadonlyArray<{ user_id: string; degree: number }>> {
-    const { rows } = await testDatabase.client.query<{ user_id: string; degree: number }>(
-      `select user_id, degree from app.visible_people($1, $2, $3)`,
-      [viewerId, maxDepth, nodeBudget],
-    );
+    // Through the `app_rw` connection, not the owner client: `app.visible_people` is
+    // SECURITY INVOKER, so the privileges and row-level policies being exercised must
+    // be the ones production runs under. Seeding stays on the owner client.
+    const { rows } = await sql<{ user_id: string; degree: number }>`
+      select user_id, degree from app.visible_people(${viewerId}, ${maxDepth}, ${nodeBudget})
+    `.execute(database);
     return rows;
   }
 

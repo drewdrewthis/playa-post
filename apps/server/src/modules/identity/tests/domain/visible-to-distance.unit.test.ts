@@ -31,7 +31,8 @@ describe('toVisibleToDistance', () => {
 
   describe('given a stored value that names an Object.prototype member', () => {
     // The `Object.hasOwn` guard: with `in`, 'constructor' matches the prototype chain
-    // and the lookup returns `undefined` — an unknown value escaping the narrowing.
+    // and the lookup returns the inherited `Object` constructor — a non-literal value
+    // escaping the narrowing, which a nullish fallback would not catch.
     it.each(['constructor', 'toString', 'hasOwnProperty', '__proto__'])(
       'fails closed to first for %j',
       (value) => {

@@ -107,7 +107,7 @@ test checked in at M2 and run in CI as a non-blocking report, blocking in M5.
 | **Graph database (Neo4j / AGE)** | A second datastore, second consistency model, and second authorization surface for a graph that is small and shallow. PostgreSQL is named as the source of truth (PDF §8). |
 | **Postgres `ltree` / closure table** | Both model hierarchies; this is a general undirected graph with per-viewer pruning. Materialized closure would need invalidation on every connection, block, and erasure. |
 | **Depth cap of 3 (as the prototype shows)** | The PDF explicitly forbids an arbitrary *product* depth cap. Our bound is operational and disclosed. |
-| **Real IDs on ghost nodes** | Enables cross-referencing that defeats the disclosure rule. See B8 in ADR-0002. |
+| **Real IDs on ghost nodes** | Enables cross-referencing that defeats the disclosure rule. See B8 in ADR-0002. *(Alpha temporarily ships this rejected alternative — see the accepted deviation under decision 4.)* |
 
 ## Consequences
 
@@ -116,7 +116,8 @@ test checked in at M2 and run in CI as a non-blocking report, blocking in M5.
 - **Negative:** every graph load costs a recursive CTE. Accepted at v1 scale; step 9 is the escape hatch,
   gated on measurement.
 - **Negative:** surrogate ghost IDs mean the client cannot cache ghost nodes across viewers or sessions
-  keyed by identity. That is intended.
+  keyed by identity. That is intended. *(Not yet in effect — see the accepted deviation under decision 4:
+  alpha returns real `app.users.id` values on `topology_only` rows.)*
 - **Negative (accepted residual):** structural re-identification of ghosts is bounded, not eliminated —
   restricting adjacency to fully-visible neighbours (decision 5) removes the neighbour-set fingerprint but
   a ghost adjacent to three or more fully-visible people remains narrowable by ordinary social knowledge.
