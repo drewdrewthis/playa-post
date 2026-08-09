@@ -81,6 +81,12 @@ test.describe('tapping a graph node', () => {
         });
       }
 
+      // Trust is settable from the sheet, and the sheet says so afterwards (AC3): the
+      // saved value round-trips through the server back into the visible label.
+      await pageA.getByRole('slider', { name: 'Trust' }).fill('60');
+      await pageA.getByTestId('person-sheet-save-trust-button').click();
+      await expect(pageA.getByTestId('person-sheet-trust-value')).toHaveText('Your trust: 60');
+
       // CLOSE puts the viewer back on the graph they never left.
       await pageA.getByTestId('person-sheet-close-button').click();
       await expect(pageA.getByTestId('person-sheet')).not.toBeVisible();
@@ -90,6 +96,13 @@ test.describe('tapping a graph node', () => {
       // Focus returns to the node the sheet opened from, so a keyboard user lands on
       // the circle they tapped rather than at the top of the document.
       await expect(pageA.getByTestId(`graph-connection-node-${userBHandle}`)).toBeFocused();
+
+      // Escape is the keyboard way out, and it lands in the same place as CLOSE.
+      await pageA.getByTestId(`graph-connection-node-${userBHandle}`).click();
+      await expect(pageA.getByTestId('person-sheet')).toBeVisible();
+      await pageA.keyboard.press('Escape');
+      await expect(pageA.getByTestId('person-sheet')).not.toBeVisible();
+      await expect(pageA).toHaveURL(/\/graph$/);
     } finally {
       await contextA.close();
       await contextB.close();

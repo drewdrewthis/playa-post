@@ -252,9 +252,10 @@ New dependencies, exact versions (verified against the registry this session):
 | `@supabase/supabase-js` | `2.112.2` | `apps/web` deps | Sign-in + session refresh (D3). |
 | `@playwright/test` | `1.62.1` | root devDeps | The browser proof. |
 
-Routing: `createBrowserRouter` with six routes — `/signin`, `/onboarding`, `/` (graph home),
-`/board`, `/board/new`, `/people/:userId` (person sheet, rendered as a route so the e2e can
-deep-link a step). One `<RequireSession>` wrapper redirecting `anonymous → /signin` and
+Routing: `createBrowserRouter` with five routes — `/signin`, `/onboarding`, `/` (graph home),
+`/board`, `/board/new`. The person sheet is **not** a route: it is an overlay over the graph
+(the comp's `sel` selection — a route-based sheet unmounted the graph and was reverted in
+PR #80). One `<RequireSession>` wrapper redirecting `anonymous → /signin` and
 `not-onboarded → /onboarding`.
 
 Theme: light-only CSS custom properties in `apps/web/src/app/theme/tokens.css`, values read
@@ -412,15 +413,16 @@ root. No component calls `fetch` directly.
 renders the structured handle errors from M2-AC25 by code (reserved / duplicate / confusable /
 charset / length) — the codes are the server's; the copy is the client's.
 
-**S5 — shell, routing, theme.** `createBrowserRouter` with the six routes; tokens from the
+**S5 — shell, routing, theme.** `createBrowserRouter` with the five routes; tokens from the
 design prototype; the pending-badge slot in the shell header (populated in S8).
 
 **S6 — graph home + person sheet.** `graph.list` → first-degree list (`degree === 1`),
 respecting `disclosure`: when `displayName`/`handle`/`avatarUrl` are **absent**, render the
-private-person treatment — never a placeholder name (M2-AC5's §6a sub-case). Person sheet at
-`/people/:userId` shows `connections.connection.get` and, **only for a connection the viewer
-owns**, a trust slider writing `connections.trust.set`. `trust: null` renders as *unset*, and
-`0` renders as *0* — two distinct UI states, not one falsy branch (M2-AC4).
+private-person treatment — never a placeholder name (M2-AC5's §6a sub-case). The person
+sheet — an overlay over the graph, not a route (PR #80) — shows
+`connections.connection.get` and, **only for a connection the viewer owns**, a trust slider
+writing `connections.trust.set`. `trust: null` renders as *unset*, and `0` renders as *0* —
+two distinct UI states, not one falsy branch (M2-AC4).
 
 **S7 — board, compose, report/dismiss.** `bulletins.board` list; compose posts
 `bulletins.create` with `type: 'request'`; per-item overflow menu calls `moderation.report` /

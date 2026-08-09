@@ -72,7 +72,7 @@ export function GraphNetwork({
   onOpenPerson,
 }: {
   readonly graph: Graph;
-  readonly onOpenPerson: (userId: string) => void;
+  readonly onOpenPerson: (person: Person) => void;
 }): JSX.Element {
   const layout = useMemo(() => layoutGraph(graph), [graph]);
   const [viewport, setViewport] = useState(FITTED_VIEWPORT);
@@ -180,7 +180,15 @@ export function GraphNetwork({
       return;
     }
 
-    onOpenPerson(userId);
+    /*
+     * Hand the parent the person, not the id: only nodes with a known person are
+     * interactive, and the sheet's subject should outlive this component's data.
+     */
+    const person = peopleById.get(userId);
+
+    if (person !== undefined) {
+      onOpenPerson(person);
+    }
   };
 
   return (

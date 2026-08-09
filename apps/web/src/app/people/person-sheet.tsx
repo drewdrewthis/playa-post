@@ -58,7 +58,15 @@ export function PersonSheet({
     mutationFn: (trust: number) =>
       api.mutate('connections.trust.set', { subjectUserId: otherUserId, trust }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries();
+      /*
+       * The saved value feeds two views: this sheet's own connection query, and the
+       * graph screen's TRUSTED count. Invalidate those, not the world — an unkeyed
+       * invalidation refetches every query in the app because one slider was saved.
+       */
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['connection', otherUserId] }),
+        queryClient.invalidateQueries({ queryKey: ['graph', 'list'] }),
+      ]);
     },
   });
 
@@ -139,7 +147,9 @@ export function PersonSheet({
          * not read as "not connected" — that message is the server's resolved `null`
          * (B6) and nothing else.
          */}
-        {connection.isPending ? null : connection.isError ? (
+        {connection.isPending ? (
+          <p className="person-sheet__notice">Loading&hellip;</p>
+        ) : connection.isError ? (
           <p className="person-sheet__notice" role="alert">
             That did not load. Close the sheet and try again.
           </p>

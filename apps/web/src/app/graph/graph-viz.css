@@ -220,7 +220,7 @@
   filter: drop-shadow(0 0 5px var(--pp-graph-node));
 }
 
-.graph-viz__dot[role='link']:hover {
+.graph-viz__dot[role='button']:hover {
   transform: scale(1.12);
 }
 

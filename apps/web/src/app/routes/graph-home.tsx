@@ -1,6 +1,8 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState, type JSX } from 'react';
 
+import type { Person } from '@playa-post/contracts';
+
 import { useApi } from '../api/api-provider';
 import { summariseGraph } from '../graph/graph-counts';
 import { GraphNetwork } from '../graph/graph-network';
@@ -35,15 +37,15 @@ export function GraphHomeRoute(): JSX.Element {
    * Tapping a node is selection, not navigation (the comp's `sel`): the person sheet
    * rises over this screen and closing it reveals the graph exactly as it was — same
    * viewport, same zoom, no history entry.
+   *
+   * The selection holds the {@link Person} itself, not a userId to look up again in the
+   * graph query's data — a sheet whose subject is derived from a server cache unmounts
+   * whenever a refetch drops or reorders that person, mid-interaction.
    */
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
 
   const network = graph.data;
   const summary = summariseGraph(network?.people ?? []);
-  const selectedPerson =
-    selectedUserId === null
-      ? undefined
-      : network?.people.find((person) => person.userId === selectedUserId);
 
   return (
     <section className="screen" data-testid="graph-home">
@@ -83,14 +85,14 @@ export function GraphHomeRoute(): JSX.Element {
           Nobody yet. Create an invite and send it to someone you know.
         </p>
       ) : (
-        <GraphNetwork graph={network} onOpenPerson={setSelectedUserId} />
+        <GraphNetwork graph={network} onOpenPerson={setSelectedPerson} />
       )}
 
-      {selectedPerson === undefined ? null : (
+      {selectedPerson === null ? null : (
         <PersonSheet
           person={selectedPerson}
           onClose={() => {
-            setSelectedUserId(null);
+            setSelectedPerson(null);
           }}
         />
       )}
