@@ -8,7 +8,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { useNavigate } from 'react-router';
 
 import type { Graph, Person } from '@playa-post/contracts';
 
@@ -68,8 +67,13 @@ interface Drag {
  * What is left here is event wiring and markup, which is the part a browser has to be
  * present to judge.
  */
-export function GraphNetwork({ graph }: { readonly graph: Graph }): JSX.Element {
-  const navigate = useNavigate();
+export function GraphNetwork({
+  graph,
+  onOpenPerson,
+}: {
+  readonly graph: Graph;
+  readonly onOpenPerson: (userId: string) => void;
+}): JSX.Element {
   const layout = useMemo(() => layoutGraph(graph), [graph]);
   const [viewport, setViewport] = useState(FITTED_VIEWPORT);
 
@@ -176,7 +180,7 @@ export function GraphNetwork({ graph }: { readonly graph: Graph }): JSX.Element 
       return;
     }
 
-    void navigate(`/people/${userId}`);
+    onOpenPerson(userId);
   };
 
   return (
@@ -352,7 +356,7 @@ function GraphNode({
       <circle
         className="graph-viz__dot"
         r={node.radius}
-        role={interactive ? 'link' : undefined}
+        role={interactive ? 'button' : undefined}
         tabIndex={interactive ? 0 : undefined}
         aria-label={interactive ? (name ?? 'Private connection') : undefined}
         data-testid={

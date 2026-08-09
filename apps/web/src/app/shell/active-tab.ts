@@ -4,13 +4,13 @@ export type TabId = 'graph' | 'board' | 'saved' | 'you';
 /**
  * The paths that belong to each tab, beyond the tab's own.
  *
- * A person sheet counts as Graph because that is where a user came from and where
- * "back" takes them; compose counts as Board for the same reason. Without this the tab
- * bar would go blank the moment a user pushed one level deeper, which reads as having
- * navigated out of the app.
+ * Compose counts as Board because that is where a user came from and where "back"
+ * takes them. Without this the tab bar would go blank the moment a user pushed one
+ * level deeper, which reads as having navigated out of the app. (A person opens as a
+ * sheet over the graph, not a path — so Graph needs no such entry.)
  */
 const TAB_PATHS: readonly (readonly [TabId, readonly string[]])[] = [
-  ['graph', ['/graph', '/people']],
+  ['graph', ['/graph']],
   ['board', ['/board']],
   ['saved', ['/saved']],
   ['you', ['/you']],

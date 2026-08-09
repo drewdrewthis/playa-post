@@ -137,6 +137,9 @@ test.describe('the report-abuse sheet renders in both themes', () => {
       await pageA.getByTestId(`graph-connection-node-${userBHandle}`).click();
       await pageA.getByRole('slider', { name: 'Trust' }).fill('85');
       await pageA.getByTestId('person-sheet-save-trust-button').click();
+      // The person sheet is an overlay over the graph, and saving trust does not close
+      // it — its scrim would swallow the tap on the compose FAB below.
+      await pageA.getByTestId('person-sheet-close-button').click();
 
       await pageA.getByTestId('compose-bulletin-button').click();
       // `BULLETIN_TYPE.request` rather than a literal: it is the *only* type M2 can

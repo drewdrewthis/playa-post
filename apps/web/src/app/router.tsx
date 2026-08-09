@@ -8,7 +8,6 @@ import { ComposeBulletinRoute } from './routes/compose-bulletin';
 import { GraphHomeRoute } from './routes/graph-home';
 import { InviteOpenRoute } from './routes/invite-open';
 import { OnboardingRoute } from './routes/onboarding';
-import { PersonSheetRoute } from './routes/person-sheet';
 import { SavedViewsRoute } from './routes/saved-views';
 import { SignInRoute } from './routes/sign-in';
 import { WelcomeRoute } from './routes/welcome';
@@ -51,9 +50,12 @@ function OnboardingLayout(): JSX.Element {
 
 /**
  * `/graph` is a second path to graph home rather than a redirect: it is the URL the
- * app navigates to from the shell, and a redirect would put an extra history entry
- * between a person sheet and the graph a user came from. `active-tab.ts` maps both to
- * the Graph tab.
+ * app navigates to from the shell, and a redirect would leave a stray history entry
+ * behind every visit to the tab. `active-tab.ts` maps both to the Graph tab.
+ *
+ * There is no `/people/:userId` route: a person opens as a sheet *over* the graph
+ * (`people/person-sheet.tsx`), selection state rather than navigation, which is how
+ * the comp draws it.
  *
  * `/saved` and `/you` are routed before either screen is built, because the comp's tab
  * bar has four tabs and a tab that goes nowhere is worse than one that says "soon".
@@ -71,7 +73,6 @@ const router = createBrowserRouter([
       { path: '/', element: <GraphHomeRoute /> },
       { path: '/graph', element: <GraphHomeRoute /> },
       { path: '/invite/:token', element: <InviteOpenRoute /> },
-      { path: '/people/:userId', element: <PersonSheetRoute /> },
       { path: '/board', element: <BoardRoute /> },
       { path: '/board/new', element: <ComposeBulletinRoute /> },
       { path: '/saved', element: <SavedViewsRoute /> },

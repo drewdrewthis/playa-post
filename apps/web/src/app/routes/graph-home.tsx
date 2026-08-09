@@ -1,9 +1,10 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 
 import { useApi } from '../api/api-provider';
 import { summariseGraph } from '../graph/graph-counts';
 import { GraphNetwork } from '../graph/graph-network';
+import { PersonSheet } from '../people/person-sheet';
 
 /**
  * Graph home: the viewer's network, drawn as the network it is.
@@ -30,8 +31,19 @@ export function GraphHomeRoute(): JSX.Element {
     mutationFn: () => api.mutate('connections.invitations.create', undefined),
   });
 
+  /*
+   * Tapping a node is selection, not navigation (the comp's `sel`): the person sheet
+   * rises over this screen and closing it reveals the graph exactly as it was — same
+   * viewport, same zoom, no history entry.
+   */
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+
   const network = graph.data;
   const summary = summariseGraph(network?.people ?? []);
+  const selectedPerson =
+    selectedUserId === null
+      ? undefined
+      : network?.people.find((person) => person.userId === selectedUserId);
 
   return (
     <section className="screen" data-testid="graph-home">
@@ -71,7 +83,16 @@ export function GraphHomeRoute(): JSX.Element {
           Nobody yet. Create an invite and send it to someone you know.
         </p>
       ) : (
-        <GraphNetwork graph={network} />
+        <GraphNetwork graph={network} onOpenPerson={setSelectedUserId} />
+      )}
+
+      {selectedPerson === undefined ? null : (
+        <PersonSheet
+          person={selectedPerson}
+          onClose={() => {
+            setSelectedUserId(null);
+          }}
+        />
       )}
     </section>
   );
