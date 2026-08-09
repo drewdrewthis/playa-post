@@ -6,7 +6,8 @@ import { markWelcomeSeen, WELCOME_STEPS } from '../welcome/welcome-steps';
 import '../welcome/welcome.css';
 
 /**
- * `/welcome` — the comp's three-step onboarding takeover, as a route.
+ * `/welcome` — the comp's onboarding takeover, as a route: three product steps from
+ * the comp, then the principles intro (see `welcome-steps.ts` for that extension).
  *
  * The comp draws it as an overlay the app shows when `playapost-onboarded` is unset;
  * here it is where an anonymous first visit lands (`RequireSession` sends a signed-out
@@ -48,6 +49,16 @@ export function WelcomeRoute(): JSX.Element {
           <h1 className="welcome__title">{current.title}</h1>
           <p className="welcome__body">{current.body}</p>
           {current.code === null ? null : <code className="welcome__code">{current.code}</code>}
+          {current.principles === null ? null : (
+            <ul className="welcome__principles">
+              {current.principles.map((principle) => (
+                <li key={principle.name} className="welcome__principle">
+                  <strong className="welcome__principle-name">{principle.name}</strong>
+                  <span className="welcome__principle-gloss">{principle.gloss}</span>
+                </li>
+              ))}
+            </ul>
+          )}
 
           <div className="welcome__dots" aria-hidden="true">
             {WELCOME_STEPS.map((welcomeStep, index) => (

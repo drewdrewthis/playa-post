@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * The welcome flow (PR #78): three network-free steps a first-time visitor walks
- * before sign-in.
+ * The welcome flow (PR #78, extended since): eight network-free steps a first-time
+ * visitor walks before sign-in — the comp's three product steps, then the
+ * principles intro closing on the eleven-name roll-call.
  *
  * The entry assertion is the routing one — an anonymous visitor who has never seen the
  * flow is sent to `/welcome`, not `/signin` — because that redirect
@@ -39,11 +40,23 @@ test.describe('the welcome flow', () => {
       await page.screenshot({ path: `${directory}/m5-welcome-step-1.png`, fullPage: true });
     }
 
-    await page.getByTestId('welcome-next').click();
-    await page.getByTestId('welcome-next').click();
+    // Seven advances land on the eighth, closing step — the count is pinned here on
+    // purpose, so adding or removing a step makes this walk fail loudly.
+    for (let advance = 0; advance < 7; advance += 1) {
+      await expect(page.getByTestId('welcome-next')).toHaveText('Next');
+      await page.getByTestId('welcome-next').click();
+      if (directory !== undefined && directory !== '') {
+        await page.screenshot({
+          path: `${directory}/m5-welcome-step-${advance + 2}.png`,
+          fullPage: true,
+        });
+      }
+    }
     await expect(page.getByTestId('welcome-next')).toHaveText('Get started');
+    // The closing step carries the full principle roll-call, ten plus consent.
+    await expect(page.locator('.welcome__principle')).toHaveCount(11);
     if (directory !== undefined && directory !== '') {
-      await page.screenshot({ path: `${directory}/m5-welcome-step-3.png`, fullPage: true });
+      await page.screenshot({ path: `${directory}/m5-welcome-step-8.png`, fullPage: true });
     }
 
     await page.getByTestId('welcome-next').click();

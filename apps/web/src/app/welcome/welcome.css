@@ -45,6 +45,46 @@
   color: var(--pp-accent);
 }
 
+/*
+ * The closing step's principle roll-call: eleven name-over-gloss cells, two-up so
+ * they fit a phone without scrolling, left-aligned against the screen's centred
+ * text so the names read as a list rather than confetti. The odd eleventh cell —
+ * Consent, the +1 — spans both columns and centres itself: the extra principle
+ * literally stands apart.
+ */
+.welcome__principles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--pp-space-2) var(--pp-space-3);
+  margin: 0;
+  padding: 0;
+  max-width: 20rem;
+  list-style: none;
+  text-align: left;
+}
+
+.welcome__principle {
+  display: flex;
+  flex-direction: column;
+}
+
+.welcome__principle:last-child {
+  grid-column: 1 / -1;
+  text-align: center;
+}
+
+.welcome__principle-name {
+  font-size: var(--pp-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.welcome__principle-gloss {
+  font-size: var(--pp-text-xs);
+  line-height: 1.4;
+  color: var(--pp-sub);
+}
+
 .welcome__dots {
   display: flex;
   gap: var(--pp-space-2);

@@ -56,8 +56,37 @@ describe('the welcome-seen flag', () => {
 });
 
 describe('the welcome steps', () => {
-  it('carries the comp’s three steps, with the sample query on the search step', () => {
-    expect(WELCOME_STEPS).toHaveLength(3);
+  it('opens with the comp’s three steps, with the sample query on the search step', () => {
+    expect(WELCOME_STEPS).toHaveLength(8);
     expect(WELCOME_STEPS[2]?.code).toBe('type:offer trust:>=60 -truck');
+    expect(WELCOME_STEPS.filter((step) => step.code !== null)).toHaveLength(1);
+  });
+
+  it('closes by naming all ten principles plus consent, and only there', () => {
+    const closing = WELCOME_STEPS.at(-1);
+    expect(closing?.principles?.map((principle) => principle.name)).toEqual([
+      'Radical Inclusion',
+      'Gifting',
+      'Decommodification',
+      'Radical Self-reliance',
+      'Radical Self-expression',
+      'Communal Effort',
+      'Civic Responsibility',
+      'Leaving No Trace',
+      'Participation',
+      'Immediacy',
+      'Consent',
+    ]);
+    expect(
+      WELCOME_STEPS.filter((step) => step.principles !== null),
+    ).toEqual([closing]);
+  });
+
+  it('glosses every principle, briefly enough to sit two-up on a phone', () => {
+    const closing = WELCOME_STEPS.at(-1);
+    for (const principle of closing?.principles ?? []) {
+      expect(principle.gloss.length).toBeGreaterThan(0);
+      expect(principle.gloss.length).toBeLessThanOrEqual(60);
+    }
   });
 });
