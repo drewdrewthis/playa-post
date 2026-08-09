@@ -1,0 +1,117 @@
+/*
+ * The person sheet, following `design/Playa Post.dc.html`'s `hasSel` block: a scrim
+ * over the whole column and a rounded sheet lifted off the bottom edge, arriving with
+ * the comp's `sheetup`.
+ *
+ * Both elements are `position: absolute` against `.app-column` — the same containing
+ * block, and the same reasoning, as `bulletins/detail-sheet.css`. The z-indices are the
+ * comp's own 30 and 31: below the bulletin detail sheet at 32/33, which the comp keeps
+ * above a selection because a bulletin is opened *from* content while a selection is
+ * made from the canvas.
+ */
+
+.person-sheet__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: var(--pp-scrim);
+}
+
+.person-sheet {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.875rem;
+  left: 0.75rem;
+  z-index: 31;
+  max-height: 80%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-3);
+  padding: var(--pp-space-5);
+  border: 1px solid var(--pp-sheet-border);
+  border-radius: var(--pp-radius-lg);
+  background: var(--pp-sheet-bg);
+  box-shadow: var(--pp-sheet-shadow);
+  animation: pp-person-sheetup 0.22s ease-out;
+}
+
+/* Named for this file, not shared: `report-abuse-sheet.css` sets the precedent that
+ * each sheet carries its own keyframes rather than reaching into another module's. */
+@keyframes pp-person-sheetup {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.person-sheet__header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--pp-space-2);
+}
+
+/** Italic serif — the comp writes the selected person's name at its largest size. */
+.person-sheet__title {
+  margin: 0;
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: var(--pp-text-2xl);
+  line-height: 1.2;
+  color: var(--pp-ink);
+}
+
+/*
+ * A person's name *is* the heading on their own sheet, so it takes the heading's type
+ * rather than the 13px label treatment it gets in a list row.
+ */
+.person-sheet__title .person-identity__name {
+  font: inherit;
+}
+
+.person-sheet__trust-value {
+  margin: 0;
+  font-family: var(--pp-font-mono);
+  font-weight: 600;
+  font-size: var(--pp-text-lg);
+  color: var(--pp-accent);
+}
+
+.person-sheet__close {
+  margin-left: auto;
+  padding: var(--pp-space-1) var(--pp-space-2);
+  border: none;
+  background: none;
+  color: var(--pp-faint);
+  font-weight: 700;
+  font-size: var(--pp-text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.person-sheet__lede {
+  margin: 0;
+  font-size: var(--pp-text-xs);
+  color: var(--pp-faint);
+}
+
+.person-sheet__notice {
+  margin: 0;
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .person-sheet {
+    animation: none;
+  }
+}

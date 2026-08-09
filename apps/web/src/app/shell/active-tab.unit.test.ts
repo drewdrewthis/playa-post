@@ -28,12 +28,16 @@ describe('activeTabFor', () => {
   });
 
   describe('given a nested path one level below a tab route', () => {
-    it('maps "/people/:userId" to the Graph tab', () => {
-      expect(activeTabFor('/people/abc-123')).toBe('graph');
-    });
-
     it('maps "/board/new" to the Board tab', () => {
       expect(activeTabFor('/board/new')).toBe('board');
+    });
+  });
+
+  describe('given the retired person-page path', () => {
+    // A person opens as a sheet over the graph now, never as a path — a URL that no
+    // route serves must not light a tab as if it were somewhere.
+    it('returns null for "/people/:userId"', () => {
+      expect(activeTabFor('/people/abc-123')).toBeNull();
     });
   });
 

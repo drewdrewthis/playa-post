@@ -8,7 +8,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { useNavigate } from 'react-router';
 
 import type { Graph, Person } from '@playa-post/contracts';
 
@@ -68,8 +67,13 @@ interface Drag {
  * What is left here is event wiring and markup, which is the part a browser has to be
  * present to judge.
  */
-export function GraphNetwork({ graph }: { readonly graph: Graph }): JSX.Element {
-  const navigate = useNavigate();
+export function GraphNetwork({
+  graph,
+  onOpenPerson,
+}: {
+  readonly graph: Graph;
+  readonly onOpenPerson: (person: Person) => void;
+}): JSX.Element {
   const layout = useMemo(() => layoutGraph(graph), [graph]);
   const [viewport, setViewport] = useState(FITTED_VIEWPORT);
 
@@ -169,14 +173,14 @@ export function GraphNetwork({ graph }: { readonly graph: Graph }): JSX.Element 
    * the same flag would eat the first Enter after any pan — the flag is only cleared by
    * the tap it cancels, and a keyboard user never makes that tap.
    */
-  const openPerson = (userId: string, gesture: Gesture): void => {
+  const openPerson = (person: Person, gesture: Gesture): void => {
     if (gesture === 'tap' && tapSuppressedRef.current) {
       tapSuppressedRef.current = false;
 
       return;
     }
 
-    void navigate(`/people/${userId}`);
+    onOpenPerson(person);
   };
 
   return (
@@ -305,7 +309,7 @@ function GraphNode({
 }: {
   readonly node: GraphLayoutNode;
   readonly person: Person | undefined;
-  readonly onOpen: (userId: string, gesture: Gesture) => void;
+  readonly onOpen: (person: Person, gesture: Gesture) => void;
 }): JSX.Element {
   const isViewer = node.degree === VIEWER_DEGREE;
   const initial = person === undefined ? undefined : nodeInitial(person);
@@ -315,16 +319,24 @@ function GraphNode({
   const interactive = !isViewer && person !== undefined;
   const handle = person?.handle;
 
-  const openOnTap = (): void => {
-    onOpen(node.userId, 'tap');
-  };
+  // Built only when there is a person to open: "an interactive node has a person" is
+  // carried by the callback's type, not re-checked by anyone downstream.
+  const openOnTap =
+    person === undefined
+      ? undefined
+      : (): void => {
+          onOpen(person, 'tap');
+        };
 
-  const openOnKey = (event: ReactKeyboardEvent<SVGCircleElement>): void => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      onOpen(node.userId, 'key');
-    }
-  };
+  const openOnKey =
+    person === undefined
+      ? undefined
+      : (event: ReactKeyboardEvent<SVGCircleElement>): void => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onOpen(person, 'key');
+          }
+        };
 
   return (
     <g
@@ -352,7 +364,7 @@ function GraphNode({
       <circle
         className="graph-viz__dot"
         r={node.radius}
-        role={interactive ? 'link' : undefined}
+        role={interactive ? 'button' : undefined}
         tabIndex={interactive ? 0 : undefined}
         aria-label={interactive ? (name ?? 'Private connection') : undefined}
         data-testid={
