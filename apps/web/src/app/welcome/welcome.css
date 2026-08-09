@@ -6,6 +6,9 @@
 
 .welcome {
   justify-content: center;
+  /* The screen is a flex column; without this, `stretch` left-anchors the
+   * max-width children (`__body`, `__next`) and the dots row. */
+  align-items: center;
   gap: var(--pp-space-4);
   text-align: center;
 }

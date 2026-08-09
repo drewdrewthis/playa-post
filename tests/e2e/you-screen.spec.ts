@@ -114,10 +114,14 @@ test.describe('the You screen renders in both themes', () => {
     for (const label of ['1ST° ONLY', 'UP TO 2ND°', 'UP TO 3RD°', 'UP TO 6TH°']) {
       await dial.click();
       await expect(dial).toHaveText(label);
-    }
-
-    if (directory !== undefined && directory !== '') {
-      await page.screenshot({ path: `${directory}/m5-visibility-dial-cycled.png`, fullPage: true });
+      // Captured mid-cycle — the end state is 'sixth' again, so a screenshot after
+      // the loop would be indistinguishable from `-sixth.png`.
+      if (label === 'UP TO 3RD°' && directory !== undefined && directory !== '') {
+        await page.screenshot({
+          path: `${directory}/m5-visibility-dial-cycled.png`,
+          fullPage: true,
+        });
+      }
     }
   });
 

@@ -23,6 +23,18 @@ test.describe('the welcome flow', () => {
     await page.goto('/');
     await expect(page.getByTestId('welcome')).toBeVisible();
     await expect(page.getByTestId('welcome-next')).toHaveText('Next');
+
+    // The screen is a flex column whose `stretch` default once left-anchored the
+    // max-width Next pill; assert it sits on the column's centre axis.
+    const column = await page.getByTestId('welcome').boundingBox();
+    const nextPill = await page.getByTestId('welcome-next').boundingBox();
+    if (column === null || nextPill === null) {
+      throw new Error('welcome column or Next pill has no bounding box');
+    }
+    const offCentreBy = Math.abs(
+      nextPill.x + nextPill.width / 2 - (column.x + column.width / 2),
+    );
+    expect(offCentreBy).toBeLessThanOrEqual(1);
     if (directory !== undefined && directory !== '') {
       await page.screenshot({ path: `${directory}/m5-welcome-step-1.png`, fullPage: true });
     }
