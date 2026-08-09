@@ -5,7 +5,13 @@
  */
 
 .welcome {
-  justify-content: center;
+  /* `safe center`, never plain `center`: this is a scrolling flex column, and a
+   * centred column whose content is taller than the box pushes its start edge above
+   * the scroll origin, where no gesture can reach it. The tallest step — the
+   * eleven-name roll-call — measures 626px against a 568px viewport on a 320-wide
+   * phone, so plain `center` clips its opening lines for good. `safe` falls back to
+   * `start` exactly when it overflows, and centres otherwise. */
+  justify-content: safe center;
   /* The screen is a flex column; without this, `stretch` left-anchors the
    * max-width children (`__body`, `__next`) and the dots row. */
   align-items: center;
@@ -43,6 +49,55 @@
   font-family: var(--pp-font-mono);
   font-size: var(--pp-text-xs);
   color: var(--pp-accent);
+}
+
+/*
+ * The closing step's principle roll-call: eleven name-over-gloss cells, two-up on a
+ * phone and left-aligned against the screen's centred text so the names read as a
+ * list rather than confetti. Two-up keeps the step short, not short enough to fit —
+ * `safe center` above is what makes the overflow reachable. The +1 — Consent, marked
+ * by the route rather than by ordinal — spans both columns and centres itself: the
+ * extra principle literally stands apart.
+ *
+ * A definition list, because a name→gloss pair is exactly that; each entry is the
+ * HTML5 `div` grouping, which is what the grid places. `dl` and `dd` carry UA margins
+ * (a block margin, and a 40px inline indent on `dd`) that would break both the gaps
+ * and the two-up alignment, so both are zeroed.
+ */
+.welcome__principles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--pp-space-2) var(--pp-space-3);
+  margin: 0;
+  padding: 0;
+  max-width: 20rem;
+  text-align: left;
+}
+
+.welcome__principle {
+  display: flex;
+  flex-direction: column;
+}
+
+.welcome__principle--plus-one {
+  grid-column: 1 / -1;
+  text-align: center;
+}
+
+.welcome__principle-name {
+  font-size: var(--pp-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.welcome__principle-gloss {
+  margin: 0;
+  font-size: var(--pp-text-xs);
+  line-height: 1.4;
+  /* `--pp-ink`, not the `--pp-sub` the other secondary copy uses: 11px is well under
+   * WCAG's 18.66px large-text threshold, and `--pp-sub` on `--pp-bg` measures 3.85:1
+   * against AA's 4.5:1 floor for body text. */
+  color: var(--pp-ink);
 }
 
 .welcome__dots {

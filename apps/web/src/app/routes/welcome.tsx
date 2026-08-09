@@ -6,7 +6,8 @@ import { markWelcomeSeen, WELCOME_STEPS } from '../welcome/welcome-steps';
 import '../welcome/welcome.css';
 
 /**
- * `/welcome` — the comp's three-step onboarding takeover, as a route.
+ * `/welcome` — the comp's onboarding takeover, as a route: three product steps from
+ * the comp, then the principles intro (see `welcome-steps.ts` for that extension).
  *
  * The comp draws it as an overlay the app shows when `playapost-onboarded` is unset;
  * here it is where an anonymous first visit lands (`RequireSession` sends a signed-out
@@ -37,7 +38,9 @@ export function WelcomeRoute(): JSX.Element {
   return (
     <div className="app-frame">
       <main className="app-column" data-testid="welcome">
-        <div className="screen screen--fill screen--centred welcome">
+        {/* Not `screen--centred`: its plain `center` lands later in the cascade and
+            would override the `safe center` that keeps the tall roll-call scrollable. */}
+        <div className="screen screen--fill welcome">
           <button className="welcome__skip" type="button" onClick={finish}>
             Skip
           </button>
@@ -48,6 +51,27 @@ export function WelcomeRoute(): JSX.Element {
           <h1 className="welcome__title">{current.title}</h1>
           <p className="welcome__body">{current.body}</p>
           {current.code === null ? null : <code className="welcome__code">{current.code}</code>}
+          {current.principles === null ? null : (
+            <dl className="welcome__principles">
+              {current.principles.map(({ name, gloss }, index, all) => (
+                // The +1 — Consent — is marked here rather than matched with a
+                // `:last-child` rule, so the stylesheet styles the extra principle
+                // instead of whichever one happens to be eleventh.
+                <div
+                  key={name}
+                  className={
+                    index === all.length - 1
+                      ? 'welcome__principle welcome__principle--plus-one'
+                      : 'welcome__principle'
+                  }
+                  data-testid="welcome-principle"
+                >
+                  <dt className="welcome__principle-name">{name}</dt>
+                  <dd className="welcome__principle-gloss">{gloss}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
 
           <div className="welcome__dots" aria-hidden="true">
             {WELCOME_STEPS.map((welcomeStep, index) => (
