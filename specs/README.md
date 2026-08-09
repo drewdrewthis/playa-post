@@ -2,8 +2,8 @@
 
 This directory began as the milestone-M2 vertical-slice suite (`docs/engineering/implementation-plan.md`
 §"M2 — First production vertical slice", the addendum §23 flow exactly) and now also carries feature
-files for later-milestone work (`bulletin-post-types.feature`, #87). For M2 the completeness claim
-holds both ways: if a behavior is not captured in an M2 scenario below, it is not in M2 scope, and
+files for later-milestone work (`bulletin-post-types.feature`, #87; `pin-a-note.feature`, #88). For M2
+the completeness claim holds both ways: if a behavior is not captured in an M2 scenario below, it is not in M2 scope, and
 every M2-AC1…AC26 is captured here or explicitly named as not cleanly mappable.
 
 Sources of truth, in precedence order: `docs/engineering/implementation-plan.md` (M2 ACs) →
@@ -57,7 +57,8 @@ per-module for independent module-level suites — this is deliberate duplicatio
 | `offline-replay.feature` | Mutation envelope replay, actorship precedence | 1 e2e, 2 integration |
 | `vertical-slice-e2e.feature` | Composite M2-AC1 proof + log hygiene | 1 e2e, 1 integration |
 | `bulletin-post-types.feature` | The six postable types; filterable ≠ postable (#87, M5) | 1 e2e, 3 integration |
-| **Total** | | **13 e2e, 47 integration, 10 unit — 70 scenarios** |
+| `pin-a-note.feature` | Private person-to-person notes, degree-1 gated (#88, D6) | 7 integration, 1 unit |
+| **Total** | | **13 e2e, 54 integration, 11 unit — 78 scenarios** |
 
 ## AC → scenario traceability
 

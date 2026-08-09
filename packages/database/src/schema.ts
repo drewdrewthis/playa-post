@@ -140,6 +140,20 @@ export interface AppMutationResults {
   result: Json | null;
 }
 
+export interface AppNotes {
+  author_id: string;
+  /**
+   * The note. Deliberately NOT indexed and NOT part of any tsvector: no query grammar reaches a note, so a note can never become a way to find people through the free-text channel. Never written to a log or an outbox payload (ADR-0006).
+   */
+  body: string;
+  created_at: Timestamp;
+  id: Generated<string>;
+  /**
+   * The one person who may read this note. Pinning requires them to be a first-degree connection of the author at write time; reading requires nothing but being them.
+   */
+  recipient_id: string;
+}
+
 export interface AppNotificationDismissals {
   dismissed_at: Timestamp;
   notification_id: string;
@@ -237,6 +251,7 @@ export interface DB {
   "app.consumer_receipts": AppConsumerReceipts;
   "app.invitations": AppInvitations;
   "app.mutation_results": AppMutationResults;
+  "app.notes": AppNotes;
   "app.notification_dismissals": AppNotificationDismissals;
   "app.notify_me_queries": AppNotifyMeQueries;
   "app.outbox_events": AppOutboxEvents;

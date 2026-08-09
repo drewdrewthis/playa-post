@@ -47,6 +47,11 @@ const INVENTORY = [
   'bulletin_dismissals',
   'bulletin_reports',
   'mutation_results',
+  // The private person-to-person channel (issue #88, decision D6). Its own table and
+  // NOT a bulletin type, which is the whole point: PDF §6 forbids mixing
+  // fixed-recipient messaging into the bulletin model, so the separation has to be
+  // visible right here, in the inventory, rather than asserted in a doc comment.
+  'notes',
 ] as const;
 
 describe('schema app holds exactly the tables M2 declared (m2-lane-briefs.md ratified decision (a))', () => {
@@ -60,7 +65,7 @@ describe('schema app holds exactly the tables M2 declared (m2-lane-briefs.md rat
     await testDatabase?.stop();
   });
 
-  it('matches the fifteen-name inventory as a set, and in count', async () => {
+  it('matches the sixteen-name inventory as a set, and in count', async () => {
     const { rows } = await testDatabase.client.query<{ tablename: string }>(
       `select tablename from pg_tables where schemaname = 'app' order by tablename`,
     );

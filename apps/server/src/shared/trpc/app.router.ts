@@ -3,6 +3,7 @@ import type { ConnectionsRouter } from '../../modules/connections/transport/conn
 import type { GraphRouter } from '../../modules/graph/transport/graph.router';
 import type { IdentityRouter } from '../../modules/identity/transport/identity.router';
 import type { ModerationRouter } from '../../modules/moderation/transport/moderation.router';
+import type { NotesRouter } from '../../modules/notes/transport/notes.router';
 import type { NotificationsRouter } from '../../modules/notifications/transport/notifications.router';
 import type { SyncRouter } from '../../modules/sync/transport/sync.router';
 import type { ViewsRouter } from '../../modules/views/transport/views.router';
@@ -24,6 +25,14 @@ export interface AppRouterModules {
   readonly connections: ConnectionsRouter;
   readonly graph: GraphRouter;
   readonly bulletins: BulletinsRouter;
+  /**
+   * The private person-to-person channel (issue #88, decision D6).
+   *
+   * ⚠ Mounted **beside** `bulletins`, never inside it. PDF §6 forbids mixing
+   * fixed-recipient messaging into the bulletin model, and a `bulletins.notes.*` namespace
+   * would undo that separation at the one layer a client actually reads.
+   */
+  readonly notes: NotesRouter;
   readonly moderation: ModerationRouter;
   readonly sync: SyncRouter;
   readonly views: ViewsRouter;
@@ -73,6 +82,7 @@ export function createAppRouter(modules: AppRouterModules) {
     connections: modules.connections,
     graph: modules.graph,
     bulletins: modules.bulletins,
+    notes: modules.notes,
     moderation: modules.moderation,
     sync: modules.sync,
     views: modules.views,

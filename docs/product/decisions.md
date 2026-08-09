@@ -27,6 +27,22 @@ Decision: **Owner wins — inline SVG bell.** ◔ does not read as notifications
 Conflict: D2 adopts the PDF's seven bulletin types including Network Update, but the prototype's compose surface offers only six (`design/Playa Post.dc.html:892` — no `update` chip), and nothing in v1 scope produces a network update.
 Decision: **The postable set is the prototype's six** — offer, request, event, collab, thanks, intro. `update` remains a member of the board grammar's `type:` vocabulary (ADR-0007) so the filter parses, but no person can compose one: a network update is something the *system* writes when that feature arrives, and until it does, `type:update` resolves to an empty board rather than an error. `create` refuses `update` (and `note`, per D2) by naming the field. Corollary, recorded so the model is deliberate rather than accidental: in M5 a bulletin's type is a *label* — classification, tint, and filter key — with no per-type structure (an `event` has no start time; `expiresAt` remains visibility-end for every type). The day a type grows structure, that is a discriminated-union change with its own decision, not a silent widening.
 
+## D6 — Private notes are back, as a separate module and never a bulletin type (2026-08-10, owner-directed)
+
+Conflict: **D2 cut private notes from v1**; the owner directive behind [#88](https://github.com/drewdrewthis/playa-post/issues/88) reopens them ("Pin a note").
+Decision: **Owner wins on the feature; the PDF still wins on the shape.** D2's *reasoning* was never that notes are unwanted — it was PDF §6: "A future fixed-recipient private messaging feature… must not be silently mixed into the bulletin model." That constraint is unchanged, so the feature returns only in the form that honours it, and the separation is structural rather than a naming convention:
+
+- its own table (`app.notes`) and its own authorized set (`app.visible_notes`), which composes `app.visible_people` for the author card only — the authorization is `recipient_id = viewer_id`;
+- its own module (`modules/notes`) and its own router, mounted **beside** `bulletins`, never inside it;
+- `bulletins.create` still refuses the value `note`, and `bulletin-post-types.feature`'s refusal scenario is deliberately untouched;
+- notes never enter a board query, a saved view, or the free-text haystack. There is no tsvector over `app.notes`, so no grammar can ever reach a note's text.
+
+**Degree 1 is the only gate.** A note may be pinned to a first-degree connection and to nobody else, and the check lives inside the insert statement (`INSERT … SELECT … WHERE EXISTS` over `app.visible_people`), so a refusal writes no row. "Not connected", "two hops away", "no such person", "no longer active", and "that is yourself" are one indistinguishable refusal (`NOTE_RECIPIENT_UNREACHABLE`, HTTP 404) — a product with no people search cannot afford an endpoint that confirms who exists.
+
+**Deferred, pending an owner decision: the comp's "WHO CAN PIN TO YOUR BOARD" control.** The comp offers a three-valued trust/distance pair for it, which contradicts its own degree-1 gate — if only direct connections can pin, a "second degree" or "anyone" setting has nothing to widen to, and a trust threshold is a different axis again (trust is private and directional, ADR-0004 decision 6, so a threshold would leak the setter's private number through who succeeds at pinning). Rather than guess which of those the control means, the recipient-side limit is not built: degree 1 is the whole rule for now. This is a UX and trust-model question, which addendum §24 sends back to the owner.
+
+Corollary: a note has no update and no take-down in this slice, so `app.notes` carries neither a `version` nor an `archived_at` column. Both arrive with the mutation that needs them (addendum §4 forbids the placeholder), and `version` specifically arrives with the first mutation ADR-0005 marks `expectedVersion: yes`.
+
 ---
 
 Escalation threshold for future decisions: addendum §24. Anything touching user experience, trust/privacy model, irreversible data constraints, significant operational cost, or custom infrastructure goes back to the owner.

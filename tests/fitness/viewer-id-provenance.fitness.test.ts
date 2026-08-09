@@ -58,9 +58,9 @@ const impersonationFixtureRouter = router({
 describe('viewerId provenance (ADR-0002 §5a, M2-AC20/B14)', () => {
   describe('the router this server actually serves', () => {
     it('has procedures to check — a walk over an empty router proves nothing', () => {
-      // An exact count, not `not.toHaveLength(0)`: mounting a ninth module without
+      // An exact count, not `not.toHaveLength(0)`: mounting a tenth module without
       // registering it in `null-object-app-router.ts` would leave this green while the
-      // control walked eight modules' worth of a nine-module surface. A blind control
+      // control walked nine modules' worth of a ten-module surface. A blind control
       // is worse than an openly `pending` B-row.
       expect(procedurePaths(appRouter())).toHaveLength(EXPECTED_PROCEDURE_COUNT);
     });

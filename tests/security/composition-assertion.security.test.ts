@@ -31,8 +31,14 @@ const allowlist: Readonly<Record<string, readonly string[]>> = {
   graph: ['connections', 'connection_trust', 'users'],
 };
 
+/**
+ * Each module's own tables. Neither `bulletins` nor `notes` appears in {@link allowlist}
+ * and neither may: they own one table each and compose `app.visible_people` for
+ * everything else, which is already exempt as a sanctioned `app.visible_*` call.
+ */
 const bulletinsOwnTables: Readonly<Record<string, readonly string[]>> = {
   bulletins: ['bulletins'],
+  notes: ['notes'],
 };
 
 const sqlFixtures = join(REPOSITORY_ROOT, 'tests', 'fitness', 'sql-fixtures');
@@ -68,7 +74,12 @@ describe('B12 — composition assertion and the SQL-location secondary rule (ADR
   });
 
   describe('every authorized read composes the authorized set rather than re-deriving it', () => {
-    it('holds the live graph and bulletins SQL to the tables each was granted', () => {
+    it('holds the live graph, bulletins and notes SQL to the tables each was granted', () => {
+      // ⚠ Every module that checks a `.sql` file in owes a directory here. A control
+      // that has stopped seeing a module is worse than one that is openly incomplete —
+      // `modules/notes` (issue #88) is the newest, and it is the module where the
+      // temptation is sharpest, because "is this recipient a connection" reads like a
+      // question for `app.connections`.
       const violations = findSqlTableOwnershipViolations(
         [
           join(REPOSITORY_ROOT, 'apps', 'server', 'src', 'modules', 'graph', 'persistence', 'sql'),
@@ -82,6 +93,7 @@ describe('B12 — composition assertion and the SQL-location secondary rule (ADR
             'persistence',
             'sql',
           ),
+          join(REPOSITORY_ROOT, 'apps', 'server', 'src', 'modules', 'notes', 'persistence', 'sql'),
         ],
         { allowlist, ownTables: bulletinsOwnTables },
       );
