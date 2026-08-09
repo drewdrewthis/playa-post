@@ -48,33 +48,58 @@ test.describe('Bulletin post types (#87)', () => {
       await page.goto('/board');
       await page.getByTestId('compose-bulletin-button').click();
 
-      // The select's option values ARE the postable vocabulary — no `update`, no
+      // The select's option *values* ARE the postable vocabulary — no `update`, no
       // `note` (`board-query.ts` explains why the write surface is narrower than the
-      // `type:` grammar). Asserted on every pass so a flaky first render cannot hide
-      // a stale option list.
+      // `type:` grammar) — and its *labels* are the comp's `typePl` dictionary, never
+      // the bare wire value. Values, not text regexes: a substring match would pass a
+      // select whose values drifted while its labels stayed plausible. Asserted on
+      // every pass so a flaky first render cannot hide a stale option list.
       const select = page.getByTestId('compose-bulletin-type-select');
-      await expect(select.locator('option')).toHaveText(
-        postableTypes.map((value) => new RegExp(value, 'iu')),
+      const options = await select.locator('option').evaluateAll((elements) =>
+        elements.map((element) => ({
+          value: element.getAttribute('value'),
+          label: element.textContent?.trim(),
+        })),
       );
+      expect(options.map((option) => option.value)).toEqual(postableTypes);
+      expect(options.map((option) => option.label)).toEqual([
+        'Offers',
+        'Requests',
+        'Events',
+        'Collabs',
+        'Thanks',
+        'Intros',
+      ]);
 
       await select.selectOption(type);
       await page.getByTestId('compose-bulletin-title-input').fill(`A ${type} for the board`);
       await page.getByTestId('compose-bulletin-body-input').fill(`Body of the ${type} bulletin.`);
       await page.getByTestId('compose-bulletin-submit-button').click();
 
-      const createdCard = page.locator('[data-testid^="board-bulletin-card-"]').first();
+      // Identify the new card by its *content*, not by list position — `.first()`
+      // would lean on the board's newest-first sort surviving a same-millisecond
+      // UUID tie-break.
+      const createdCard = page
+        .locator('[data-testid^="board-bulletin-card-"]')
+        .filter({ hasText: `A ${type} for the board` });
       await expect(createdCard).toBeVisible();
       await expect(createdCard).toHaveAttribute('data-type', type);
-      composedIds.push(
-        (await createdCard.getAttribute('data-testid'))?.replace('board-bulletin-card-', '') ?? '',
-      );
+      const testId = await createdCard.getAttribute('data-testid');
+      if (testId === null) {
+        throw new Error(`the ${type} card rendered without a data-testid`);
+      }
+      composedIds.push(testId.replace('board-bulletin-card-', ''));
     }
 
     // All six cards on one board, each badged as its own type — the tint rules in
     // `screens.css` key off exactly this attribute.
     await page.goto('/board');
     for (const [index, type] of postableTypes.entries()) {
-      const card = page.getByTestId(`board-bulletin-card-${composedIds[index] ?? ''}`);
+      const id = composedIds[index];
+      if (id === undefined) {
+        throw new Error(`no card id was captured for ${type}`);
+      }
+      const card = page.getByTestId(`board-bulletin-card-${id}`);
       await expect(card).toBeVisible();
       await expect(card).toHaveAttribute('data-type', type);
     }
@@ -82,6 +107,18 @@ test.describe('Bulletin post types (#87)', () => {
     const directory = process.env['E2E_TYPES_SCREENSHOT_DIR'];
     if (directory !== undefined && directory !== '') {
       await page.screenshot({ path: `${directory}/m5-board-post-types.png`, fullPage: true });
+      // Both palettes: the dark `tintsD` ramp is a separate set of tokens, and a
+      // light-only capture would leave the dark half of the change unevidenced.
+      await page.getByTestId('theme-toggle-button').click();
+      await page.screenshot({ path: `${directory}/m5-board-post-types-dark.png`, fullPage: true });
+      await page.getByTestId('theme-toggle-button').click();
     }
+
+    // A chip actually narrows the board — the chips are the PR's visible half, and
+    // every chip compiles to the single-value `type:<value>` term.
+    await page.getByTestId('board-filter-chip-offer').click();
+    const visibleCards = page.locator('[data-testid^="board-bulletin-card-"]');
+    await expect(visibleCards).toHaveCount(1);
+    await expect(visibleCards).toHaveAttribute('data-type', 'offer');
   });
 });

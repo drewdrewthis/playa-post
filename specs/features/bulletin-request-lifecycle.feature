@@ -4,8 +4,9 @@ Feature: Bulletin lifecycle — Request creation, archival, and atomicity
   So that my board reflects only what I intend to still be visible
 
   # M2 scope: Request type only — create, read via authorized board query, archive;
-  # lifecycle timestamps + version. Cut to M5: the other six types, edit, expiry sweep,
-  # tags, location, URL detection.
+  # lifecycle timestamps + version. Since then: the other postable types shipped with
+  # #87 (`bulletin-post-types.feature`), location + expiry with their own migration.
+  # Still future: edit, expiry sweep, tags, URL detection.
 
   @e2e
   # @ac:M2-AC1

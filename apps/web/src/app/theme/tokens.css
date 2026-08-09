@@ -74,13 +74,19 @@
 
   /*
    * Per-bulletin-type tint (the prototype's `tintsL`/`tintsD` maps) — one token per
-   * postable type in `BULLETIN_TYPE` (#87). The grammar's `update` has no token: no
-   * person can post one, so no card ever needs its tint.
+   * postable type in `BULLETIN_TYPE` (#87). The grammar's `update` has no token: it is
+   * filterable but not postable (decision D5), so until a system writer exists no card
+   * carries it — and an unrecognised type falls back to `--pp-sub` in the card rules.
+   *
+   * `event` and `collab` depart from the comp's `tintsL` (#c58a2a / #5f7d7b): the tint
+   * is *text* at `--pp-text-2xs` on `--pp-card`, where those values measure 2.93:1 and
+   * 4.38:1 — under the 4.5:1 AA floor. Same hues, darkened to 4.84:1 and 5.71:1. The
+   * comp is layout/hue authority, not a contrast authority.
    */
   --pp-tint-offer: #77743a;
   --pp-tint-request: #b45336;
-  --pp-tint-event: #c58a2a;
-  --pp-tint-collab: #5f7d7b;
+  --pp-tint-event: #946820;
+  --pp-tint-collab: #516a69;
   --pp-tint-thanks: #9c5a68;
   --pp-tint-intro: #6b6089;
 
@@ -176,6 +182,13 @@
   --pp-ok: #56e0c0;
   --pp-ok-bg: rgb(86 224 192 / 12%);
 
+  /*
+   * Dark tints are the comp's `tintsD` verbatim. Three coincide byte-for-byte with the
+   * status palette (offer = --pp-ok, event = --pp-warn, request = --pp-danger): the
+   * comp draws both ramps from one dark-mode palette, and we keep the coincidence
+   * rather than invent hues the comp never showed. Deliberate; separate tokens so
+   * either ramp can move without the other.
+   */
   --pp-tint-offer: #56e0c0;
   --pp-tint-request: #ff7eb6;
   --pp-tint-event: #ffc466;

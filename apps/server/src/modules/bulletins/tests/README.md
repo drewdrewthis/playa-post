@@ -14,6 +14,7 @@ at all. Nothing here needs `pnpm db:start`.
 | `integration/` | `visible-bulletins-migration.integration.test.ts` | `app.visible_bulletins`' catalog shape — `SECURITY INVOKER`, `SET search_path = ''`, signature, grants (ADR-0004:75-77, M2.8/M2.9) |
 | `integration/` | `bulletin-request-lifecycle.integration.test.ts` | `bulletin-request-lifecycle.feature` — one `@e2e` (API-level) + five `@integration` (M2-AC1/AC6/AC12/AC18/AC19) |
 | `integration/` | `board-visibility-query.integration.test.ts` | `board-visibility-query.feature` — two `@e2e` (API-level) + two `@integration` (M2-AC1/AC5/AC14) |
+| `integration/` | `bulletin-post-types.integration.test.ts` | `bulletin-post-types.feature` — one `@e2e` (API-level) + three `@integration` (#87: six-type round-trip, `type:` narrowing, `update` empty-not-error, update/note refusal) |
 | `unit/` | `visible-bulletins-sql-composition.unit.test.ts` | the checked-in `persistence/sql/visible-bulletins.sql` composes `app.visible_people` and never joins `app.connections` |
 
 The grammar's four `@unit` scenarios live in `modules/views/tests/unit/` instead — the

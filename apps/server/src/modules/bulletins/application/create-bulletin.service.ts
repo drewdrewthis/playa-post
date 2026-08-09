@@ -14,7 +14,7 @@ import type { BulletinRepository } from '../domain/bulletin.repository';
  */
 export interface CreateBulletinCommand {
   readonly authorId: string;
-  /** M2 writes one type; see {@link BulletinType}. */
+  /** One of the six postable types (#87); see {@link BulletinType}. */
   readonly type: BulletinType;
   readonly title: string;
   readonly body: string;

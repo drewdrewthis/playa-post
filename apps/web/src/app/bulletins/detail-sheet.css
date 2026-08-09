@@ -82,23 +82,48 @@
  *
  * ⚠ The type-to-tint mapping is stated again below because the card's copy lives in
  * `app/theme/screens.css`, which another lane owns; a shared `[data-type]` rule would
- * mean editing that file. Two lines per type, in two files — when a second bulletin
- * type ships, both need it.
+ * mean editing that file. One rule per postable type, in two files — kept honest by
+ * `tests/fitness/bulletin-type-parity.fitness.test.ts`, which fails when either file
+ * misses a `BULLETIN_TYPE` member.
+ *
+ * The fallback is `--pp-sub`, not the accent: the light accent is byte-identical to
+ * `--pp-tint-request`, so an unrecognised type would masquerade as a request. Muted
+ * ink says "a tag, but not one we know".
  */
 .detail-sheet__type {
   align-self: flex-start;
   padding: 3px 7px;
-  border: 1px dashed var(--pp-bulletin-tint, var(--pp-accent));
+  border: 1px dashed var(--pp-bulletin-tint, var(--pp-sub));
   border-radius: 3px;
   font-weight: 700;
   font-size: var(--pp-text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--pp-bulletin-tint, var(--pp-accent));
+  color: var(--pp-bulletin-tint, var(--pp-sub));
+}
+
+.detail-sheet[data-type='offer'] {
+  --pp-bulletin-tint: var(--pp-tint-offer);
 }
 
 .detail-sheet[data-type='request'] {
   --pp-bulletin-tint: var(--pp-tint-request);
+}
+
+.detail-sheet[data-type='event'] {
+  --pp-bulletin-tint: var(--pp-tint-event);
+}
+
+.detail-sheet[data-type='collab'] {
+  --pp-bulletin-tint: var(--pp-tint-collab);
+}
+
+.detail-sheet[data-type='thanks'] {
+  --pp-bulletin-tint: var(--pp-tint-thanks);
+}
+
+.detail-sheet[data-type='intro'] {
+  --pp-bulletin-tint: var(--pp-tint-intro);
 }
 
 .detail-sheet__time {

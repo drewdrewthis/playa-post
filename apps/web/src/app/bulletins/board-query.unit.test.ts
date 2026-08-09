@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { BULLETIN_TYPE } from '@playa-post/contracts';
-
 import {
   BOARD_FILTER_CHIPS,
   buildBoardQuery,
@@ -74,10 +72,18 @@ describe('BOARD_FILTER_CHIPS', () => {
 
   // The comp draws eight chips. Only the six postable types get one (#87): a chip for
   // `update` would filter to a permanently empty board, and `note` is never a value.
-  it('carries one chip per postable bulletin type and no others', () => {
-    expect(BOARD_FILTER_CHIPS.slice(1).map((chip) => chip.filter)).toEqual(
-      Object.values(BULLETIN_TYPE),
-    );
+  // Spelled out literally, in the comp's order — the chip row is *built* from
+  // `Object.values(BULLETIN_TYPE)`, so comparing against that expression would restate
+  // the implementation and green-light any vocabulary forever.
+  it('carries one chip per postable bulletin type, in comp order, and no others', () => {
+    expect(BOARD_FILTER_CHIPS.slice(1).map((chip) => chip.filter)).toEqual([
+      'offer',
+      'request',
+      'event',
+      'collab',
+      'thanks',
+      'intro',
+    ]);
   });
 
   it("labels each type chip in the comp's plural form", () => {

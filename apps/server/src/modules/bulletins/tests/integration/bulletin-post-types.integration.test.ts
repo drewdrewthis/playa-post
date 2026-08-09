@@ -117,8 +117,9 @@ describe('bulletin post types (bulletin-post-types.feature, #87)', () => {
       const callerA = await callerFor(userA.authUserId);
       const callerB = await callerFor(userB.authUserId);
 
+      // The vocabulary itself (six members, comp order) is pinned in the unit tier —
+      // `board-query.unit.test.ts` — not here; this suite proves the six round-trip.
       const postableTypes = Object.values(BULLETIN_TYPE);
-      expect(postableTypes).toEqual(['offer', 'request', 'event', 'collab', 'thanks', 'intro']);
 
       for (const type of postableTypes) {
         const created = await callerA.bulletins.create({
@@ -135,7 +136,7 @@ describe('bulletin post types (bulletin-post-types.feature, #87)', () => {
     });
   });
 
-  describe('Scenario: The type: filter narrows a mixed board to the asked-for types (@e2e, API-level, #87)', () => {
+  describe('Scenario: The type: filter narrows a mixed board to the asked-for types (@integration, #87)', () => {
     it('returns exactly the offer and the thanks bulletins for "type:offer|thanks"', async () => {
       const userA = await seedOnboardedUser('dusty_types_filter_a');
       const userB = await seedOnboardedUser('dusty_types_filter_b');
@@ -156,10 +157,41 @@ describe('bulletin post types (bulletin-post-types.feature, #87)', () => {
       const board = await callerB.bulletins.board({ query: 'type:offer|thanks' });
       const typesOnBoard = board.items.map((item) => item.type).sort();
       expect(typesOnBoard).toEqual(['offer', 'thanks']);
+
+      // The single-value form is the one the UI actually composes — every chip
+      // compiles to exactly `type:<value>` (`board-query.ts`), never an alternation.
+      const chipShaped = await callerB.bulletins.board({ query: 'type:offer' });
+      expect(chipShaped.items.map((item) => item.type)).toEqual(['offer']);
     });
   });
 
-  describe('Scenario: The two non-postable vocabulary members are refused at create (@e2e, API-level, #87)', () => {
+  describe('Scenario: Filtering for the never-postable update is an empty board, not an error (@integration, #87)', () => {
+    it('resolves "type:update" to zero rows against a fully mixed board', async () => {
+      const userA = await seedOnboardedUser('dusty_types_update_a');
+      const userB = await seedOnboardedUser('dusty_types_update_b');
+      await seedAcceptedConnection(userA.userId, userB.userId);
+
+      const { callerFor } = makeCallers();
+      const callerA = await callerFor(userA.authUserId);
+      const callerB = await callerFor(userB.authUserId);
+
+      for (const type of Object.values(BULLETIN_TYPE)) {
+        await callerA.bulletins.create({
+          type,
+          title: `A ${type} on the board`,
+          body: `Body of the ${type} bulletin.`,
+        });
+      }
+
+      // `update` is in the grammar so the filter *parses*; no person can post one, so
+      // it *matches nothing* (decision D5). An error here would mean the grammar and
+      // the postable set collapsed into one list.
+      const board = await callerB.bulletins.board({ query: 'type:update' });
+      expect(board.items).toEqual([]);
+    });
+  });
+
+  describe('Scenario: The two non-postable vocabulary members are refused at create (@integration, #87)', () => {
     it('refuses type "update" and type "note" with a validation error and writes no row', async () => {
       const userA = await seedOnboardedUser('dusty_types_refused_a');
 
@@ -175,7 +207,12 @@ describe('bulletin post types (bulletin-post-types.feature, #87)', () => {
             title: 'This must never land',
             body: 'A type the create surface does not accept.',
           }),
-        ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+        ).rejects.toMatchObject({
+          code: 'BAD_REQUEST',
+          // The refusal must be *about the type field* — a BAD_REQUEST for, say, the
+          // title would green-light this test while the type slipped through.
+          cause: { issues: [{ path: ['type'] }] },
+        });
       }
 
       expect(await bulletinsRowCount()).toBe(0);
