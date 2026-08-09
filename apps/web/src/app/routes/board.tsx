@@ -14,7 +14,7 @@ import { BulletinCard } from '../bulletins/bulletin-card';
 import { BulletinDetailSheet } from '../bulletins/bulletin-detail-sheet';
 import { describeHideFailure } from '../moderation/hide-failure';
 import { ReportAbuseSheet } from '../moderation/report-abuse-sheet';
-import { buildBoardItems } from '../notes/note-board-items';
+import { buildBoardItems, channelState, describeBoardList } from '../notes/note-board-items';
 import { NoteCard } from '../notes/note-card';
 import { useOffline } from '../offline/offline-provider';
 import { forgetBoardCard, queueMutation } from '../offline/pending-mutations';
@@ -72,12 +72,17 @@ function boardErrorMessage(error: unknown): string {
  * model. An archived bulletin stays rendered for its author, marked, instead of
  * vanishing; disappearing state is indistinguishable from a bug.
  *
- * ⚠ **That union is skipped the moment a query is active.** `bulletins.board` is the
- * only thing that knows what a query means; unioning an unfiltered `listMine` into a
- * filtered answer would put bulletins on screen that do not match what was asked, which
- * is a broken filter rather than a generous one. A search shows the server's answer and
- * nothing else — including nothing from the offline cache, because a write the server
- * has not seen cannot have been matched against a query it never ran.
+ * ⚠ **A search adds no rows to that union.** `bulletins.board` is the only thing that
+ * knows what a query means; unioning an unfiltered `listMine` into a filtered answer would
+ * put bulletins on screen that do not match what was asked, which is a broken filter
+ * rather than a generous one. A search shows the server's answer and nothing else —
+ * including nothing from the offline cache, because a write the server has not seen cannot
+ * have been matched against a query it never ran.
+ *
+ * It does still *correct* the rows the search returned: a bulletin the query matched is
+ * the viewer's own if `listMine` says so, whatever the visibility read's projection of it
+ * looked like. Leaving that off during a search rendered somebody's own post as a
+ * stranger's, under the sheet's "ask them for an intro" hint.
  */
 export function BoardRoute(): JSX.Element {
   const api = useApi();
@@ -279,21 +284,33 @@ export function BoardRoute(): JSX.Element {
         archived: bulletin.archivedAt !== null,
       });
     }
+  }
 
-    // Last, so the server's own-view wins over any optimistic copy of the same row.
-    for (const bulletin of mine.data ?? []) {
-      cards.set(bulletin.id, {
-        id: bulletin.id,
-        type: bulletin.type,
-        title: bulletin.title,
-        body: bulletin.body,
-        createdAt: bulletin.createdAt,
-        loc: bulletin.loc,
-        expiresAt: bulletin.expiresAt,
-        own: true,
-        archived: bulletin.archivedAt !== null,
-      });
+  /*
+   * Last, so the server's own-view wins over any optimistic copy of the same row.
+   *
+   * ⚠ **Runs during a search too, but only over rows the query already returned.** The
+   * `continue` is what keeps a search honest: an unfiltered `listMine` folded into a
+   * filtered answer would show bulletins that do not match what was asked. A bulletin the
+   * search *did* match is a different thing — it is on screen either way, and rendering it
+   * as somebody else's puts the intro hint under the viewer's own post.
+   */
+  for (const bulletin of mine.data ?? []) {
+    if (queryActive && !cards.has(bulletin.id)) {
+      continue;
     }
+
+    cards.set(bulletin.id, {
+      id: bulletin.id,
+      type: bulletin.type,
+      title: bulletin.title,
+      body: bulletin.body,
+      createdAt: bulletin.createdAt,
+      loc: bulletin.loc,
+      expiresAt: bulletin.expiresAt,
+      own: true,
+      archived: bulletin.archivedAt !== null,
+    });
   }
 
   const visible = [...cards.values()]
@@ -304,6 +321,19 @@ export function BoardRoute(): JSX.Element {
   // is active, because nothing a person writes in a note is searchable and a client that
   // matched them locally would be inventing the grammar the server refused to build.
   const items = buildBoardItems({ cards: visible, notes: notes.data ?? [], queryActive });
+
+  /*
+   * ⚠ What the list region may *claim*, decided outside the JSX so it can be asserted
+   * without a DOM. `notes.isError` used to go unread here, which turned a failed
+   * `notes.list` into "Nothing on your board yet. Quiet playa." — a private message
+   * somebody left, reported as a quiet playa.
+   */
+  const region = describeBoardList({
+    itemCount: items.length,
+    queryActive,
+    board: channelState(board),
+    notes: channelState(notes),
+  });
 
   // One clock reading per render, shared by every card and the sheet, so no two ages on
   // screen are measured against different moments. Nothing re-reads it on a timer: the
@@ -399,34 +429,48 @@ export function BoardRoute(): JSX.Element {
         </p>
       )}
 
-      {queryActive && board.isError ? (
+      {region.boardError ? (
         <p className="form__error" data-testid="board-error">
           {boardErrorMessage(board.error)}
         </p>
-      ) : items.length === 0 ? (
-        <p className="screen__empty">
-          {queryActive ? 'Nothing matches. Quiet playa.' : 'Nothing on your board yet. Quiet playa.'}
-        </p>
       ) : (
-        <ul className="board-list">
-          {items.map((item) => (
-            <li key={item.key}>
-              {item.kind === 'note' ? (
-                /* No `onOpen`: a note carries its whole text on the card and there is no
-                   `notes.getById` to open — see `notes/note-card.tsx`. */
-                <NoteCard note={item.note} now={now} />
-              ) : (
-                <BulletinCard
-                  card={item.card}
-                  now={now}
-                  onOpen={(opened) => {
-                    setOpenBulletinId(opened.id);
-                  }}
-                />
-              )}
-            </li>
-          ))}
-        </ul>
+        <>
+          {/*
+           * `.form__error`, sitting beside the refused-query line above and reading the
+           * same way, because it is the same kind of thing: a read that did not answer.
+           * `role="status"` rather than `alert` — the bulletins under it are still worth
+           * reading, and this is not an interruption.
+           */}
+          {region.notesFailure === null ? null : (
+            <p className="form__error" data-testid="board-notes-error" role="status">
+              {region.notesFailure}
+            </p>
+          )}
+
+          {region.empty === null ? null : <p className="screen__empty">{region.empty}</p>}
+
+          {region.items ? (
+            <ul className="board-list">
+              {items.map((item) => (
+                <li key={item.key}>
+                  {item.kind === 'note' ? (
+                    /* No `onOpen`: a note carries its whole text on the card and there is
+                       no `notes.getById` to open — see `notes/note-card.tsx`. */
+                    <NoteCard note={item.note} now={now} />
+                  ) : (
+                    <BulletinCard
+                      card={item.card}
+                      now={now}
+                      onOpen={(opened) => {
+                        setOpenBulletinId(opened.id);
+                      }}
+                    />
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </>
       )}
 
       {/*

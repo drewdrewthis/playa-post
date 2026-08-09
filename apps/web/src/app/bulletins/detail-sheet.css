@@ -211,12 +211,27 @@
 }
 
 /*
- * The comp's full-width "Pin a note to X's board" pill (line 285). It is a `Link`, so it
- * needs the two things `.button` assumes about a `<button>`: a box of its own, and no
- * underline.
+ * The comp's full-width "Pin a note to X's board" pill (line 285), which it fills with
+ * ink and letters in paper — `background:t.ink;color:t.bgSolid`, in both palettes.
+ *
+ * ⚠ Its own treatment rather than `.button--primary`. The orange fill is the FAB's, and
+ * "the orange thing" means compose everywhere else in this app; borrowing it here would
+ * make two different gestures look like one. It is also the accessible reading: the
+ * accent fill carries this 13px label at 4.34:1 in light, and ink carries it at 13.29:1.
+ *
+ * A border in the fill's own colour, invisible by construction, so this pill and the
+ * buttons in the row under it are the same height.
  */
 .detail-sheet__pin-note {
   display: block;
+  padding: var(--pp-space-3);
+  border: 1px solid var(--pp-ink);
+  border-radius: var(--pp-radius-pill);
+  background: var(--pp-ink);
+  color: var(--pp-bg-solid);
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  text-align: center;
   text-decoration: none;
 }
 

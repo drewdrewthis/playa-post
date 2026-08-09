@@ -7,6 +7,7 @@ import {
   notePinnedMessage,
   notePrivacyLine,
   noteRecipientName,
+  noteRecipientParam,
   pinNoteButtonLabel,
 } from './note-recipient';
 
@@ -20,6 +21,31 @@ function person(userId: string, degree: number, displayName?: string): Person {
     ...(displayName === undefined ? {} : { displayName }),
   };
 }
+
+describe('noteRecipientParam', () => {
+  it('reads the recipient a link names', () => {
+    expect(noteRecipientParam('3f2a91c4-0000-4000-8000-000000000000')).toBe(
+      '3f2a91c4-0000-4000-8000-000000000000',
+    );
+  });
+
+  /*
+   * ⚠ Whitespace is nobody. `?noteTo=%20` used to open a compose screen addressed to " ",
+   * whose every submit is refused with `MUTATION_PAYLOAD_INVALID` — a screen doomed
+   * before it rendered. The bulletin sheet is the harmless reading of a mangled link.
+   */
+  it.each([null, '', ' ', '   ', '\t', '\n'])(
+    'reads %j as naming nobody, so the route falls back to the bulletin sheet',
+    (raw) => {
+      expect(noteRecipientParam(raw)).toBeNull();
+    },
+  );
+
+  // Trimmed on the way through: the padding must not reach a payload the server hashes.
+  it('hands on the trimmed id rather than the padding around it', () => {
+    expect(noteRecipientParam('  person-1  ')).toBe('person-1');
+  });
+});
 
 describe('noteRecipientName', () => {
   it('uses the disclosed display name', () => {

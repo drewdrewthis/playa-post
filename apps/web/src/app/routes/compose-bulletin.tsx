@@ -17,6 +17,7 @@ import {
 } from '../bulletins/compose-bulletin-draft';
 import { describeSubmissionOutcome } from '../bulletins/compose-bulletin-outcome';
 import { ComposeNote } from '../notes/compose-note';
+import { noteRecipientParam } from '../notes/note-recipient';
 import { useOffline } from '../offline/offline-provider';
 import { queueMutation } from '../offline/pending-mutations';
 
@@ -48,12 +49,11 @@ const TOAST_HOLD_MS = 1200;
  */
 export function ComposeBulletinRoute(): JSX.Element {
   const [searchParams] = useSearchParams();
-  const noteTo = searchParams.get('noteTo');
+  // Absent, empty, or nothing but spaces is not a recipient — `noteRecipientParam` owns
+  // that reading, and hands back the trimmed id the note sheet is opened for.
+  const noteTo = noteRecipientParam(searchParams.get('noteTo'));
 
-  // `?noteTo=` with nothing after it is not a recipient. It reaches the bulletin sheet,
-  // which is the harmless reading of a truncated link — a note screen addressed to
-  // nobody could only ever be refused.
-  return noteTo === null || noteTo === '' ? (
+  return noteTo === null ? (
     <ComposeBulletinForm />
   ) : (
     // A new recipient is a new sheet: no typed draft may survive a subject change.

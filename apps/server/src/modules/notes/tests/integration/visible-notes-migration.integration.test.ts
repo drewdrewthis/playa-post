@@ -191,6 +191,15 @@ describe('app.notes and app.visible_notes(viewer_id uuid) — issue #88', () => 
           `${grantee} must not be able to execute app.visible_notes`,
         ).toBe(false);
       }
+
+      // Both halves, matching the table-grant test above. The negative half alone passes
+      // just as happily against a function nobody can execute — including one the
+      // migration forgot to grant, or one a later `create or replace` dropped the grant
+      // from — and a green suite over a dead read path is worse than a red one.
+      const { rows } = await database.client.query<{ has_privilege: boolean }>(
+        `select pg_catalog.has_function_privilege('app_rw', 'app.visible_notes(uuid)', 'EXECUTE') as has_privilege`,
+      );
+      expect(rows[0]?.has_privilege).toBe(true);
     });
   });
 });

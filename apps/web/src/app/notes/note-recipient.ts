@@ -3,7 +3,8 @@ import type { Person } from '@playa-post/contracts';
 import { nodeLabel } from '../graph/graph-node-identity';
 
 /**
- * What the compose screen may say about the person a note is being pinned to.
+ * The person a note is being pinned to: who the URL names, and what the compose screen
+ * may say about them.
  *
  * Every string here has two forms, and the second is not a degraded one: §6a lets a
  * person be visible on the graph with no name disclosed at all, and the comp — where
@@ -14,6 +15,24 @@ import { nodeLabel } from '../graph/graph-node-identity';
  * implementation of §6a's "a name you may write, or nothing" rule; re-deriving it here
  * would be a second spelling of a privacy rule, which is how two spellings drift.
  */
+
+/**
+ * The recipient a `?noteTo=` names, or `null` when it names nobody.
+ *
+ * ⚠ **Whitespace is nobody.** `?noteTo=%20` used to open the note sheet addressed to
+ * `" "`, a screen whose every submit is refused with `MUTATION_PAYLOAD_INVALID` — doomed
+ * before it rendered, and refused in a way that says nothing about what went wrong. A
+ * truncated or padded link reaches the bulletin sheet instead, which is the harmless
+ * reading of one.
+ *
+ * The trimmed value is what gets passed on, so nothing downstream carries the padding
+ * into a payload the server hashes.
+ */
+export function noteRecipientParam(raw: string | null): string | null {
+  const trimmed = raw?.trim() ?? '';
+
+  return trimmed === '' ? null : trimmed;
+}
 
 /**
  * The recipient's name, or `null` when the projection disclosed none.

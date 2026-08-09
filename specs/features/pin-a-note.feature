@@ -15,6 +15,20 @@ Feature: Pin a note — the private channel between two people who are already c
   # TO YOUR BOARD" control from the comp is deliberately absent — see D6 for why its
   # semantics are an open owner question.
   #
+  # Two absences below are deliberate and would otherwise read as gaps:
+  #
+  # The person sheet's "Pin a note" entry point is NOT in this feature. Composing from a
+  # person — rather than from a bulletin's detail sheet — belongs to issue #85's person
+  # sheet, and is left to it rather than half-built here so there is one decision about
+  # where that surface lives instead of two.
+  #
+  # There is no scenario for the author reading a note back, because there is nothing to
+  # read: notes are recipient-only (D6), `app.visible_notes` gates on
+  # `recipient_id = viewer_id`, and `notes.list` takes no argument. The author sees no
+  # trace of what they sent — no sent list, no receipt, no read state. "A note is left on
+  # somebody else's board" is the whole model, and the first scenario asserts the author's
+  # own list is empty as the positive statement of it.
+  #
   # No @e2e scenario. The browser surface exists (compose sheet, board card, the detail
   # sheet's degree-gated control) but a Playwright walk of it needs two *connected*
   # users, and `tests/e2e/global-setup.ts` onboards two who are not — connecting them is
@@ -62,7 +76,9 @@ Feature: Pin a note — the private channel between two people who are already c
     Given user A has no connection to user D
     When user A attempts to pin a note to user D
     And user A attempts to pin a note to a user ID that names nobody
-    Then both attempts are refused identically, disclosing nothing about who exists
+    And user A attempts to pin a note to themselves
+    Then all three attempts are refused identically, disclosing nothing about who exists
+    And no note row is written
 
   @integration
   # @issue:88
@@ -83,11 +99,49 @@ Feature: Pin a note — the private channel between two people who are already c
 
   @integration
   # @issue:88
+  Scenario: The idempotency store keeps no copy of a pinned note's text
+    Given user A and user B are directly connected
+    When user A submits a note.pin envelope whose body is a distinctive phrase
+    Then the stored idempotency result carries no body field
+    And the stored result does not contain the note's text anywhere
+
+  @integration
+  # @issue:88
   Scenario: The outbox event for a pinned note carries identifiers only
     Given user A and user B are directly connected
     When user A pins a note whose body is a distinctive phrase
     Then one NotePinned event is written carrying the note, author and recipient IDs
     And the serialized event payload does not contain the note's text
+
+  @integration
+  # @issue:88
+  Scenario: A delivered note outlives the connection that carried it
+    Given user A and user B are directly connected
+    And user A has pinned a note to user B
+    When the connection between user A and user B is severed
+    Then user B's note list still carries the note
+    And the note carries no author card at all
+    And user A's identifier appears nowhere in it
+
+  @integration
+  # @issue:88
+  Scenario: A delivered note outlives its author deactivating
+    Given user A and user B are directly connected
+    And user A has pinned a note to user B
+    When user A's account is deactivated
+    Then user B's note list still carries the note
+    And the note carries no author card at all
+    And user A's identifier appears nowhere in it
+
+  @integration
+  # @issue:88
+  Scenario: An author who lowers their disclosure after pinning keeps the note and loses the name
+    Given user A and user B are directly connected at "full" disclosure
+    And user A has pinned a note to user B, which carries user A's name
+    When user A lowers their disclosure to user B to "limited"
+    Then user B's note list still carries the note
+    And its author card carries the user ID and disclosure only
+    And the card carries no display name and no handle
 
   @unit
   # @issue:88

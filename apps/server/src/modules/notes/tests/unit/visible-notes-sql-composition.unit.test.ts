@@ -33,6 +33,24 @@ describe('modules/notes/persistence/sql/visible-notes.sql — composition (issue
       .join('\n');
   }
 
+  /**
+   * The main query's select list — from its `select` up to `from app.notes`.
+   *
+   * Needed because "which columns are projected" and "which columns are joined on" are
+   * different questions about the same identifier, and only the first one is a rule here.
+   */
+  function selectListText(): string {
+    const statement = statementText();
+    const fromNotes = statement.search(/\bfrom\s+app\.notes\b/i);
+
+    if (fromNotes === -1) {
+      throw new Error('visible-notes.sql must read from app.notes');
+    }
+
+    // The CTE has a `select` of its own, so the main one is the *last* before the table.
+    return statement.slice(statement.toLowerCase().lastIndexOf('select', fromNotes), fromNotes);
+  }
+
   it('calls app.visible_people(...) as a subquery', () => {
     expect(statementText()).toMatch(/\bapp\.visible_people\s*\(/i);
   });
@@ -52,6 +70,31 @@ describe('modules/notes/persistence/sql/visible-notes.sql — composition (issue
     // caller would have to remember to add it, and the first one to forget would publish
     // somebody's private notes to whoever asked.
     expect(statementText()).toMatch(/recipient_id\s*=\s*viewer_id/i);
+  });
+
+  it('LEFT-joins the authorized set — a delivered note outlives its author leaving', () => {
+    // The property: severing the connection, the author deactivating, or the traversal
+    // hitting its own node budget may take away the author card and must never take away
+    // the note. An INNER join is how that silently stops being true — the row simply
+    // stops being returned — so the join keyword is pinned here rather than left to a
+    // reviewer to notice, and the lifecycle scenarios in
+    // `pin-a-note.integration.test.ts` prove the behaviour it buys.
+    expect(statementText()).toMatch(/left\s+join\s+authorized_people/i);
+  });
+
+  it('never projects n.author_id — the author card comes only from the authorized set', () => {
+    // The other half of the LEFT JOIN, and the half that keeps it from failing open. With
+    // the person join outer, a row can survive with no matching authorized person; if the
+    // select list read the identifier off app.notes instead of off the projection, that
+    // row would hand back the real app.users.id of somebody the graph has already decided
+    // this viewer may not see. Projecting from `p` makes the identifier NULL exactly when
+    // the card is absent, with no third state to get wrong.
+    //
+    // ⚠ Scoped to the select list on purpose. `n.author_id` still appears in the join
+    // condition and must — that is what the projection is matched *on*. Asserting over
+    // the whole statement would forbid the join itself.
+    expect(selectListText()).not.toMatch(/\bn\.author_id\b/i);
+    expect(selectListText()).toMatch(/\bp\.user_id\b/i);
   });
 
   it('builds no tsvector over the body — a note must never become a people search', () => {

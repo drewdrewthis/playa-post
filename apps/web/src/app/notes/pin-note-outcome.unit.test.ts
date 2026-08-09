@@ -10,10 +10,11 @@ describe('describePinNoteOutcome', () => {
     });
   });
 
+  /** The comp's string to the character (`design/Playa Post.dc.html:907`) — no full stop. */
   it('reports a still-queued row as a success the user can walk away from', () => {
     expect(describePinNoteOutcome('pending', null, 'Lena')).toEqual({
       kind: 'queued',
-      message: 'Queued — will sync when you’re back.',
+      message: 'Queued — will sync when you’re back',
     });
     expect(describePinNoteOutcome('inflight', null, 'Lena').kind).toBe('queued');
   });

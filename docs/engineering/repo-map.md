@@ -59,7 +59,12 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  note-recipient.ts (every sentence in a named and an unnamed form, §6a),
                  note-reach.ts (offer the control at degree 1, the comp's hint beyond it — a UX
                  gate, never an authorization one), note-board-items.ts (notes interleaved into the
-                 board by time, and absent from every search), pin-note-outcome.ts).
+                 board by time, absent from every search, and the pure decision of what the list
+                 region may claim when the notes read fails), pin-note-outcome.ts,
+                 pin-note-submit.ts (the total submit flow: queue-write and drain faults each map
+                 to a retryable outcome, and a retry replays the queued row rather than queueing a
+                 twin), note-author.ts (absent author card → no author line, withheld-but-present
+                 → the private-connection card)).
                  A feature stylesheet is imported
                  by the component that owns it, never added to screens.css.
                  ⚠ The unit project runs in environment: 'node' and there is no component-test

@@ -98,12 +98,18 @@
    * own table, its own procedure, and its own card. A `--pp-tint-note` sitting in that
    * row would invite exactly the reading the whole module exists to prevent.
    *
-   * The comp's `tintsL.note` verbatim — 5.00:1 on `--pp-card`, clear of the 4.5:1 AA
-   * floor, so unlike `event` and `collab` it needs no darkening. The background is the
-   * same hue at the comp's 6%.
+   * ⚠ Darkened from the comp's `tintsL.note` (#54718e), for `event` and `collab`'s reason
+   * and against a surface neither of them has. The tint is *text* at `--pp-text-2xs` on
+   * `.note-card__type`, and a note card is a 6% wash of this same tint laid over
+   * `--pp-bg` — so what is actually behind those letters is the composite #ece7dd, not
+   * `--pp-card` and not the page. The comp's value measures 4.13:1 there, under the 4.5:1
+   * AA floor. Same hue, darkened to 4.64:1 against its own wash.
+   *
+   * The wash stays the comp's 6% and is derived from the *darkened* hue, so the card and
+   * the tag on it remain one colour.
    */
-  --pp-note-tint: #54718e;
-  --pp-note-bg: rgb(84 113 142 / 6%);
+  --pp-note-tint: #4c6986;
+  --pp-note-bg: rgb(76 105 134 / 6%);
 
   /* Spacing */
   --pp-space-1: 0.25rem;
@@ -211,7 +217,11 @@
   --pp-tint-thanks: #c99aff;
   --pp-tint-intro: #66d9e8;
 
-  /* The comp's `tintsD.note`, and its 6% wash. See the light block for why it sits apart. */
+  /*
+   * The comp's `tintsD.note` verbatim, and its 6% wash — 9.92:1 over that wash on
+   * `--pp-bg-solid`, so unlike the light one it needs no darkening. See the light block
+   * for why the pair sits apart from the `--pp-tint-*` ramp.
+   */
   --pp-note-tint: #9ecbff;
   --pp-note-bg: rgb(158 203 255 / 6%);
 }

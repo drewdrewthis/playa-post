@@ -13,10 +13,10 @@
  *
  * ⚠ **Pinning required degree 1; reading does not re-derive it.** An author who was a
  * direct connection when the note was pinned may since have moved further away, or may
- * disclose only `limited` — so a note can legitimately arrive with no name on it. A
- * consumer that filled one in from anywhere else — the recipient's own graph, a cache,
- * the connection they remember — is the bug B5's person-projection sub-case asserts
- * against.
+ * disclose only `limited` — so a note can legitimately arrive with no name on it, and (see
+ * {@link VisibleNote.author}) with no author card at all. A consumer that filled either
+ * in from anywhere else — the recipient's own graph, a cache, the connection they
+ * remember — is the bug B5's person-projection sub-case asserts against.
  *
  * Shaped like `modules/graph`'s exported `VisiblePerson` rather than *being* one:
  * addendum §19 forbids importing another module's domain entity, and this is the author
@@ -58,5 +58,19 @@ export interface VisibleNote {
   readonly id: string;
   readonly body: string;
   readonly createdAt: Date;
-  readonly author: VisibleNoteAuthor;
+  /**
+   * ⚠ **Optional, because the note survives its author leaving.** A note was addressed
+   * and delivered; it belongs to the person it was left with. Severing the connection,
+   * the author deactivating, and the graph traversal reaching its own bounds each remove
+   * the *card* — `app.visible_notes` LEFT-joins `app.visible_people` and projects every
+   * author column from that set — and none of them removes the *message*.
+   *
+   * Absent rather than `null`, and whole or nothing rather than partially filled: this is
+   * a different absence from {@link VisibleNoteAuthor}'s missing name. There, a person is
+   * present and under-disclosed; here there is no person to disclose, so not even
+   * `userId` is projected — handing back the raw `app.notes.author_id` of someone the
+   * graph has already decided this viewer may not see is precisely what the LEFT JOIN
+   * must not be allowed to do.
+   */
+  readonly author?: VisibleNoteAuthor;
 }

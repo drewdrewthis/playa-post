@@ -62,7 +62,9 @@ export function describePinNoteOutcome(
       return { kind: 'pinned', message: notePinnedMessage(recipientName) };
 
     case 'pending':
-      return { kind: 'queued', message: 'Queued — will sync when you’re back.' };
+      // The comp's string to the character (`design/Playa Post.dc.html:907`), which ends
+      // without a full stop — every other pill on that screen does too.
+      return { kind: 'queued', message: 'Queued — will sync when you’re back' };
 
     case 'inflight':
       return { kind: 'queued', message: 'Still syncing — it will land shortly.' };

@@ -95,6 +95,41 @@ describe('pin a note (pin-a-note.feature, #88)', () => {
     );
   }
 
+  /**
+   * Remove the connection outright, which is the only severance `app.connections` can
+   * express: its `status` column is documented as "accepted (M2 has no other state)", so
+   * there is no `revoked` row to write instead. Whatever the withdrawal mutation
+   * eventually does, it ends with this pair absent from `app.visible_people`, which is
+   * the input the note read actually reacts to.
+   */
+  async function severConnection(userAId: string, userBId: string): Promise<void> {
+    await testDatabase.client.query(
+      `delete from app.connections where user_a_id = $1 and user_b_id = $2`,
+      [userAId, userBId],
+    );
+  }
+
+  /** ADR-0002 B11's lifecycle: `app.visible_people` prunes anyone not `active`. */
+  async function deactivateUser(userId: string): Promise<void> {
+    await testDatabase.client.query(
+      `update app.users set status = 'deactivated', deactivated_at = now() where id = $1`,
+      [userId],
+    );
+  }
+
+  /** Lower what `userAId` discloses to `userBId`, after the note has already been pinned. */
+  async function setDisclosure(
+    userAId: string,
+    userBId: string,
+    aDisclosesToB: 'full' | 'limited',
+  ): Promise<void> {
+    await testDatabase.client.query(
+      `update app.connections set a_discloses_to_b_level = $3
+        where user_a_id = $1 and user_b_id = $2`,
+      [userAId, userBId, aDisclosesToB],
+    );
+  }
+
   async function notesRowCount(): Promise<number> {
     const { rows } = await testDatabase.client.query<{ count: string }>(
       'select count(*)::text as count from app.notes',
@@ -111,6 +146,30 @@ describe('pin a note (pin-a-note.feature, #88)', () => {
       aggregate_id: string;
       payload: unknown;
     }>('select event_type, actor_id, aggregate_id, payload from app.outbox_events');
+    return rows;
+  }
+
+  /**
+   * The idempotency store as the database holds it.
+   *
+   * `body_field` and `result_text` are extracted **in SQL** rather than by re-serializing
+   * the driver's parsed object: the claim is about what is durably stored in the jsonb
+   * column for the 30-day window (ADR-0005), and a round trip through `pg`'s type parser
+   * is a claim about the driver.
+   */
+  async function mutationResultRows(): Promise<
+    readonly { mutation_type: string; body_field: string | null; result_text: string }[]
+  > {
+    const { rows } = await testDatabase.client.query<{
+      mutation_type: string;
+      body_field: string | null;
+      result_text: string;
+    }>(
+      `select mutation_type,
+              result ->> 'body' as body_field,
+              result::text      as result_text
+         from app.mutation_results`,
+    );
     return rows;
   }
 
@@ -158,6 +217,40 @@ describe('pin a note (pin-a-note.feature, #88)', () => {
     };
   }
 
+  /**
+   * A caller onto the real `sync` router with `note.pin` registered — the offline path.
+   *
+   * Shared by the two scenarios that submit envelopes, because they differ only in what
+   * they then assert: one reads the response, the other reads the row the response was
+   * stored in, and both have to be looking at the same wiring for either to mean
+   * anything.
+   */
+  async function syncCallerFor(authUserId: string) {
+    const notesModule: NotesModule = createNotesModule({ database });
+    const syncModule: SyncModule = createSyncModule({
+      database,
+      handlers: { 'note.pin': notePinHandler(notesModule) },
+      // `note.pin` has no actorship check on purpose: it names no pre-existing subject,
+      // and its one authorization question is settled inside the insert. Registering a
+      // check here would make this suite test a gate production does not have.
+      actorshipChecks: {},
+    });
+    const createCaller = createCallerFactory(router({ sync: syncModule.router }));
+    const token = await mintSupabaseAsymmetricUserToken({
+      signingKey,
+      role: 'authenticated',
+      subject: authUserId,
+    });
+    const { actorResolver } = createIdentityModule({ database });
+
+    return createCaller(
+      contextFor(`Bearer ${token}`, {
+        accessTokenVerifier: createSupabaseJwtVerifier({ keySource: signingKey.publicKey }),
+        actorResolver,
+      }),
+    );
+  }
+
   describe("Scenario: A note reaches its recipient's board and nobody else's (@integration, #88)", () => {
     it("lands on user B's list with user A as its author, and on no other list", async () => {
       const userA = await seedOnboardedUser('dusty_note_reach_a');
@@ -184,9 +277,9 @@ describe('pin a note (pin-a-note.feature, #88)', () => {
       expect(forB).toHaveLength(1);
       expect(forB[0]?.id).toBe(pinned.id);
       expect(forB[0]?.body).toBe('The good coffee is in the blue bin.');
-      expect(forB[0]?.author.userId).toBe(userA.userId);
+      expect(forB[0]?.author?.userId).toBe(userA.userId);
       // At `full` disclosure the projected author card carries the name.
-      expect(forB[0]?.author.displayName).toBe('dusty_note_reach_a');
+      expect(forB[0]?.author?.displayName).toBe('dusty_note_reach_a');
 
       // The author does not read their own note back: a note is left on somebody else's
       // board, not posted to a shared one.
@@ -209,7 +302,10 @@ describe('pin a note (pin-a-note.feature, #88)', () => {
 
       const forB = await callerB.notes.list();
       expect(forB).toHaveLength(1);
-      expect(forB[0]?.author.disclosure).toBe('topology_only');
+      // The card is *present* and unnamed — a different absence from the author-less note
+      // the lifecycle scenarios below produce, and the reason `userId` is asserted here.
+      expect(forB[0]?.author?.userId).toBe(userA.userId);
+      expect(forB[0]?.author?.disclosure).toBe('topology_only');
       // ⚠ **Absent keys**, not nulls. ADR-0002 §6a: the columns are never projected, so a
       // serialized payload carries no identity key at all — which is what stops a client
       // rendering a placeholder where a withheld name would be.
@@ -245,7 +341,7 @@ describe('pin a note (pin-a-note.feature, #88)', () => {
   });
 
   describe('Scenario: Pinning to a stranger is refused the same way as pinning to nobody (@integration, #88)', () => {
-    it('answers identically for an unconnected person and for a UUID naming nobody', async () => {
+    it('answers identically for an unconnected person, a UUID naming nobody, and yourself', async () => {
       const userA = await seedOnboardedUser('dusty_note_stranger_a');
       const userD = await seedOnboardedUser('dusty_note_stranger_d');
 
@@ -272,31 +368,24 @@ describe('pin a note (pin-a-note.feature, #88)', () => {
         throw new Error(`pinning to ${recipientId} was expected to be refused`);
       }
 
-      const refusals = [await refusalOf(userD.userId), await refusalOf(randomUUID())];
+      const refusals = [
+        await refusalOf(userD.userId),
+        await refusalOf(randomUUID()),
+        // The third input is the caller themselves, and it needs no separate gate: nobody
+        // is at degree 1 of themselves, so the same `EXISTS` that refuses a stranger
+        // refuses this — the property the `notes_distinct_parties` constraint backstops
+        // (asserted directly in `visible-notes-migration.integration.test.ts`).
+        await refusalOf(userA.userId),
+      ];
 
       // Byte-identical, which is the property rather than a nicety: any difference at all
-      // between "not connected" and "no such person" turns this endpoint into a
-      // user-existence oracle in a product that has no people search (ADR-0002 §10, B17).
-      expect(refusals[0]).toEqual(refusals[1]);
+      // between "not connected", "no such person" and "that is yourself" turns this
+      // endpoint into a user-existence oracle in a product that has no people search
+      // (ADR-0002 §10, B17). Compared pairwise against the first, so a failure names which
+      // input diverged.
+      expect(refusals[1]).toEqual(refusals[0]);
+      expect(refusals[2]).toEqual(refusals[0]);
       expect(refusals[0]?.code).toBe('NOT_FOUND');
-      expect(await notesRowCount()).toBe(0);
-    });
-
-    it('refuses a note addressed to yourself, with the same answer a stranger gets', async () => {
-      // Nobody is at degree 1 of themselves, so the pin gate refuses this with no
-      // separate check — the property the `notes_distinct_parties` constraint backstops.
-      const userA = await seedOnboardedUser('dusty_note_self_a');
-
-      const { callerFor } = makeCallers();
-      const callerA = await callerFor(userA.authUserId);
-
-      await expect(
-        callerA.notes.pin({ recipientId: userA.userId, body: 'Note to self.' }),
-      ).rejects.toMatchObject({
-        code: 'NOT_FOUND',
-        cause: expect.objectContaining({ code: 'NOTE_RECIPIENT_UNREACHABLE' }),
-      });
-
       expect(await notesRowCount()).toBe(0);
     });
   });
@@ -329,28 +418,7 @@ describe('pin a note (pin-a-note.feature, #88)', () => {
       const userB = await seedOnboardedUser('dusty_note_replay_b');
       await seedAcceptedConnection(userA.userId, userB.userId);
 
-      const notesModule: NotesModule = createNotesModule({ database });
-      const syncModule: SyncModule = createSyncModule({
-        database,
-        handlers: { 'note.pin': notePinHandler(notesModule) },
-        // `note.pin` has no actorship check on purpose: it names no pre-existing subject,
-        // and its one authorization question is settled inside the insert. Registering a
-        // check here would make this suite test a gate production does not have.
-        actorshipChecks: {},
-      });
-      const createCaller = createCallerFactory(router({ sync: syncModule.router }));
-      const token = await mintSupabaseAsymmetricUserToken({
-        signingKey,
-        role: 'authenticated',
-        subject: userA.authUserId,
-      });
-      const { actorResolver } = createIdentityModule({ database });
-      const callerA = createCaller(
-        contextFor(`Bearer ${token}`, {
-          accessTokenVerifier: createSupabaseJwtVerifier({ keySource: signingKey.publicKey }),
-          actorResolver,
-        }),
-      );
+      const callerA = await syncCallerFor(userA.authUserId);
 
       const envelope = {
         mutationId: randomUUID(),
@@ -366,6 +434,48 @@ describe('pin a note (pin-a-note.feature, #88)', () => {
       expect(second.results[0]?.outcome).toBe('replayed');
       expect(second.results[0]?.result).toEqual(first.results[0]?.result);
       expect(await notesRowCount()).toBe(1);
+    });
+  });
+
+  describe("Scenario: The idempotency store keeps no copy of a pinned note's text (@integration, #88, ADR-0005)", () => {
+    it('stores a result with no body field and no note text in the jsonb at all', async () => {
+      const userA = await seedOnboardedUser('dusty_note_idem_a');
+      const userB = await seedOnboardedUser('dusty_note_idem_b');
+      await seedAcceptedConnection(userA.userId, userB.userId);
+
+      const callerA = await syncCallerFor(userA.authUserId);
+
+      const distinctivePhrase = 'obsidian-marigold-thunderhead';
+      const response = await callerA.sync.submitMutations({
+        mutations: [
+          {
+            mutationId: randomUUID(),
+            mutationType: 'note.pin',
+            clientCreatedAt: new Date().toISOString(),
+            payload: { recipientId: userB.userId, body: `Meet me by the ${distinctivePhrase}.` },
+          },
+        ],
+      });
+
+      expect(response.results[0]?.outcome).toBe('applied');
+      expect(await notesRowCount()).toBe(1);
+
+      const stored = await mutationResultRows();
+      expect(stored).toHaveLength(1);
+      expect(stored[0]?.mutation_type).toBe('note.pin');
+
+      // ⚠ The whole stored value, not just the absence of the key it would live under.
+      // `app.mutation_results.result` is jsonb held for the 30-day replay window and
+      // returned verbatim on every replay, in a row guarded by no recipient predicate —
+      // so text that reached it would be a second, ungated copy of the most private thing
+      // this product stores, exactly the copy decision D6 and PDF §6 rule out. The one
+      // copy lives in `app.notes` and is reachable only through `app.visible_notes`.
+      expect(stored[0]?.body_field).toBeNull();
+      expect(stored[0]?.result_text).not.toContain(distinctivePhrase);
+
+      // The same value is what a replaying client is handed back, so the response carries
+      // no more than the row does.
+      expect(JSON.stringify(response.results[0]?.result)).not.toContain(distinctivePhrase);
     });
   });
 
@@ -399,6 +509,97 @@ describe('pin a note (pin-a-note.feature, #88)', () => {
       // and a note is the most private thing this product stores — a consumer re-reads it
       // through `app.visible_notes` or it does not get it at all (M2-AC16, PDF §6).
       expect(JSON.stringify(events[0])).not.toContain(distinctivePhrase);
+    });
+  });
+
+  /**
+   * The post-delivery lifecycle — what happens to a note when the *relationship* changes.
+   *
+   * ⚠ The invariant all three share: **the card may go, the message may not.** A note was
+   * addressed to one person and delivered, so it is theirs; nothing a third party does to
+   * their own connection or their own account may reach onto somebody else's board and
+   * remove what they were told. This is where notes deliberately diverge from bulletins,
+   * which are published outward and rightly leave with their author.
+   *
+   * ⚠ And the half that keeps the divergence safe: when the author card goes, it goes
+   * **whole**. Each scenario asserts the author's `app.users.id` is nowhere in the
+   * serialized note, because `app.visible_notes` projects every author column from the
+   * authorized set — so a person the graph has excluded cannot leak back as a bare
+   * identifier on a note they once wrote.
+   */
+  describe('Scenario: A delivered note outlives the connection that carried it (@integration, #88)', () => {
+    it('keeps the note and drops the author card entirely when the connection is severed', async () => {
+      const userA = await seedOnboardedUser('dusty_note_severed_a');
+      const userB = await seedOnboardedUser('dusty_note_severed_b');
+      await seedAcceptedConnection(userA.userId, userB.userId);
+
+      const { callerFor } = makeCallers();
+      const callerA = await callerFor(userA.authUserId);
+      const callerB = await callerFor(userB.authUserId);
+
+      await callerA.notes.pin({ recipientId: userB.userId, body: 'The spare goggles are yours.' });
+      await severConnection(userA.userId, userB.userId);
+
+      const forB = await callerB.notes.list();
+      expect(forB).toHaveLength(1);
+      expect(forB[0]?.body).toBe('The spare goggles are yours.');
+      expect(forB[0]?.author).toBeUndefined();
+      // Absent, not null: the key is gone, so there is nothing for a client to render a
+      // placeholder into (the same discipline the identity fields inside a card follow).
+      expect(Object.keys(forB[0] ?? {})).not.toContain('author');
+      expect(JSON.stringify(forB[0])).not.toContain(userA.userId);
+    });
+  });
+
+  describe('Scenario: A delivered note outlives its author deactivating (@integration, #88, B11)', () => {
+    it('keeps the note and drops the author card entirely when the author is no longer active', async () => {
+      const userA = await seedOnboardedUser('dusty_note_gone_a');
+      const userB = await seedOnboardedUser('dusty_note_gone_b');
+      await seedAcceptedConnection(userA.userId, userB.userId);
+
+      const { callerFor } = makeCallers();
+      const callerA = await callerFor(userA.authUserId);
+      const callerB = await callerFor(userB.authUserId);
+
+      await callerA.notes.pin({ recipientId: userB.userId, body: 'Water is under the shade structure.' });
+      await deactivateUser(userA.userId);
+
+      const forB = await callerB.notes.list();
+      expect(forB).toHaveLength(1);
+      expect(forB[0]?.body).toBe('Water is under the shade structure.');
+      expect(forB[0]?.author).toBeUndefined();
+      expect(JSON.stringify(forB[0])).not.toContain(userA.userId);
+    });
+  });
+
+  describe('Scenario: An author who lowers their disclosure after pinning keeps the note and loses the name (@integration, #88)', () => {
+    it('projects the card at read time, so the name disappears and the note does not', async () => {
+      const userA = await seedOnboardedUser('dusty_note_lowered_a');
+      const userB = await seedOnboardedUser('dusty_note_lowered_b');
+      await seedAcceptedConnection(userA.userId, userB.userId, 'full');
+
+      const { callerFor } = makeCallers();
+      const callerA = await callerFor(userA.authUserId);
+      const callerB = await callerFor(userB.authUserId);
+
+      await callerA.notes.pin({ recipientId: userB.userId, body: 'Left the lantern by your door.' });
+      // Named at pin time, unnamed afterwards — which is the point: §6a is evaluated on
+      // every read, so the card is never a snapshot of what was disclosed when the note
+      // was written.
+      expect((await callerB.notes.list())[0]?.author?.displayName).toBe('dusty_note_lowered_a');
+
+      await setDisclosure(userA.userId, userB.userId, 'limited');
+
+      const forB = await callerB.notes.list();
+      expect(forB).toHaveLength(1);
+      expect(forB[0]?.body).toBe('Left the lantern by your door.');
+      // The person is still in B's world, so the card stays — it is only the identity
+      // columns that go. This is the *partial* absence, distinct from the two scenarios
+      // above where there is no person left to describe at all.
+      expect(forB[0]?.author?.userId).toBe(userA.userId);
+      expect(forB[0]?.author?.disclosure).toBe('topology_only');
+      expect(JSON.stringify(forB[0]?.author)).not.toContain('displayName');
+      expect(JSON.stringify(forB[0]?.author)).not.toContain('handle');
     });
   });
 });

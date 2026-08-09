@@ -5,6 +5,8 @@ import type { Note } from '@playa-post/contracts';
 import { relativeTime } from '../bulletins/relative-time';
 import { PersonIdentity } from '../people/person-identity';
 
+import { noteAuthorCard } from './note-author';
+
 import './note-card.css';
 
 /**
@@ -19,9 +21,10 @@ import './note-card.css';
  * were already on the card, so the card is not a tap target.
  *
  * ⚠ The author renders through {@link PersonIdentity}, which is where §6a's "no derived
- * placeholder" rule lives. Pinning required a first-degree connection *at the time*; by
- * the time this is read the author may disclose less. What the server withheld it
- * withheld deliberately, and it is never filled back in from the local graph.
+ * placeholder" rule lives — and only when there is an author card to render at all. An
+ * author who has left this viewer's world is absent from the payload, and the card then
+ * carries no author line: the note survives, unnamed. `note-author.ts` holds that
+ * distinction, and the reasons it is not a placeholder.
  */
 export function NoteCard({
   note,
@@ -35,6 +38,7 @@ export function NoteCard({
   readonly now: Date;
 }): JSX.Element {
   const age = relativeTime(note.createdAt, now);
+  const author = noteAuthorCard(note);
 
   return (
     <article className="note-card" data-testid={`board-note-card-${note.id}`}>
@@ -50,9 +54,11 @@ export function NoteCard({
 
       <p className="note-card__body">{note.body}</p>
 
-      <p className="note-card__author">
-        <PersonIdentity identity={note.author} />
-      </p>
+      {author === null ? null : (
+        <p className="note-card__author">
+          <PersonIdentity identity={author} />
+        </p>
+      )}
     </article>
   );
 }

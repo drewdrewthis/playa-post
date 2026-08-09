@@ -5,7 +5,6 @@ import { Link, useNavigate } from 'react-router';
 import { useApi } from '../api/api-provider';
 import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
 import { useOffline } from '../offline/offline-provider';
-import { queueMutation } from '../offline/pending-mutations';
 
 import {
   composeNoteTitle,
@@ -13,13 +12,8 @@ import {
   noteRecipientName,
   pinNoteButtonLabel,
 } from './note-recipient';
-import {
-  buildPinNotePayload,
-  inspectNoteDraft,
-  NOTE_BODY_MAX_LENGTH,
-  noteOverBy,
-} from './pin-note-draft';
-import { describePinNoteOutcome } from './pin-note-outcome';
+import { inspectNoteDraft, NOTE_BODY_MAX_LENGTH, noteOverBy } from './pin-note-draft';
+import { submitPinNote } from './pin-note-submit';
 
 import '../bulletins/compose-bulletin.css';
 
@@ -76,7 +70,13 @@ function useOnline(): boolean {
  *
  * **The screen only leaves on a success.** A refusal keeps the typed note on screen and
  * says what the server said; the refused row stays in the queue, where the shell's
- * pending badge accounts for it.
+ * pending badge accounts for it. A note that never reached the queue at all says *that*,
+ * and gives the button back — the one thing the screen may never do is stay disabled with
+ * nothing on it.
+ *
+ * The submit itself is `pin-note-submit.ts`: which row this press acts on, and what its
+ * settled state means, are decisions that can be asserted without a DOM, so they are not
+ * made in here.
  */
 export function ComposeNote({ recipientId }: { readonly recipientId: string }): JSX.Element {
   const api = useApi();
@@ -87,6 +87,13 @@ export function ComposeNote({ recipientId }: { readonly recipientId: string }): 
   const [submitting, setSubmitting] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  /*
+   * The row an earlier press left in the queue, or `null`. Held across presses so a
+   * second one replays the write that exists rather than minting a second envelope —
+   * `pin-note-submit.ts` decides which of those this is, and is the only thing that sets
+   * it back to `null`.
+   */
+  const [queuedMutationId, setQueuedMutationId] = useState<string | null>(null);
 
   /*
    * The recipient's name, from the graph the app is already holding. A miss — an
@@ -133,29 +140,27 @@ export function ComposeNote({ recipientId }: { readonly recipientId: string }): 
     setSubmitting(true);
     setRefusal(null);
 
-    // Built once and never touched again: the server hashes the payload to decide
-    // replay-versus-duplicate, so rebuilding it later would break idempotency.
-    const queued = await queueMutation(database, {
-      mutationType: 'note.pin',
-      payload: buildPinNotePayload(recipientId, body),
+    // Every failure the queue, the network, and the store can produce has a sentence in
+    // `pin-note-submit.ts`, and that call never rejects — which is what keeps `submitting`
+    // from latching on with nothing on screen to explain it.
+    const result = await submitPinNote({
+      database,
+      syncRunner,
+      recipientId,
+      body,
+      recipientName: name,
+      queuedMutationId,
     });
 
-    await syncRunner.drain();
+    setQueuedMutationId(result.mutationId);
 
-    const settled = await database.pendingMutations.get(queued.mutationId);
-    const outcome = describePinNoteOutcome(
-      settled?.state ?? 'pending',
-      settled?.lastError ?? null,
-      name,
-    );
-
-    if (outcome.kind === 'refused') {
-      setRefusal(outcome.message);
+    if (result.stays) {
+      setRefusal(result.message);
       setSubmitting(false);
       return;
     }
 
-    setToast(outcome.message);
+    setToast(result.message);
   }
 
   return (
@@ -177,8 +182,16 @@ export function ComposeNote({ recipientId }: { readonly recipientId: string }): 
          * The comp's privacy line, and the closest thing this screen has to an audience
          * control: it states who sees the note rather than offering a choice, because
          * there is no choice — one recipient, decided by the button that opened this.
+         *
+         * ⚠ Its own class rather than `screen__aside`. This is not small print: it is the
+         * sentence that tells somebody their message is private, and the comp gives it
+         * `t.sub` at 12.5px rather than the 11px faint treatment the asides get.
          */}
-        <p className="screen__aside" id="compose-note-privacy" data-testid="compose-note-privacy">
+        <p
+          className="compose-sheet__privacy"
+          id="compose-note-privacy"
+          data-testid="compose-note-privacy"
+        >
           {notePrivacyLine(name)}
         </p>
 

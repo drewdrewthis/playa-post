@@ -241,6 +241,20 @@ export function BulletinDetailSheet({
           <p className="detail-sheet__author">{authorLine}</p>
         )}
 
+        {/*
+         * ⚠ Above the moderation row, which is where the comp puts it
+         * (`design/Playa Post.dc.html:285` — the `canNote` block precedes `canModerate`).
+         * Reaching somebody is the sheet's positive action and Dismiss/Report are its
+         * escape hatches; under them, the first full-width control below a stranger's post
+         * is the one that makes them go away.
+         */}
+        {noteAffordance === null ? null : (
+          <PinNoteFooter
+            recipientId={noteAffordance.recipientId}
+            reach={noteAffordance.reach}
+          />
+        )}
+
         <div className="detail-sheet__actions">
           {card.own ? (
             <button
@@ -290,26 +304,24 @@ export function BulletinDetailSheet({
             </>
           )}
         </div>
-
-        {noteAffordance === null ? null : (
-          <PinNoteFooter
-            recipientId={noteAffordance.recipientId}
-            reach={noteAffordance.reach}
-          />
-        )}
       </section>
     </>
   );
 }
 
 /**
- * The comp's footer for reaching the author: a button when you may, one line when you
+ * The comp's control for reaching the author: a button when you may, one line when you
  * may not (`design/Playa Post.dc.html:285,745-746`).
  *
  * A `Link` rather than a button with a handler, because pinning is a *navigation* — the
  * compose sheet is the `/board/new` route, exactly as the shell's FAB reaches it. That
  * also means it opens in a new tab if somebody middle-clicks, which a handler would
  * silently swallow.
+ *
+ * ⚠ **Not `button--primary`.** The comp fills this one with ink and sets the label in
+ * paper (`background:t.ink;color:t.bgSolid`), and it is right to: the orange fill is the
+ * FAB's, which means "compose", and it belongs to one thing. `.detail-sheet__pin-note`
+ * carries the whole treatment.
  */
 function PinNoteFooter({
   recipientId,
@@ -321,7 +333,7 @@ function PinNoteFooter({
   if (reach.kind === 'can-pin') {
     return (
       <Link
-        className="button button--primary detail-sheet__pin-note"
+        className="detail-sheet__pin-note"
         data-testid="bulletin-detail-pin-note-link"
         to={`/board/new?noteTo=${encodeURIComponent(recipientId)}`}
       >

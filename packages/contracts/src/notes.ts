@@ -30,11 +30,20 @@ export interface PinNoteRequest {
  *
  * Carries `recipientId`, which {@link Note} does not, and no author card, which {@link Note}
  * does: the author is the caller, so there is no person here to project.
+ *
+ * ⚠ **It carries no `body` either, and that is a privacy rule rather than a saving.** The
+ * author wrote the note; handing it straight back tells them nothing they did not just
+ * type. What it *would* do is put the text somewhere else: the same value answers the
+ * offline path, where `sync.submitMutations` stores every result verbatim in
+ * `app.mutation_results.result` for the 30-day replay window (ADR-0005), in a row no
+ * recipient gating touches. That is the second copy of a note's text D6 and PDF §6 keep
+ * this product from making — one copy, in `app.notes`, reachable only through
+ * `app.visible_notes`. A client that wants to show what was just pinned has it in the
+ * draft it submitted.
  */
 export interface PinnedNote {
   readonly id: string;
   readonly recipientId: string;
-  readonly body: string;
   readonly createdAt: string;
 }
 
@@ -46,8 +55,12 @@ export interface PinnedNote {
  *
  * ⚠ **Do not fill a missing name in from your own graph or from the connection you
  * remember making.** Pinning required a first-degree connection at the time; by the time
- * you read it that person may disclose less, or may have moved further away. What the
- * server withheld, it withheld deliberately.
+ * you read it that person may disclose less. What the server withheld, it withheld
+ * deliberately.
+ *
+ * This type is the **partial** absence — somebody is there and you may not be told their
+ * name. When there is no card at all, {@link Note.author} is absent instead: the author
+ * has left your visible world entirely and not even `userId` is disclosed.
  */
 export interface NoteAuthor {
   readonly userId: string;
@@ -68,5 +81,21 @@ export interface Note {
   readonly body: string;
   /** ISO-8601, and the list arrives newest first. */
   readonly createdAt: string;
-  readonly author: NoteAuthor;
+  /**
+   * The author card, **absent when there is no longer an author to show**.
+   *
+   * The note is yours and it does not disappear with them. An absent card means the
+   * person who wrote it has left your visible world — the connection was severed, they
+   * deactivated, or they now sit beyond the bounds the graph traversal answers within —
+   * and the server is withholding every one of their identifying columns, `userId`
+   * included.
+   *
+   * ⚠ **Render no author line. Never a reconstructed one.** Not from a cached person, not
+   * from your own graph, not from the connection you remember: an authorless note is the
+   * server saying "you may read this message and you may not be told who it is from", and
+   * filling that in locally is the same B5 person-projection bug as inventing a withheld
+   * name (see {@link NoteAuthor}, which is the *partial* case — a card that is present but
+   * unnamed).
+   */
+  readonly author?: NoteAuthor;
 }

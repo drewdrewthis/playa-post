@@ -16,13 +16,23 @@
 -- is answered by composing the canonical function rather than by joining app.users
 -- (ADR-0002 §6a: "no direct join to app.users for an author card, ever").
 --
--- ⚠ The author join is INNER, so a note from somebody who has left this viewer's world
--- entirely — deactivated, suspended, erased (ADR-0002 B11) — disappears from the list
--- rather than surviving as an unnamed card. A LEFT JOIN would keep the note and withhold
--- the name, which reads kinder and fails open: it would hand back the real
--- app.users.id of a person the graph has already decided this viewer may not see. Notes
--- follow app.visible_bulletins here on purpose, so the system has one answer to "the
--- author is gone" rather than two.
+-- ⚠ **The author join is LEFT, and this is the one place notes deliberately part company
+-- with app.visible_bulletins.** A bulletin is published outward, to whoever can reach its
+-- author, so an author who leaves a viewer's world rightly takes their bulletins with
+-- them. A note was addressed to one person and delivered: it is the recipient's. Severing
+-- the connection, the author deactivating, or the traversal stopping at its own max_depth
+-- or node_budget may each take away the author CARD, and none of them may take away the
+-- MESSAGE. A delivered note that vanished off somebody's board because a third party
+-- changed a setting would be this product quietly editing what a person was told.
+--
+-- ⚠ What makes that safe is that **every author column is projected from the authorized
+-- set, never from app.notes**. When the LEFT JOIN matches nobody, author_id comes back
+-- NULL with the disclosure and the name: `n.author_id` — the real app.users.id of a
+-- person the graph has already decided this viewer may not see — is not in the select
+-- list at all, so no shape of this result can hand one back. A note therefore arrives
+-- with a whole author card or with none, which is exactly what
+-- packages/contracts/src/notes.ts promises the client (render no author line, never a
+-- reconstructed one).
 --
 -- ⚠ This file is the checked-in source. The migration that installs it carries a
 -- byte-identical copy of the statement below (a migration is forward-only and cannot
@@ -58,7 +68,8 @@ as $$
   --
   -- max_depth and node_budget are left to the function's own defaults, exactly as
   -- app.visible_bulletins leaves them. They are operational bounds on the traversal, not
-  -- a product rule about notes.
+  -- a product rule about notes — which is why a note may not depend on them for its own
+  -- survival, and under the LEFT JOIN below it does not.
   with authorized_people as (
     select vp.user_id,
            vp.disclosure,
@@ -67,7 +78,10 @@ as $$
       from app.visible_people(viewer_id) vp
   )
   select n.id,
-         n.author_id,
+         -- The author, from the authorized set and never from n.author_id. NULL here is
+         -- the honest answer to "who wrote this" when the writer is outside this viewer's
+         -- world: the note stays, the person does not, and the identifier goes with them.
+         p.user_id,
          -- The note itself. Unlike a bulletin's title and body this is never indexed and
          -- never searched: there is no tsvector column on app.notes, so no query grammar
          -- can ever reach a note's text, and a note cannot become a way to find people
@@ -76,9 +90,9 @@ as $$
          n.created_at,
          -- ADR-0002 §6a, applied at the source. Below `full` the identity columns are
          -- not projected at all, so they never leave the database and no layer above can
-         -- forget to strip them. A degree-1 author is reachable by construction — that
-         -- is what pinning required — but reachable is not the same as disclosed, and a
-         -- connection that grants only `limited` still shows up here unnamed.
+         -- forget to strip them. A degree-1 author is reachable at the moment of pinning
+         -- — that is what pinning required — but reachable is not the same as disclosed,
+         -- and a connection that grants only `limited` still shows up here unnamed.
          --
          -- The `case` is belt-and-braces over app.visible_people, which already withholds
          -- these below `full`. It is kept so a reader of this function can see the §6a
@@ -88,11 +102,13 @@ as $$
          case when p.disclosure = 'full' then p.display_name end,
          case when p.disclosure = 'full' then p.handle end
     from app.notes n
-    join authorized_people p on p.user_id = n.author_id
+    left join authorized_people p on p.user_id = n.author_id
    -- The whole authorization rule, and the reason this function needs no other predicate:
-   -- a note has exactly one reader. The author does not appear in their own result, which
-   -- is the product statement PDF §6 asks for — a note is left on somebody else's board,
-   -- not posted to a shared one.
+   -- a note has exactly one reader. Because the person join is LEFT, this predicate is
+   -- also the only thing standing between a viewer and a row — which is as it should be,
+   -- since it is the only thing that was ever deciding readability. The author does not
+   -- appear in their own result, which is the product statement PDF §6 asks for — a note
+   -- is left on somebody else's board, not posted to a shared one.
    where n.recipient_id = viewer_id
    -- Newest first, inside the function rather than at the caller. There is no query
    -- grammar over notes and no second ordering anyone could want, so ordering here means
