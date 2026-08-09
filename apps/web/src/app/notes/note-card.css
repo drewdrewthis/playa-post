@@ -1,0 +1,106 @@
+/*
+ * The note card (#88), following the comp's `noteLook` (`design/Playa Post.dc.html`
+ * lines 726-729) — a dashed, tinted, slightly-tilted card that does not look like the
+ * bulletins around it.
+ *
+ * ⚠ Its own class tree rather than a `.bulletin-card[data-type='note']` variant. A note
+ * is not a bulletin type (decision D6) and `note` is never a value on the wire; hanging
+ * it off the bulletin card's `[data-type]` selector would put the idea back into the CSS
+ * after the schema, the router, and the contracts all took it out. The two cards share
+ * their box metrics by restating four lines, which is cheaper than sharing a selector
+ * that claims a kinship this product denies.
+ */
+
+.note-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4375rem;
+  padding: 0.875rem 1rem;
+  border: 1px dashed var(--pp-note-tint);
+  border-radius: var(--pp-radius);
+  background: var(--pp-note-bg);
+
+  /*
+   * The comp's half-degree tilt: a note reads as something left on your board rather
+   * than posted to it. Static, so it is not motion — `prefers-reduced-motion` governs
+   * animation, and a card that straightened itself for some readers would be a different
+   * layout, not a calmer one.
+   */
+  transform: rotate(-0.5deg);
+}
+
+.note-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--pp-space-2);
+}
+
+/* The dashed tag, in the note tint — the shape `.bulletin-card__type` uses for a type. */
+.note-card__type {
+  align-self: flex-start;
+  padding: 3px 7px;
+  border: 1px dashed var(--pp-note-tint);
+  border-radius: 3px;
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-note-tint);
+}
+
+/* The comp's PRIVATE pill: filled rather than outlined, so it reads as a state. */
+.note-card__private {
+  padding: 3px 8px;
+  border-radius: var(--pp-radius-pill);
+  background: var(--pp-input-bg);
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-sub);
+}
+
+.note-card__time {
+  flex: none;
+  margin-left: auto;
+  font-size: var(--pp-text-xs);
+  color: var(--pp-faint);
+}
+
+/*
+ * The note itself, in the reading face. `pre-wrap` because a note is somebody typing to
+ * one person: the line they broke is a line they meant.
+ */
+.note-card__body {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: var(--pp-font-display);
+  font-weight: 400;
+  font-size: var(--pp-text-base);
+  line-height: 1.5;
+  color: var(--pp-ink);
+}
+
+/* A dashed rule above the author, as the comp separates a text from who wrote it. */
+.note-card__author {
+  margin: 0;
+  padding-top: var(--pp-space-2);
+  border-top: 1px dashed var(--pp-note-tint);
+  font-weight: 600;
+  font-size: var(--pp-text-xs);
+  color: var(--pp-sub);
+}
+
+/* `PersonIdentity` is built for a list row; scaled to a meta line here, never rebuilt. */
+.note-card__author .person-identity__avatar,
+.note-card__author .person-identity__private-mark {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.note-card__author .person-identity__name,
+.note-card__author .person-identity__handle,
+.note-card__author .person-identity__private-label {
+  font-size: inherit;
+  color: inherit;
+}

@@ -81,6 +81,25 @@
   text-decoration: none;
 }
 
+/*
+ * The note sheet's privacy line (`design/Playa Post.dc.html:388`).
+ *
+ * ⚠ Not `screen__aside`, and never move it back. That class is the app's small print —
+ * 11px in `--pp-faint`, which measures under the AA floor on this sheet — and this line is
+ * the one that tells somebody their message is private. The comp gives it `t.sub` at
+ * 12.5px: larger, and the heavier of the two greys.
+ *
+ * `--pp-sub` is itself a shade short of AA on light surfaces. Darkening it is a change to
+ * every screen that uses it and belongs in a pass of its own, not here.
+ */
+.compose-sheet__privacy {
+  margin: 0;
+  font-weight: 500;
+  font-size: 0.78125rem;
+  line-height: 1.5;
+  color: var(--pp-sub);
+}
+
 /* Fields -------------------------------------------------------------------- */
 
 /*

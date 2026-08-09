@@ -3,12 +3,12 @@ import type { CachedBoardCard, OfflineDatabase, PendingMutationRow, PendingMutat
 /**
  * The mutation types this client queues.
  *
- * ⚠ Narrower than ADR-0005's matrix on purpose: these are the ones M2's UI can
- * produce. A type queued here must have a replay route in `sync-runner.ts` — queuing
- * one the client cannot replay is a row that sits `pending` forever with no affordance
- * to clear it.
+ * ⚠ Narrower than ADR-0005's matrix on purpose: these are the ones the UI can produce.
+ * A type queued here must have a replay route in `sync-runner.ts` — queuing one the
+ * client cannot replay is a row that sits `pending` forever with no affordance to clear
+ * it. `offline/replay-routes.unit.test.ts` holds the two lists together.
  */
-export const QUEUED_MUTATION_TYPES = ['bulletin.create', 'bulletin.archive'] as const;
+export const QUEUED_MUTATION_TYPES = ['bulletin.create', 'bulletin.archive', 'note.pin'] as const;
 
 /** One of {@link QUEUED_MUTATION_TYPES}. */
 export type QueuedMutationType = (typeof QUEUED_MUTATION_TYPES)[number];

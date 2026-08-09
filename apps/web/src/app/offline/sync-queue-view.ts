@@ -39,10 +39,17 @@ const TONE: Record<PendingMutationState, QueueTone> = {
   synced: 'good',
 };
 
-/** What this build knows how to name. Anything else falls back to its type. */
+/**
+ * What this build knows how to name. Anything else falls back to its type.
+ *
+ * ⚠ A note is named and never quoted. `titleOf` below is reached only for
+ * `bulletin.create`, which is what keeps a note's body — the one payload in the queue
+ * that is private to two people — out of a list rendered on the You screen.
+ */
 const NOUN: Record<string, string> = {
   'bulletin.create': 'Bulletin',
   'bulletin.archive': 'Archived bulletin',
+  'note.pin': 'Note',
 };
 
 /**

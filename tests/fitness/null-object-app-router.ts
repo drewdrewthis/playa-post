@@ -3,6 +3,7 @@ import { createConnectionsRouter } from '../../apps/server/src/modules/connectio
 import { createGraphRouter } from '../../apps/server/src/modules/graph/transport/graph.router';
 import { createIdentityRouter } from '../../apps/server/src/modules/identity/transport/identity.router';
 import { createModerationRouter } from '../../apps/server/src/modules/moderation/transport/moderation.router';
+import { createNotesRouter } from '../../apps/server/src/modules/notes/transport/notes.router';
 import { createNotificationsRouter } from '../../apps/server/src/modules/notifications/transport/notifications.router';
 import { createSyncRouter } from '../../apps/server/src/modules/sync/transport/sync.router';
 import { createViewsRouter } from '../../apps/server/src/modules/views/transport/views.router';
@@ -34,9 +35,9 @@ const unreachable = (): Promise<never> =>
   Promise.reject(new Error('no procedure is invoked by this router'));
 
 /** How many procedures the assembled router serves. Asserted, never inferred. */
-export const EXPECTED_PROCEDURE_COUNT = 27;
+export const EXPECTED_PROCEDURE_COUNT = 29;
 
-/** Build the whole eight-module router with no infrastructure behind it. */
+/** Build the whole nine-module router with no infrastructure behind it. */
 export function buildNullObjectAppRouter(): ReturnType<typeof createAppRouter> {
   return createAppRouter({
     identity: createIdentityRouter({
@@ -57,6 +58,10 @@ export function buildNullObjectAppRouter(): ReturnType<typeof createAppRouter> {
       getBulletin: { getById: unreachable },
       listMyBulletins: { list: unreachable },
       listBoard: { list: unreachable },
+    }),
+    notes: createNotesRouter({
+      pinNote: { pin: unreachable },
+      listNotes: { list: unreachable },
     }),
     moderation: createModerationRouter({
       reportBulletin: { report: unreachable },

@@ -7,6 +7,7 @@ import { createConnectionsRouter } from '../../modules/connections/transport/con
 import { createGraphRouter } from '../../modules/graph/transport/graph.router';
 import { createIdentityRouter } from '../../modules/identity/transport/identity.router';
 import { createModerationRouter } from '../../modules/moderation/transport/moderation.router';
+import { createNotesRouter } from '../../modules/notes/transport/notes.router';
 import { createNotificationsRouter } from '../../modules/notifications/transport/notifications.router';
 import { createSyncRouter } from '../../modules/sync/transport/sync.router';
 import { createViewsRouter } from '../../modules/views/transport/views.router';
@@ -56,6 +57,10 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
       getBulletin: { getById: unreachable },
       listMyBulletins: { list: unreachable },
       listBoard: { list: unreachable },
+    }),
+    notes: createNotesRouter({
+      pinNote: { pin: unreachable },
+      listNotes: { list: unreachable },
     }),
     moderation: createModerationRouter({
       reportBulletin: { report: unreachable },

@@ -210,11 +210,47 @@
   flex: 1;
 }
 
-.detail-sheet__unbuilt {
+/*
+ * The comp's full-width "Pin a note to X's board" pill (line 285), which it fills with
+ * ink and letters in paper — `background:t.ink;color:t.bgSolid`, in both palettes.
+ *
+ * ⚠ Its own treatment rather than `.button--primary`. The orange fill is the FAB's, and
+ * "the orange thing" means compose everywhere else in this app; borrowing it here would
+ * make two different gestures look like one. It is also the accessible reading: the
+ * accent fill carries this 13px label at 4.34:1 in light, and ink carries it at 13.29:1.
+ *
+ * A border in the fill's own colour, invisible by construction, so this pill and the
+ * buttons in the row under it are the same height.
+ */
+.detail-sheet__pin-note {
+  display: block;
+  padding: var(--pp-space-3);
+  border: 1px solid var(--pp-ink);
+  border-radius: var(--pp-radius-pill);
+  background: var(--pp-ink);
+  color: var(--pp-bg-solid);
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  text-align: center;
+  text-decoration: none;
+}
+
+/*
+ * The second-degree hint (line 746): the comp's italic serif in the warn palette, inside
+ * a dashed warn box — the same treatment `.detail-sheet__gone` gives "this is stale".
+ * Both say *the thing you are looking at is not what you can act on*.
+ */
+.detail-sheet__intro-hint {
   margin: 0;
-  font-size: var(--pp-text-xs);
-  line-height: 1.5;
-  color: var(--pp-faint);
+  padding: var(--pp-space-2) var(--pp-space-3);
+  border: 1px dashed var(--pp-warn);
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-warn-bg);
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-size: var(--pp-text-sm);
+  line-height: 1.45;
+  color: var(--pp-warn);
 }
 
 @media (prefers-reduced-motion: reduce) {

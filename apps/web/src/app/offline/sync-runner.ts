@@ -1,11 +1,18 @@
 import type { Bulletin, MutationEnvelope, MutationOutcome } from '@playa-post/contracts';
 
-import { procedureErrorCode, type PlayaPostClient } from '../api/client';
+import { applicationErrorCode, procedureErrorCode, type PlayaPostClient } from '../api/client';
 
 import type { OfflineDatabase, PendingMutationRow } from './database';
 import { cacheBoardCard, claimPendingMutations, markMutation, requeueMutation } from './pending-mutations';
+import { SYNC_REPLAYED_MUTATION_TYPES } from './replay-routes';
 
-/** Drains the offline queue. One per app; `drain()` is safe to call concurrently. */
+/**
+ * Drains the offline queue. One per app.
+ *
+ * `drain()` is safe to call concurrently, and a concurrent call resolves against a pass
+ * that could have seen the row the caller just wrote — never against the pass already on
+ * the wire, which claimed its rows before that write existed.
+ */
 export interface SyncRunner {
   drain(): Promise<void>;
 }
@@ -20,19 +27,9 @@ export interface SyncRunnerOptions {
 /**
  * Replays queued mutations, in order, exactly once each.
  *
- * **Two replay routes, chosen by mutation type, and the split is a fact about the
- * server rather than a preference:**
- *
- * - `bulletin.create` goes through `sync.submitMutations`, the idempotent path. The
- *   server stores the result against `(actorId, mutationId, request_hash)`, so a
- *   second submission of the same envelope comes back `replayed` carrying the original
- *   result and creates no second bulletin.
- * - `bulletin.archive` goes through its own procedure. ⚠ It has an *actorship check*
- *   registered in `composition/container.ts` but **no handler**, so submitting it
- *   through `sync.submitMutations` returns `rejected` / `UNSUPPORTED_MUTATION_TYPE`
- *   and the archive would silently never happen. Queuing it here (so the offline
- *   affordance and the badge are real) while replaying it directly is the honest
- *   shape until that registry gains the entry — see the L5 PR body.
+ * Two replay routes, chosen by mutation type — see `replay-routes.ts`, whose table
+ * `replay-routes.unit.test.ts` holds against `QUEUED_MUTATION_TYPES` so a newly queued
+ * type cannot reach production with no route.
  *
  * Nothing here retries on a timer. `attempts` is recorded and displayed; a failed row
  * waits for the next `online` event or an explicit retry. A backoff loop would hide
@@ -40,7 +37,10 @@ export interface SyncRunnerOptions {
  */
 export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
   const { database, api, onSettled } = options;
-  let draining: Promise<void> | null = null;
+  /** The pass on the wire, or `null` when nothing is draining. */
+  let inFlight: Promise<void> | null = null;
+  /** The single follow-up promised to everyone who asked while a pass was running. */
+  let followUp: Promise<void> | null = null;
 
   async function drainOnce(): Promise<void> {
     if (!navigator.onLine) {
@@ -57,8 +57,8 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       claimed.map((row) => markMutation(database, row.mutationId, 'inflight', row.lastError)),
     );
 
-    const batched = claimed.filter((row) => row.mutationType === 'bulletin.create');
-    const direct = claimed.filter((row) => row.mutationType !== 'bulletin.create');
+    const batched = claimed.filter((row) => SYNC_REPLAYED_MUTATION_TYPES.includes(row.mutationType));
+    const direct = claimed.filter((row) => !SYNC_REPLAYED_MUTATION_TYPES.includes(row.mutationType));
 
     await replayThroughSync(batched);
 
@@ -111,7 +111,15 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     switch (outcome.outcome) {
       case 'applied':
       case 'replayed': {
-        const bulletin = asBulletin(outcome.result);
+        /*
+         * ⚠ Gated on the mutation type, not on the shape of the result. A `PinnedNote`
+         * carries an `id` and a `createdAt` too, so `asBulletin` would accept one
+         * happily and cache a note as a bulletin on the author's own board — where it
+         * does not belong twice over: a note lands on its *recipient's* board, which
+         * this device never renders.
+         */
+        const bulletin =
+          row.mutationType === 'bulletin.create' ? asBulletin(outcome.result) : null;
 
         if (bulletin !== null) {
           await cacheBoardCard(database, { kind: 'own', bulletin });
@@ -161,35 +169,78 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
   }
 
   /**
-   * A refusal is terminal; a dropped connection is not.
+   * A whole call that did not land, put back or put down.
    *
-   * Collapsing the two would either retry a `FORBIDDEN` forever or discard a write
-   * because a tunnel ate the request.
+   * ⚠ **The merits arrive per envelope, and never here.** `applyOutcome`'s `rejected` is
+   * the server having read one write and refused it — that is the refusal channel, and it
+   * is terminal. A rejected *call* is the transport or the server's health: a 500, a
+   * gateway, a timeout, a rate limit, a tunnel. None of those is an answer about the
+   * write, and all of them are worth another try.
+   *
+   * So only an `applicationCode` — a module's own verdict, attached by `errorFormatter`
+   * — marks a row `failed`. A bare envelope code goes back to `pending` carrying that
+   * code, because a row put down here renders as "The server refused this note" for a
+   * note the server never evaluated.
    */
   async function returnToQueue(rows: readonly PendingMutationRow[], error: unknown): Promise<void> {
-    const code = procedureErrorCode(error);
+    const refusal = applicationErrorCode(error);
+    const transport = procedureErrorCode(error) ?? 'TRANSPORT_UNAVAILABLE';
 
     for (const row of rows) {
-      if (code === null) {
-        await requeueMutation(database, row, 'TRANSPORT_UNAVAILABLE');
+      if (refusal === null) {
+        await requeueMutation(database, row, transport);
       } else {
-        await markMutation(database, row.mutationId, 'failed', code);
+        await markMutation(database, row.mutationId, 'failed', refusal);
       }
     }
   }
 
-  return {
-    drain(): Promise<void> {
-      // One drain at a time: two concurrent drains would claim the same `pending` rows
-      // and submit each envelope twice. Idempotency would absorb it for
-      // `bulletin.create`; nothing would absorb it for the direct route.
-      draining ??= drainOnce().finally(() => {
-        draining = null;
-      });
+  function startPass(): Promise<void> {
+    const pass = drainOnce().finally(() => {
+      inFlight = null;
+    });
 
-      return draining;
-    },
-  };
+    inFlight = pass;
+
+    return pass;
+  }
+
+  /**
+   * One pass at a time, and never a pass that could not have claimed you.
+   *
+   * Two concurrent passes would claim the same `pending` rows and submit each envelope
+   * twice — idempotency would absorb that for `bulletin.create`, and nothing would absorb
+   * it for the direct route. But handing a caller the pass already on the wire is its own
+   * bug: that pass claimed its rows *before* this caller wrote theirs, so an online pin
+   * would settle against a drain that never saw it and report "Queued — will sync when
+   * you’re back" to somebody who is not offline.
+   *
+   * A call arriving mid-pass therefore gets a **follow-up** pass, chained behind the
+   * current one. `??=` is what makes a burst of them share the one follow-up rather than
+   * each stacking a pass of its own.
+   */
+  function drain(): Promise<void> {
+    if (inFlight === null) {
+      return startPass();
+    }
+
+    // Both settlements chain to the same continuation: a pass that threw still ended,
+    // and the row queued behind it is still owed an attempt of its own.
+    followUp ??= inFlight.then(passAfterThisOne, passAfterThisOne);
+
+    return followUp;
+  }
+
+  function passAfterThisOne(): Promise<void> {
+    followUp = null;
+
+    // Asked again rather than started outright. Between a pass ending and this
+    // continuation running there is a tick, and an `online` event landing in it may have
+    // started the next pass already — beginning a second here is the double claim.
+    return drain();
+  }
+
+  return { drain };
 }
 
 /** `sync.submitMutations` returns handler results as `unknown`; this is the narrowing. */

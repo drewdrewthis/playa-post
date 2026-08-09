@@ -22,6 +22,7 @@ export * from './graph';
 export * from './health';
 export * from './identity';
 export * from './moderation';
+export * from './notes';
 export * from './notifications';
 export * from './sync';
 export * from './views';

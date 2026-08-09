@@ -54,6 +54,16 @@ const bulletinsSqlDirectory = join(
   'persistence',
   'sql',
 );
+const notesSqlDirectory = join(
+  repositoryRoot,
+  'apps',
+  'server',
+  'src',
+  'modules',
+  'notes',
+  'persistence',
+  'sql',
+);
 
 interface AllowlistFile {
   readonly [moduleName: string]: readonly string[];
@@ -178,13 +188,55 @@ describe('sql-table-ownership (m2-lane-briefs.md:311, blocking finding B-3)', ()
 
     describe('against modules/bulletins/persistence/sql/ in the real tree', () => {
       it('reports no violation once visible-bulletins.sql exists and stays within app.bulletins + app.visible_*', () => {
-        // Vacuous today — `modules/bulletins/persistence/` does not exist yet.
-        // `collectSqlFiles` walks an absent directory to `[]`, so this is a real,
-        // currently-empty assertion rather than a skip — mirrors the graph
-        // describe block's identical "against the real tree" test.
+        // Load-bearing, not vacuous: `visible-bulletins.sql` has shipped, so this walks
+        // real production SQL — mirrors the graph describe block's identical "against the
+        // real tree" test.
         const violations = findSqlTableOwnershipViolations([bulletinsSqlDirectory], {
           allowlist: loadAllowlist(),
           ownTables: bulletinsOwnTables,
+        });
+
+        expect(violations).toEqual([]);
+      });
+    });
+  });
+
+  /**
+   * Issue #88, decision D6. `modules/notes` is in exactly `modules/bulletins`' position:
+   * it owns `app.notes` outright (passed via `ownTables`, not the allowlist) and
+   * everything else it needs — `app.visible_people(...)` — is already exempt as a
+   * sanctioned function call, so it needs no allowlist entry either.
+   *
+   * The failure this guards is the tempting one. "Is this recipient a direct connection"
+   * reads like a question about `app.connections`, and answering it there would be a
+   * second definition of reachability living in the one module whose whole job is a
+   * private channel — R2, the plan's only Critical-severity risk. The pin statement
+   * composes `app.visible_people` instead (`postgres-note.repository.ts`), and no `.sql`
+   * file here may name a table that would let a future edit do otherwise.
+   *
+   * ⚠ This cannot see the pin statement itself, which is a Kysely `sql` literal rather
+   * than a `.sql` file — no rule in this build can. What it does is keep the checked-in
+   * escape hatch shut: a note query cannot quietly grow the join.
+   *
+   * No violating/allowed fixture pair of its own: the walker is one function, and the
+   * graph and bulletins fixtures already prove it still bites. What is specific to this
+   * module is the allowlist assertion and the real-tree walk below.
+   */
+  describe('notes module ownership scope (issue #88)', () => {
+    const notesOwnTables = { notes: ['notes'] };
+
+    it('does not allowlist modules/notes to reach app.connections or app.users directly', () => {
+      const allowlist = loadAllowlist();
+      const notesAllowance = allowlist['notes'] ?? [];
+      expect(notesAllowance).not.toContain('connections');
+      expect(notesAllowance).not.toContain('users');
+    });
+
+    describe('against modules/notes/persistence/sql/ in the real tree', () => {
+      it('holds visible-notes.sql to app.notes + app.visible_*, and no other table', () => {
+        const violations = findSqlTableOwnershipViolations([notesSqlDirectory], {
+          allowlist: loadAllowlist(),
+          ownTables: notesOwnTables,
         });
 
         expect(violations).toEqual([]);

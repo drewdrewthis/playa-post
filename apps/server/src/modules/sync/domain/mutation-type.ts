@@ -1,20 +1,27 @@
 /**
- * The mutation types `sync.submitMutations` recognises in M2.
+ * The mutation types `sync.submitMutations` recognises.
  *
- * These are the **seven write operations the M2 slice exposes**, which is the same
- * seven M2-AC19's B13 matrix walks "whether submitted via tRPC or via
- * `sync.submitMutations`". ADR-0005's v1 conflict matrix names more (`bulletin.update`,
- * `connection.invite`, `connection.remove`, `block.create`, `view.save`,
- * `intro.request`); each of those arrives with the milestone that builds the mutation,
- * because a type listed here with nothing behind it is a type an actorship gate cannot
- * check and a handler cannot serve.
+ * The first seven are the write operations the M2 slice exposes, which is the same seven
+ * M2-AC19's B13 matrix walks "whether submitted via tRPC or via `sync.submitMutations`".
+ * `note.pin` joined them with the private-note channel (issue #88, decision D6).
+ * ADR-0005's v1 conflict matrix names more (`bulletin.update`, `connection.invite`,
+ * `connection.remove`, `block.create`, `view.save`, `intro.request`); each of those
+ * arrives with the milestone that builds the mutation, because a type listed here with
+ * nothing behind it is a type an actorship gate cannot check and a handler cannot serve.
  *
- * ⚠ **Recognised is not the same as implemented.** M2 wires exactly one *replayable*
- * handler — `bulletin.create`. The other six are recognised so that the type-agnostic
- * actorship gate has something to check *before* dispatch discovers there is no
- * handler; without that, an unrelated actor submitting `bulletin.archive` would be
+ * ⚠ **Recognised is not the same as implemented.** Two of these have *replayable*
+ * handlers — `bulletin.create` and `note.pin`. The other six are recognised so that the
+ * type-agnostic actorship gate has something to check *before* dispatch discovers there
+ * is no handler; without that, an unrelated actor submitting `bulletin.archive` would be
  * refused for the wrong reason and B13's sync column would be vacuously green
  * (`m2-lane-briefs.md` §"The sync half of B13 is not vacuously green").
+ *
+ * ⚠ `note.pin` has **no** entry in the actorship-check registry, and that is correct
+ * rather than an omission: like `bulletin.create` it names no pre-existing subject the
+ * actor could be unrelated *to* — the author is the acting actor and the note does not
+ * exist yet. Its one authorization question, "may I write to this recipient", is decided
+ * inside the insert statement itself (`postgres-note.repository.ts`), so it is settled
+ * before any row lands rather than by a gate that could be removed.
  */
 export const MUTATION_TYPES = [
   'bulletin.create',
@@ -24,6 +31,7 @@ export const MUTATION_TYPES = [
   'connection.accept',
   'trust.set',
   'notifyMe.update',
+  'note.pin',
 ] as const;
 
 /** One of {@link MUTATION_TYPES}. */

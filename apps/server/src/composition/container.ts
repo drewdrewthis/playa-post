@@ -23,6 +23,10 @@ import {
   createHiddenBulletins,
   createModerationModule,
 } from '../modules/moderation/moderation.module';
+import type { PinNoteService } from '../modules/notes/application/pin-note.service';
+import { createNotesModule } from '../modules/notes/notes.module';
+import { presentNote } from '../modules/notes/transport/note.presenter';
+import { pinNoteCommandFields, pinNoteInput } from '../modules/notes/transport/pin-note.input';
 import type { SendGroupedPushHandler } from '../modules/notifications/application/send-grouped-push.handler';
 import { isPushDeliveryConfigured, type PushTransport } from '../modules/notifications/domain/push-transport';
 import { unconfiguredPushTransport } from '../modules/notifications/infrastructure/unconfigured-push.transport';
@@ -104,15 +108,50 @@ function requireBulletinActorship(
 }
 
 /**
- * The `MutationType → handler` registry — M2 wires exactly one replayable handler.
+ * The `MutationType → handler` registry — two replayable handlers.
  *
- * `bulletin.create` needs no actorship check: the author is the acting actor, so there
- * is no subject for them to be unrelated to (see `create-bulletin.service.ts`). Its
- * result is `presentBulletin`'s, deliberately — a client must not be able to tell from
+ * Neither needs an actorship check: in both cases the author is the acting actor, so
+ * there is no pre-existing subject for them to be unrelated to (see
+ * `create-bulletin.service.ts` and `mutation-type.ts`'s note on `note.pin`). Each result
+ * is its module's presenter output, deliberately — a client must not be able to tell from
  * the payload whether its change went through the tRPC procedure or the offline queue.
+ *
+ * ⚠ `note.pin` differs from `bulletin.create` in one way that matters offline: it has a
+ * refusal a queued envelope can hit. A recipient who was a first-degree connection when
+ * the note was composed may not be one when the queue drains, and the insert refuses it —
+ * so the envelope comes back `rejected` with `NOTE_RECIPIENT_UNREACHABLE` and no row
+ * lands. That is an `ApplicationError` and therefore per-envelope, never batch-fatal
+ * (ADR-0005).
  */
-function mutationHandlers(createBulletin: CreateBulletinService): MutationHandlerRegistry {
+function mutationHandlers(
+  createBulletin: CreateBulletinService,
+  pinNote: PinNoteService,
+): MutationHandlerRegistry {
   return {
+    'note.pin': {
+      async handle({ actorId, mutationType, payload }) {
+        const parsed = pinNoteInput.safeParse(payload);
+
+        if (!parsed.success) {
+          throw new MutationPayloadInvalidError(mutationType);
+        }
+
+        return {
+          result: presentNote(
+            await pinNote.pin({
+              // From the resolved actor, never from the payload (ADR-0002 §5a, B14) —
+              // the one line in the offline path where writing a note in somebody else's
+              // name would live.
+              authorId: actorId,
+              // Field-for-field with the tRPC procedure, through the one mapping both
+              // call.
+              ...pinNoteCommandFields(parsed.data),
+            }),
+          ),
+        };
+      },
+    },
+
     'bulletin.create': {
       async handle({ actorId, mutationType, payload }) {
         const parsed = createBulletinInput.safeParse(payload);
@@ -149,6 +188,12 @@ function mutationHandlers(createBulletin: CreateBulletinService): MutationHandle
  * about. `modules/connections` exports no application interface to check against yet
  * and `notifyMe.update` does not exist until lane L3b-notify (lane-brief C13 already
  * records that join). Each owes an entry here as part of its own definition of done.
+ *
+ * ⚠ `bulletin.create` and `note.pin` are **not** on that list of gaps: neither names a
+ * pre-existing subject, so there is nothing for an actorship gate to check. `note.pin`
+ * does name a *recipient*, and that claim is authorized inside its insert statement
+ * rather than here — a pre-dispatch check would be a second answer to it, and the
+ * cheaper of two answers always wins the race.
  */
 function mutationActorshipChecks(
   findVisibleBulletin: FindVisibleBulletinAuthor,
@@ -288,6 +333,12 @@ export function buildAppContainer(
   // lazily captured; every line only names what is already built.
   const hiddenBulletins = createHiddenBulletins({ database });
   const bulletins = createBulletinsModule({ database, hiddenBulletins });
+  // Notes is built beside bulletins and depends on neither it nor graph: `app.visible_notes`
+  // composes `app.visible_people` in SQL, and the pin statement does the same, so the
+  // wiring order between the three carries no meaning. Beside rather than inside is the
+  // point — PDF §6 keeps fixed-recipient messaging out of the bulletin model, and
+  // decision D6 makes that separation structural (issue #88).
+  const notes = createNotesModule({ database });
   const moderation = createModerationModule({
     database,
     findVisibleBulletin: bulletins.findVisibleBulletin,
@@ -321,7 +372,7 @@ export function buildAppContainer(
   // here and never inside it.
   const sync = createSyncModule({
     database,
-    handlers: mutationHandlers(bulletins.createBulletin),
+    handlers: mutationHandlers(bulletins.createBulletin, notes.pinNote),
     actorshipChecks: mutationActorshipChecks(bulletins.findVisibleBulletin),
   });
   // Audit is built last: it has no router and no other consumer, so nothing else in
@@ -377,6 +428,7 @@ export function buildAppContainer(
       connections: connections.router,
       graph: graph.router,
       bulletins: bulletins.router,
+      notes: notes.router,
       moderation: moderation.router,
       sync: sync.router,
       views: views.router,

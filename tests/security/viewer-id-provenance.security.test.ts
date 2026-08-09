@@ -23,9 +23,9 @@ import {
  * viewer is derived from the verified token by `authenticatedProcedure` and nowhere
  * else; a `viewerId` on an input is impersonation with a schema in front of it.
  *
- * Points at the **merged eight-module** router via `null-object-app-router.ts`, the
+ * Points at the **merged nine-module** router via `null-object-app-router.ts`, the
  * one hand-maintained registry all three consumers of this walk share. ⚠ That registry
- * is the single highest-value line in this control: four modules landed after the
+ * is the single highest-value line in this control: five modules landed after the
  * walker was written, and a registry missing one flips this row `live` while the
  * control is blind to part of the surface. `EXPECTED_PROCEDURE_COUNT` is asserted, not
  * inferred, precisely so "the walk saw everything" is itself checked.

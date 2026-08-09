@@ -13,6 +13,7 @@ import type {
   ModerationTargetRequest,
   ReportBulletinRequest,
 } from './moderation';
+import type { Note, PinnedNote, PinNoteRequest } from './notes';
 import type {
   GroupedNotification,
   NotificationDismissal,
@@ -99,6 +100,9 @@ export interface PlayaPostApi {
 
   'moderation.report': MutationSpec<ReportBulletinRequest, HiddenBulletin>;
   'moderation.dismiss': MutationSpec<ModerationTargetRequest, HiddenBulletin>;
+
+  'notes.pin': MutationSpec<PinNoteRequest, PinnedNote>;
+  'notes.list': QuerySpec<void, readonly Note[]>;
 
   'sync.submitMutations': MutationSpec<SubmitMutationsRequest, MutationBatch>;
 

@@ -40,8 +40,8 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  state,tests}. Shell/router/providers/auth/api client/offline queue in
                  src/app/{routes,auth,api,offline,shell} (the M2 frontend). Shared UI in src/shared/.
                  A screen whose pieces outgrow one route file gets a sibling feature directory —
-                 src/app/{people,notifications,bulletins,graph,moderation,profile}/ — holding its
-                 components, its own <feature>.css, and any pure logic worth unit-testing on its
+                 src/app/{people,notifications,bulletins,graph,moderation,notes,profile}/ — holding
+                 its components, its own <feature>.css, and any pure logic worth unit-testing on its
                  own (src/app/bulletins/
                  is the board: card, detail sheet, search bar, the query builder and the relative-time
                  formatter; src/app/graph/ is the network canvas: graph-layout.ts seeded from person
@@ -51,7 +51,20 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  reason vocabulary and the send gate, report-abuse-sheet.tsx renders them,
                  hide-failure.ts turns a refused or undelivered moderation.report/moderation.dismiss
                  into a message plus whether a retry can work and whether the card belongs back,
-                 hide-failure-notice.css styles the notice board.tsx renders from it).
+                 hide-failure-notice.css styles the notice board.tsx renders from it;
+                 src/app/notes/ is the private channel (#88): compose-note.tsx is the second thing
+                 /board/new can compose (routes/compose-bulletin.tsx dispatches on ?noteTo=),
+                 note-card.tsx + note-card.css are the comp's dashed tilted card, and the decisions
+                 are pure — pin-note-draft.ts (bounds mirrored ahead of the round trip),
+                 note-recipient.ts (every sentence in a named and an unnamed form, §6a),
+                 note-reach.ts (offer the control at degree 1, the comp's hint beyond it — a UX
+                 gate, never an authorization one), note-board-items.ts (notes interleaved into the
+                 board by time, absent from every search, and the pure decision of what the list
+                 region may claim when the notes read fails), pin-note-outcome.ts,
+                 pin-note-submit.ts (the total submit flow: queue-write and drain faults each map
+                 to a retryable outcome, and a retry replays the queued row rather than queueing a
+                 twin), note-author.ts (absent author card → no author line, withheld-but-present
+                 → the private-connection card)).
                  A feature stylesheet is imported
                  by the component that owns it, never added to screens.css.
                  ⚠ The unit project runs in environment: 'node' and there is no component-test
@@ -70,8 +83,8 @@ apps/server/     The modular monolith.
   entrypoints/   http/ · outbox-drainer/ · notification-flush/ (ADR-0006 — two in-process pollers,
                  no separate queue or cron facility; ADR-0009 retired the Cloudflare dual-target this
                  line used to describe). The ONLY place that knows about the runtime (ADR-0009).
-  modules/       identity · connections · graph · bulletins · views · notifications · moderation ·
-                 sync · storage · audit. Each: transport/ application/ domain/ persistence/ tests/
+  modules/       identity · connections · graph · bulletins · notes · views · notifications ·
+                 moderation · sync · storage · audit. Each: transport/ application/ domain/ persistence/ tests/
                  plus a <name>.module.ts. (Addendum §4 — a module only grows the directories it needs:
                  modules/graph has no domain/, because ADR-0004 decision 7 makes the graph a read
                  model rather than an aggregate; modules/views was domain/ + tests/ alone while the
@@ -87,8 +100,11 @@ apps/server/     The modular monolith.
                  and persistence/ is the one directory domain/ may never import (ADR-0012). A module that
                  owns a database function checks its source in at persistence/sql/ and carries a
                  byte-identical copy in the migration that installs it — modules/graph's
-                 visible-people.sql and visible-edges.sql, and modules/bulletins'
-                 visible-bulletins.sql, each pinned by a verbatim-containment assertion
+                 visible-people.sql and visible-edges.sql, modules/bulletins'
+                 visible-bulletins.sql, and modules/notes' visible-notes.sql (the private
+                 person-to-person channel, #88/decision D6 — its own table and its own
+                 authorized set precisely so a note is never a bulletin type, PDF §6), each
+                 pinned by a verbatim-containment assertion
                  (ADR-0004:73-74). Re-installing one is a NEW migration carrying the new text,
                  never an edit to the old one; a function whose `returns table` shape changed has
                  to be DROPped there first, because `create or replace` refuses it.
