@@ -68,6 +68,19 @@ test.describe('tapping a graph node', () => {
       await expect(pageA).toHaveURL(/\/graph$/);
       await expect(pageA.getByTestId('graph-home')).toBeVisible();
 
+      // Screenshot only when `E2E_PERSON_SHEET_SCREENSHOT_DIR` is set — the same
+      // opt-in shape as `E2E_YOU_SCREENSHOT_DIR`; a normal run writes nothing.
+      const directory = process.env['E2E_PERSON_SHEET_SCREENSHOT_DIR'];
+      if (directory !== undefined && directory !== '') {
+        await pageA.screenshot({
+          path: `${directory}/m5-person-sheet-over-graph.png`,
+          fullPage: true,
+          // Fast-forwards the slide-up so the image shows the settled sheet, not a
+          // half-transparent frame of the animation.
+          animations: 'disabled',
+        });
+      }
+
       // CLOSE puts the viewer back on the graph they never left.
       await pageA.getByTestId('person-sheet-close-button').click();
       await expect(pageA.getByTestId('person-sheet')).not.toBeVisible();
