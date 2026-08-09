@@ -57,8 +57,8 @@ per-module for independent module-level suites — this is deliberate duplicatio
 | `offline-replay.feature` | Mutation envelope replay, actorship precedence | 1 e2e, 2 integration |
 | `vertical-slice-e2e.feature` | Composite M2-AC1 proof + log hygiene | 1 e2e, 1 integration |
 | `bulletin-post-types.feature` | The six postable types; filterable ≠ postable (#87, M5) | 1 e2e, 3 integration |
-| `pin-a-note.feature` | Private person-to-person notes, degree-1 gated (#88, D6) | 7 integration, 1 unit |
-| **Total** | | **13 e2e, 54 integration, 11 unit — 78 scenarios** |
+| `pin-a-note.feature` | Private person-to-person notes, degree-1 gated (#88, D6) | 7 integration, 7 unit |
+| **Total** | | **13 e2e, 54 integration, 17 unit — 84 scenarios** |
 
 ## AC → scenario traceability
 

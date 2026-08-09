@@ -40,8 +40,8 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  state,tests}. Shell/router/providers/auth/api client/offline queue in
                  src/app/{routes,auth,api,offline,shell} (the M2 frontend). Shared UI in src/shared/.
                  A screen whose pieces outgrow one route file gets a sibling feature directory —
-                 src/app/{people,notifications,bulletins,graph,moderation,profile}/ — holding its
-                 components, its own <feature>.css, and any pure logic worth unit-testing on its
+                 src/app/{people,notifications,bulletins,graph,moderation,notes,profile}/ — holding
+                 its components, its own <feature>.css, and any pure logic worth unit-testing on its
                  own (src/app/bulletins/
                  is the board: card, detail sheet, search bar, the query builder and the relative-time
                  formatter; src/app/graph/ is the network canvas: graph-layout.ts seeded from person
@@ -51,7 +51,15 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  reason vocabulary and the send gate, report-abuse-sheet.tsx renders them,
                  hide-failure.ts turns a refused or undelivered moderation.report/moderation.dismiss
                  into a message plus whether a retry can work and whether the card belongs back,
-                 hide-failure-notice.css styles the notice board.tsx renders from it).
+                 hide-failure-notice.css styles the notice board.tsx renders from it;
+                 src/app/notes/ is the private channel (#88): compose-note.tsx is the second thing
+                 /board/new can compose (routes/compose-bulletin.tsx dispatches on ?noteTo=),
+                 note-card.tsx + note-card.css are the comp's dashed tilted card, and the decisions
+                 are pure — pin-note-draft.ts (bounds mirrored ahead of the round trip),
+                 note-recipient.ts (every sentence in a named and an unnamed form, §6a),
+                 note-reach.ts (offer the control at degree 1, the comp's hint beyond it — a UX
+                 gate, never an authorization one), note-board-items.ts (notes interleaved into the
+                 board by time, and absent from every search), pin-note-outcome.ts).
                  A feature stylesheet is imported
                  by the component that owns it, never added to screens.css.
                  ⚠ The unit project runs in environment: 'node' and there is no component-test

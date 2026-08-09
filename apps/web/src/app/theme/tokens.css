@@ -90,6 +90,21 @@
   --pp-tint-thanks: #9c5a68;
   --pp-tint-intro: #6b6089;
 
+  /*
+   * The note card (#88), deliberately **outside** the `--pp-tint-*` ramp above.
+   *
+   * The comp keeps `note` in the same `tintsL`/`tintsD` map as the bulletin types, but a
+   * note is not a seventh bulletin type and never becomes one (decision D6): it is its
+   * own table, its own procedure, and its own card. A `--pp-tint-note` sitting in that
+   * row would invite exactly the reading the whole module exists to prevent.
+   *
+   * The comp's `tintsL.note` verbatim — 5.00:1 on `--pp-card`, clear of the 4.5:1 AA
+   * floor, so unlike `event` and `collab` it needs no darkening. The background is the
+   * same hue at the comp's 6%.
+   */
+  --pp-note-tint: #54718e;
+  --pp-note-bg: rgb(84 113 142 / 6%);
+
   /* Spacing */
   --pp-space-1: 0.25rem;
   --pp-space-2: 0.5rem;
@@ -195,6 +210,10 @@
   --pp-tint-collab: #7ea8ff;
   --pp-tint-thanks: #c99aff;
   --pp-tint-intro: #66d9e8;
+
+  /* The comp's `tintsD.note`, and its 6% wash. See the light block for why it sits apart. */
+  --pp-note-tint: #9ecbff;
+  --pp-note-bg: rgb(158 203 255 / 6%);
 }
 
 *,

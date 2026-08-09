@@ -210,11 +210,32 @@
   flex: 1;
 }
 
-.detail-sheet__unbuilt {
+/*
+ * The comp's full-width "Pin a note to X's board" pill (line 285). It is a `Link`, so it
+ * needs the two things `.button` assumes about a `<button>`: a box of its own, and no
+ * underline.
+ */
+.detail-sheet__pin-note {
+  display: block;
+  text-decoration: none;
+}
+
+/*
+ * The second-degree hint (line 746): the comp's italic serif in the warn palette, inside
+ * a dashed warn box — the same treatment `.detail-sheet__gone` gives "this is stale".
+ * Both say *the thing you are looking at is not what you can act on*.
+ */
+.detail-sheet__intro-hint {
   margin: 0;
-  font-size: var(--pp-text-xs);
-  line-height: 1.5;
-  color: var(--pp-faint);
+  padding: var(--pp-space-2) var(--pp-space-3);
+  border: 1px dashed var(--pp-warn);
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-warn-bg);
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-size: var(--pp-text-sm);
+  line-height: 1.45;
+  color: var(--pp-warn);
 }
 
 @media (prefers-reduced-motion: reduce) {

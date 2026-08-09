@@ -4,6 +4,7 @@ import { procedureErrorCode, type PlayaPostClient } from '../api/client';
 
 import type { OfflineDatabase, PendingMutationRow } from './database';
 import { cacheBoardCard, claimPendingMutations, markMutation, requeueMutation } from './pending-mutations';
+import { SYNC_REPLAYED_MUTATION_TYPES } from './replay-routes';
 
 /** Drains the offline queue. One per app; `drain()` is safe to call concurrently. */
 export interface SyncRunner {
@@ -20,19 +21,9 @@ export interface SyncRunnerOptions {
 /**
  * Replays queued mutations, in order, exactly once each.
  *
- * **Two replay routes, chosen by mutation type, and the split is a fact about the
- * server rather than a preference:**
- *
- * - `bulletin.create` goes through `sync.submitMutations`, the idempotent path. The
- *   server stores the result against `(actorId, mutationId, request_hash)`, so a
- *   second submission of the same envelope comes back `replayed` carrying the original
- *   result and creates no second bulletin.
- * - `bulletin.archive` goes through its own procedure. ⚠ It has an *actorship check*
- *   registered in `composition/container.ts` but **no handler**, so submitting it
- *   through `sync.submitMutations` returns `rejected` / `UNSUPPORTED_MUTATION_TYPE`
- *   and the archive would silently never happen. Queuing it here (so the offline
- *   affordance and the badge are real) while replaying it directly is the honest
- *   shape until that registry gains the entry — see the L5 PR body.
+ * Two replay routes, chosen by mutation type — see `replay-routes.ts`, whose table
+ * `replay-routes.unit.test.ts` holds against `QUEUED_MUTATION_TYPES` so a newly queued
+ * type cannot reach production with no route.
  *
  * Nothing here retries on a timer. `attempts` is recorded and displayed; a failed row
  * waits for the next `online` event or an explicit retry. A backoff loop would hide
@@ -57,8 +48,8 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       claimed.map((row) => markMutation(database, row.mutationId, 'inflight', row.lastError)),
     );
 
-    const batched = claimed.filter((row) => row.mutationType === 'bulletin.create');
-    const direct = claimed.filter((row) => row.mutationType !== 'bulletin.create');
+    const batched = claimed.filter((row) => SYNC_REPLAYED_MUTATION_TYPES.includes(row.mutationType));
+    const direct = claimed.filter((row) => !SYNC_REPLAYED_MUTATION_TYPES.includes(row.mutationType));
 
     await replayThroughSync(batched);
 
@@ -111,7 +102,15 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     switch (outcome.outcome) {
       case 'applied':
       case 'replayed': {
-        const bulletin = asBulletin(outcome.result);
+        /*
+         * ⚠ Gated on the mutation type, not on the shape of the result. A `PinnedNote`
+         * carries an `id` and a `createdAt` too, so `asBulletin` would accept one
+         * happily and cache a note as a bulletin on the author's own board — where it
+         * does not belong twice over: a note lands on its *recipient's* board, which
+         * this device never renders.
+         */
+        const bulletin =
+          row.mutationType === 'bulletin.create' ? asBulletin(outcome.result) : null;
 
         if (bulletin !== null) {
           await cacheBoardCard(database, { kind: 'own', bulletin });

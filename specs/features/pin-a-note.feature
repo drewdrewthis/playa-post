@@ -15,9 +15,16 @@ Feature: Pin a note — the private channel between two people who are already c
   # TO YOUR BOARD" control from the comp is deliberately absent — see D6 for why its
   # semantics are an open owner question.
   #
-  # No @e2e scenario: there is no browser surface for notes yet. Every scenario below is
-  # API-level, in `modules/notes/tests/integration/pin-a-note.integration.test.ts`,
-  # except the content-policy one, which is pure domain logic.
+  # No @e2e scenario. The browser surface exists (compose sheet, board card, the detail
+  # sheet's degree-gated control) but a Playwright walk of it needs two *connected*
+  # users, and `tests/e2e/global-setup.ts` onboards two who are not — connecting them is
+  # the vertical-slice spec's own multi-step flow. The web behaviour below is proved at
+  # `@unit` instead, which is where it lives: `apps/web`'s unit project runs in
+  # `environment: 'node'` with no component harness, so every decision this feature makes
+  # is in a pure module beside the component that renders it.
+  #
+  # The `@integration` scenarios are in
+  # `modules/notes/tests/integration/pin-a-note.integration.test.ts`.
 
   @integration
   # @issue:88
@@ -90,3 +97,54 @@ Feature: Pin a note — the private channel between two people who are already c
     Then a whitespace-only body is refused
     And a body longer than the bound is refused
     And an accepted body is returned trimmed
+
+  @unit
+  # @issue:88
+  Scenario: The compose form refuses an empty or over-long note before the round trip
+    Given a note draft in the compose sheet
+    When the draft is inspected against the server's bound
+    Then a whitespace-only draft is not pinnable
+    And a draft past the bound is not pinnable, measured after trimming
+    And the queued payload carries only a recipient and a trimmed body
+
+  @unit
+  # @issue:88
+  Scenario: A recipient whose name §6a withheld is addressed without one being invented
+    Given a person the viewer may see but whose name was not disclosed
+    When the compose sheet writes its title, privacy line, button, and toast
+    Then each names "their board" rather than a placeholder
+    And no sentence contains a rendered null or a dangling possessive
+
+  @unit
+  # @issue:88
+  Scenario: The pin control is offered only to a direct connection
+    Given a bulletin author on the viewer's own graph
+    When the detail sheet decides what to offer
+    Then a first-degree author gets the pin control
+    And an author further away gets the intro hint naming the degree already visible
+    And an author absent from the graph gets the requirement, naming no degree
+
+  @unit
+  # @issue:88
+  Scenario: Notes join the board by time and are never returned by a search
+    Given the viewer's bulletins and the notes pinned to their board
+    When the board composes its rows
+    Then the two kinds are interleaved newest first, each keyed apart from the other
+    And no note appears at all while a query is active
+
+  @unit
+  # @issue:88
+  Scenario: A refused pin keeps the note on screen and discloses nothing about the recipient
+    Given a queued note the server refused
+    When the settled queue row is read back
+    Then an unreachable recipient is answered with the requirement, not with a fact about them
+    And a failed or conflicted row is never rendered as a success
+    And a code this build has no copy for is shown as itself
+
+  @unit
+  # @issue:88
+  Scenario: A queued note replays through the path that deduplicates it
+    Given the client's queued mutation types and the drainer's replay routes
+    When the two are compared
+    Then every queued type has exactly one route
+    And note.pin is routed through sync.submitMutations rather than replayed directly

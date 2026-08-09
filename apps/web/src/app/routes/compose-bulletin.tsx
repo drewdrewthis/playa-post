@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, type FormEvent, type JSX, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 
 import { BULLETIN_TYPE, type BulletinType } from '@playa-post/contracts';
 
@@ -16,6 +16,7 @@ import {
   type ExpiryPreset,
 } from '../bulletins/compose-bulletin-draft';
 import { describeSubmissionOutcome } from '../bulletins/compose-bulletin-outcome';
+import { ComposeNote } from '../notes/compose-note';
 import { useOffline } from '../offline/offline-provider';
 import { queueMutation } from '../offline/pending-mutations';
 
@@ -33,6 +34,34 @@ const BULLETIN_TYPES: readonly BulletinType[] = Object.values(BULLETIN_TYPE);
 const TOAST_HOLD_MS = 1200;
 
 /**
+ * `/board/new` — one route, two things you can write.
+ *
+ * `?noteTo=<personId>` is the whole switch, and it is a *route* parameter rather than a
+ * mode toggle inside one form because the two compose different things: the note sheet
+ * has one field and the bulletin sheet has six controls, and the recipient is decided
+ * before either opens (the comp's `noteTo`, set by the button that navigates here).
+ * Nothing offers to turn one into the other mid-draft.
+ *
+ * ⚠ **Dispatched here rather than branched inside the form.** The bulletin form holds
+ * eight hooks; a `?noteTo` check above them would make every one of them conditional,
+ * which React forbids and the linter catches. Two components, one route.
+ */
+export function ComposeBulletinRoute(): JSX.Element {
+  const [searchParams] = useSearchParams();
+  const noteTo = searchParams.get('noteTo');
+
+  // `?noteTo=` with nothing after it is not a recipient. It reaches the bulletin sheet,
+  // which is the harmless reading of a truncated link — a note screen addressed to
+  // nobody could only ever be refused.
+  return noteTo === null || noteTo === '' ? (
+    <ComposeBulletinForm />
+  ) : (
+    // A new recipient is a new sheet: no typed draft may survive a subject change.
+    <ComposeNote key={noteTo} recipientId={noteTo} />
+  );
+}
+
+/**
  * Compose a bulletin — the comp's "Post a bulletin" sheet.
  *
  * ⚠ **Always through the offline queue**, online or not. Posting straight to the
@@ -41,9 +70,9 @@ const TOAST_HOLD_MS = 1200;
  * route nobody has tested. The drain immediately afterwards is what makes the
  * connected case feel immediate.
  *
- * `bulletin.create` is the mutation type with a real handler behind
- * `sync.submitMutations`, so a duplicate submission of the same envelope comes back
- * `replayed` and produces exactly one bulletin.
+ * `bulletin.create` has a real handler behind `sync.submitMutations`, so a duplicate
+ * submission of the same envelope comes back `replayed` and produces exactly one
+ * bulletin.
  *
  * **The screen only leaves on a success.** Where it used to navigate unconditionally, it
  * now reads the settled queue row back and stays put on a refusal, showing what the
@@ -55,7 +84,7 @@ const TOAST_HOLD_MS = 1200;
  * `/board/new`; it takes the sheet's shape without taking the router's. Turning it into a
  * true overlay is a change to the shell and the router, not to this file.
  */
-export function ComposeBulletinRoute(): JSX.Element {
+function ComposeBulletinForm(): JSX.Element {
   const navigate = useNavigate();
   const { database, syncRunner } = useOffline();
   const [type, setType] = useState<BulletinType>(BULLETIN_TYPE.request);

@@ -14,6 +14,8 @@ import { BulletinCard } from '../bulletins/bulletin-card';
 import { BulletinDetailSheet } from '../bulletins/bulletin-detail-sheet';
 import { describeHideFailure } from '../moderation/hide-failure';
 import { ReportAbuseSheet } from '../moderation/report-abuse-sheet';
+import { buildBoardItems } from '../notes/note-board-items';
+import { NoteCard } from '../notes/note-card';
 import { useOffline } from '../offline/offline-provider';
 import { forgetBoardCard, queueMutation } from '../offline/pending-mutations';
 import { saveViewFailureMessage, seedSavedViewName } from '../views/saved-view-list';
@@ -118,6 +120,20 @@ export function BoardRoute(): JSX.Element {
   const mine = useQuery({
     queryKey: ['bulletins', 'listMine'],
     queryFn: () => api.query('bulletins.listMine', undefined),
+  });
+
+  /*
+   * The notes pinned to this viewer's board (#88). No parameter and no viewer id: there
+   * is exactly one note list a caller may read, so there is nothing to name
+   * (`notes.router.ts`, ADR-0002 §5a).
+   *
+   * ⚠ Not unioned into `cards`. A note is not a bulletin, has no `type`, no title, and no
+   * author-versus-viewer read models to reconcile; `buildBoardItems` orders the two kinds
+   * into one list without flattening either into the other's shape.
+   */
+  const notes = useQuery({
+    queryKey: ['notes', 'list'],
+    queryFn: () => api.query('notes.list', undefined),
   });
 
   // The offline cache is unioned in so a card written while offline — or one whose
@@ -284,6 +300,11 @@ export function BoardRoute(): JSX.Element {
     .filter((card) => !hidden.includes(card.id))
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 
+  // Bulletins and notes in one column, newest first — and no notes at all while a query
+  // is active, because nothing a person writes in a note is searchable and a client that
+  // matched them locally would be inventing the grammar the server refused to build.
+  const items = buildBoardItems({ cards: visible, notes: notes.data ?? [], queryActive });
+
   // One clock reading per render, shared by every card and the sheet, so no two ages on
   // screen are measured against different moments. Nothing re-reads it on a timer: the
   // board refetches often enough that a minute's drift on an idle screen is invisible
@@ -303,6 +324,8 @@ export function BoardRoute(): JSX.Element {
         onSearchChange={setSearch}
         filter={filter}
         onFilterChange={setFilter}
+        // ⚠ Bulletins matched, not rows on screen: a search never reaches a note, so
+        // counting them would report matches against a query they were never tested by.
         matchCount={board.isSuccess ? visible.length : null}
         saving={saveView.isPending}
         // ⚠ The *settled* query, not the raw field. `BoardSearch` knows a query is being
@@ -380,21 +403,27 @@ export function BoardRoute(): JSX.Element {
         <p className="form__error" data-testid="board-error">
           {boardErrorMessage(board.error)}
         </p>
-      ) : visible.length === 0 ? (
+      ) : items.length === 0 ? (
         <p className="screen__empty">
           {queryActive ? 'Nothing matches. Quiet playa.' : 'Nothing on your board yet. Quiet playa.'}
         </p>
       ) : (
         <ul className="board-list">
-          {visible.map((card) => (
-            <li key={card.id}>
-              <BulletinCard
-                card={card}
-                now={now}
-                onOpen={(opened) => {
-                  setOpenBulletinId(opened.id);
-                }}
-              />
+          {items.map((item) => (
+            <li key={item.key}>
+              {item.kind === 'note' ? (
+                /* No `onOpen`: a note carries its whole text on the card and there is no
+                   `notes.getById` to open — see `notes/note-card.tsx`. */
+                <NoteCard note={item.note} now={now} />
+              ) : (
+                <BulletinCard
+                  card={item.card}
+                  now={now}
+                  onOpen={(opened) => {
+                    setOpenBulletinId(opened.id);
+                  }}
+                />
+              )}
             </li>
           ))}
         </ul>

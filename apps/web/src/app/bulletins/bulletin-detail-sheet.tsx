@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState, type JSX, type PointerEvent } from 'react';
+import { Link } from 'react-router';
 
 import { useApi } from '../api/api-provider';
 import { applicationErrorCode } from '../api/client';
+import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
+import { describeNoteReach, type NoteReach } from '../notes/note-reach';
 import { PersonIdentity } from '../people/person-identity';
 
 import type { BoardCardView } from './board-card-view';
@@ -26,12 +29,19 @@ const DISMISS_DRAG_DISTANCE = 80;
  * Four ways out, because a sheet that traps someone is worse than no sheet: the CLOSE
  * control, Escape, a tap on the scrim, and a drag downwards.
  *
- * **Pin-a-note and Request-intro are deliberately absent.** The comp puts both here and
- * they are its signature "reach someone" gestures, but there is no server concept of
- * either, *and* their comp conditions are degree tests (`deg === 1`, `deg === 2`) this
- * client cannot evaluate — `BulletinAuthor` carries a disclosure, not a distance. A
- * disabled button would advertise a control whose enabling condition cannot even be
- * computed, so the sheet says plainly that replying is not built instead.
+ * **Pin-a-note is here; Request-intro is still not.** This is the comp's signature "reach
+ * someone" gesture, and #88 gave it a server concept: `notes.pin`, gated on a first-degree
+ * connection. The comp's condition is a degree test (`deg === 1`) and `BulletinAuthor`
+ * carries a disclosure rather than a distance, so the degree is read from `graph.list` —
+ * the payload that does carry one, and which the app is usually already holding.
+ * Requesting an intro is issue #89 and has no procedure behind it, so the second-degree
+ * case is the comp's hint and no button.
+ *
+ * ⚠ **The degree read here decides what is *offered*, never what is *allowed*.** The
+ * authorization lives inside the insert statement (`postgres-note.repository.ts`), which
+ * refuses a non-first-degree recipient identically to one who does not exist. A person
+ * whose degree changes between this read and the write still gets the server's answer,
+ * rendered by the compose screen.
  */
 export function BulletinDetailSheet({
   card,
@@ -57,6 +67,16 @@ export function BulletinDetailSheet({
   const detail = useQuery({
     queryKey: ['bulletins', 'getById', card.id],
     queryFn: () => api.query('bulletins.getById', { bulletinId: card.id }),
+  });
+
+  /*
+   * The same key the graph screen reads under, so opening a sheet after visiting the
+   * graph costs nothing. `BulletinAuthor` carries no degree; this is the only payload
+   * that does.
+   */
+  const graph = useQuery({
+    queryKey: GRAPH_LIST_QUERY_KEY,
+    queryFn: () => api.query('graph.list', undefined),
   });
 
   useEffect(() => {
@@ -95,6 +115,22 @@ export function BulletinDetailSheet({
 
   const authorLine =
     author === undefined ? (card.own ? 'You' : null) : <PersonIdentity identity={author} />;
+
+  /*
+   * Whether to offer pinning a note back, and to whom.
+   *
+   * `null` while the graph read is unsettled, and for one's own post. A pending read
+   * rendering as "not connected" would flash the intro hint at somebody who is in fact a
+   * direct connection — the same four-states discipline `people/person-sheet.tsx` keeps.
+   */
+  const people = graph.data?.people;
+  const noteAffordance =
+    card.own || author === undefined || people === undefined
+      ? null
+      : {
+          recipientId: author.userId,
+          reach: describeNoteReach(people.find((person) => person.userId === author.userId)),
+        };
 
   function endDrag(): void {
     if (dragOrigin.current === null) {
@@ -255,13 +291,48 @@ export function BulletinDetailSheet({
           )}
         </div>
 
-        {card.own ? null : (
-          <p className="detail-sheet__unbuilt">
-            There is no way to reply yet — pinning a note to someone&rsquo;s board
-            arrives in a later release.
-          </p>
+        {noteAffordance === null ? null : (
+          <PinNoteFooter
+            recipientId={noteAffordance.recipientId}
+            reach={noteAffordance.reach}
+          />
         )}
       </section>
     </>
+  );
+}
+
+/**
+ * The comp's footer for reaching the author: a button when you may, one line when you
+ * may not (`design/Playa Post.dc.html:285,745-746`).
+ *
+ * A `Link` rather than a button with a handler, because pinning is a *navigation* — the
+ * compose sheet is the `/board/new` route, exactly as the shell's FAB reaches it. That
+ * also means it opens in a new tab if somebody middle-clicks, which a handler would
+ * silently swallow.
+ */
+function PinNoteFooter({
+  recipientId,
+  reach,
+}: {
+  readonly recipientId: string;
+  readonly reach: NoteReach;
+}): JSX.Element {
+  if (reach.kind === 'can-pin') {
+    return (
+      <Link
+        className="button button--primary detail-sheet__pin-note"
+        data-testid="bulletin-detail-pin-note-link"
+        to={`/board/new?noteTo=${encodeURIComponent(recipientId)}`}
+      >
+        {reach.label}
+      </Link>
+    );
+  }
+
+  return (
+    <p className="detail-sheet__intro-hint" data-testid="bulletin-detail-intro-hint">
+      {reach.hint}
+    </p>
   );
 }
