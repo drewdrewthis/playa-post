@@ -16,10 +16,10 @@ import { expect, test, type Page } from '@playwright/test';
  * `vertical-slice-e2e.spec.ts` uses for `E2E_BOARD_SCREENSHOT_PATH`, so a normal run
  * writes nothing.
  *
- * ⚠ **Nothing here asserts a privacy limit**, because this build ships none: the two
- * standing limits are deferred until their default is settled (see the route's own note).
- * When they land they bring their own coverage — do not reinstate assertions here against
- * controls that are not on the screen.
+ * The **Who-can-see-you dial** (PR #78) is the first of the two standing privacy limits
+ * to ship — its default is settled ('sixth', the six-degrees principle) and its cycle is
+ * asserted below against the real server. The trust dial remains deferred and asserted
+ * nowhere, on purpose.
  *
  * Advisory, like the rest of `test:e2e` (`docs/engineering/l5-plan.md` D2): it is not one
  * of the nine required CI jobs.
@@ -87,6 +87,38 @@ test.describe('the You screen renders in both themes', () => {
     await expect(page.getByTestId('profile-counts')).toBeVisible();
     await expect(page.getByTestId('invite-share-button')).toBeVisible();
     await capture(page, 'dark');
+  });
+
+  /**
+   * The dial round-trips through the real server: every click is an
+   * `identity.visibility.set` mutation, and the label the next assertion reads comes
+   * from the row the server stored, not from optimistic local state. Four clicks walk
+   * the whole scale and land back on the 'sixth' default, so the suite leaves the
+   * user's setting exactly where it found it.
+   */
+  test("cycles the Who-can-see-you dial through the real server and back to 'sixth'", async ({
+    page,
+  }) => {
+    await bootstrapSession(page, requireEnv('E2E_USER_A_ACCESS_TOKEN'));
+    await page.goto('/you');
+
+    const dial = page.getByTestId('visibility-dial');
+    await expect(dial).toHaveText('UP TO 6TH°');
+
+    const directory = process.env['E2E_YOU_SCREENSHOT_DIR'];
+    if (directory !== undefined && directory !== '') {
+      await dial.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${directory}/m5-visibility-dial-sixth.png`, fullPage: true });
+    }
+
+    for (const label of ['1ST° ONLY', 'UP TO 2ND°', 'UP TO 3RD°', 'UP TO 6TH°']) {
+      await dial.click();
+      await expect(dial).toHaveText(label);
+    }
+
+    if (directory !== undefined && directory !== '') {
+      await page.screenshot({ path: `${directory}/m5-visibility-dial-cycled.png`, fullPage: true });
+    }
   });
 
   /**
