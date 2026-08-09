@@ -29,18 +29,24 @@ export interface BoardFilterChip {
  * the comp's own dictionary has `thanks`, whose plural is `Thanks`.
  */
 const TYPE_CHIP_LABELS: Record<BulletinType, string> = {
+  offer: 'Offers',
   request: 'Requests',
+  event: 'Events',
+  collab: 'Collabs',
+  thanks: 'Thanks',
+  intro: 'Intros',
 };
 
 /**
  * The chip row: "All", then one chip per postable bulletin type.
  *
  * The comp draws eight chips (`All / Offers / Requests / Events / Collabs / Thanks /
- * Intros / Note`). Only the types in `BULLETIN_TYPE` exist — `request` alone today —
- * and this row is deliberately *narrower than the grammar*: the server's `type:`
- * vocabulary accepts seven values so that a filter for a type nothing has been written
- * as returns zero rows rather than an error, but offering that as a **chip** advertises
- * a filter whose only possible answer is an empty board.
+ * Intros / Note`). Only the types in `BULLETIN_TYPE` get a chip — the six postable
+ * ones (#87) — and this row is deliberately *narrower than the grammar*: the server's
+ * `type:` vocabulary also accepts `update` so that a filter for a type no person can
+ * compose returns zero rows rather than an error, but offering that as a **chip**
+ * advertises a filter whose only possible answer is an empty board. `note` is never a
+ * value at all (decision D2).
  */
 export const BOARD_FILTER_CHIPS: readonly BoardFilterChip[] = [
   { filter: 'all', label: 'All' },

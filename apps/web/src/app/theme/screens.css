@@ -468,8 +468,28 @@
   color: var(--pp-bulletin-tint, var(--pp-accent));
 }
 
+.bulletin-card[data-type='offer'] {
+  --pp-bulletin-tint: var(--pp-tint-offer);
+}
+
 .bulletin-card[data-type='request'] {
   --pp-bulletin-tint: var(--pp-tint-request);
+}
+
+.bulletin-card[data-type='event'] {
+  --pp-bulletin-tint: var(--pp-tint-event);
+}
+
+.bulletin-card[data-type='collab'] {
+  --pp-bulletin-tint: var(--pp-tint-collab);
+}
+
+.bulletin-card[data-type='thanks'] {
+  --pp-bulletin-tint: var(--pp-tint-thanks);
+}
+
+.bulletin-card[data-type='intro'] {
+  --pp-bulletin-tint: var(--pp-tint-intro);
 }
 
 .bulletin-card__title {

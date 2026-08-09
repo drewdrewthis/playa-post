@@ -73,11 +73,16 @@
   --pp-ok-bg: rgb(119 116 58 / 14%);
 
   /*
-   * Per-bulletin-type tint (the prototype's `tintsL`/`tintsD` maps). Only `request`
-   * exists in `BULLETIN_TYPE` today, so only `request` is declared — a token per type
-   * the contract does not have yet would be a palette for a product that is not built.
+   * Per-bulletin-type tint (the prototype's `tintsL`/`tintsD` maps) — one token per
+   * postable type in `BULLETIN_TYPE` (#87). The grammar's `update` has no token: no
+   * person can post one, so no card ever needs its tint.
    */
+  --pp-tint-offer: #77743a;
   --pp-tint-request: #b45336;
+  --pp-tint-event: #c58a2a;
+  --pp-tint-collab: #5f7d7b;
+  --pp-tint-thanks: #9c5a68;
+  --pp-tint-intro: #6b6089;
 
   /* Spacing */
   --pp-space-1: 0.25rem;
@@ -171,7 +176,12 @@
   --pp-ok: #56e0c0;
   --pp-ok-bg: rgb(86 224 192 / 12%);
 
+  --pp-tint-offer: #56e0c0;
   --pp-tint-request: #ff7eb6;
+  --pp-tint-event: #ffc466;
+  --pp-tint-collab: #7ea8ff;
+  --pp-tint-thanks: #c99aff;
+  --pp-tint-intro: #66d9e8;
 }
 
 *,

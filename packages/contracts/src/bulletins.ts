@@ -1,13 +1,19 @@
 /**
- * The bulletin types a client may **post** in M2.
+ * The bulletin types a client may **post** — the comp's compose vocabulary, in the
+ * comp's chip order (#87).
  *
- * Deliberately smaller than the board grammar's seven types: the grammar accepts a
- * filter for a type nothing has written yet (it must return zero rows rather than
- * become an oracle for what has shipped), while this is the closed set the create
- * procedure's schema enforces.
+ * Deliberately smaller than the board grammar's seven types: `update` is filterable
+ * but never postable — a network update is something the system writes, not something
+ * a person composes. The grammar list stays separate so a filter for a type nothing
+ * has written yet returns zero rows rather than becoming an oracle for what shipped.
  */
 export const BULLETIN_TYPE = {
+  offer: 'offer',
   request: 'request',
+  event: 'event',
+  collab: 'collab',
+  thanks: 'thanks',
+  intro: 'intro',
 } as const;
 
 /** One of {@link BULLETIN_TYPE}'s values. */
