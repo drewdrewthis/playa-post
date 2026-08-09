@@ -4,6 +4,7 @@ import { Navigate, useLocation } from 'react-router';
 
 import { useApi } from '../api/api-provider';
 import { procedureErrorCode } from '../api/client';
+import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
 import { hasSeenWelcome } from '../welcome/welcome-steps';
 
 import { useSession } from './session-provider';
@@ -59,7 +60,7 @@ export function RequireSession({ children }: { readonly children: ReactNode }): 
   const location = useLocation();
 
   const probe = useQuery({
-    queryKey: ['graph', 'list'],
+    queryKey: GRAPH_LIST_QUERY_KEY,
     queryFn: () => api.query('graph.list', undefined),
     enabled: status === 'signed-in',
   });

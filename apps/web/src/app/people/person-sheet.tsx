@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type JSX } from 'react';
 import type { Person } from '@playa-post/contracts';
 
 import { useApi } from '../api/api-provider';
+import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
 
 import { PersonIdentity, trustLabel } from './person-identity';
 
@@ -42,8 +43,9 @@ export function PersonSheet({
   const sheetRef = useRef<HTMLElement>(null);
   const otherUserId = person.userId;
 
+  const connectionKey = ['connection', otherUserId] as const;
   const connection = useQuery({
-    queryKey: ['connection', otherUserId],
+    queryKey: connectionKey,
     queryFn: () => api.query('connections.connection.get', { otherUserId }),
   });
 
@@ -64,8 +66,8 @@ export function PersonSheet({
        * invalidation refetches every query in the app because one slider was saved.
        */
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['connection', otherUserId] }),
-        queryClient.invalidateQueries({ queryKey: ['graph', 'list'] }),
+        queryClient.invalidateQueries({ queryKey: connectionKey }),
+        queryClient.invalidateQueries({ queryKey: GRAPH_LIST_QUERY_KEY }),
       ]);
     },
   });
@@ -148,7 +150,12 @@ export function PersonSheet({
          * (B6) and nothing else.
          */}
         {connection.isPending ? (
-          <p className="person-sheet__notice">Loading&hellip;</p>
+          // `role="status"`: the sheet has already taken focus, so without a live
+          // region a screen-reader user hears the title and then silence while the
+          // content swaps in. The error arm keeps `role="alert"`'s higher urgency.
+          <p className="person-sheet__notice" role="status">
+            Loading&hellip;
+          </p>
         ) : connection.isError ? (
           <p className="person-sheet__notice" role="alert">
             That did not load. Close the sheet and try again.

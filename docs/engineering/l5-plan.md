@@ -252,11 +252,11 @@ New dependencies, exact versions (verified against the registry this session):
 | `@supabase/supabase-js` | `2.112.2` | `apps/web` deps | Sign-in + session refresh (D3). |
 | `@playwright/test` | `1.62.1` | root devDeps | The browser proof. |
 
-Routing: `createBrowserRouter` with five routes — `/signin`, `/onboarding`, `/` (graph home),
-`/board`, `/board/new`. The person sheet is **not** a route: it is an overlay over the graph
-(the comp's `sel` selection — a route-based sheet unmounted the graph and was reverted in
-PR #80). One `<RequireSession>` wrapper redirecting `anonymous → /signin` and
-`not-onboarded → /onboarding`.
+Routing: `createBrowserRouter`; `apps/web/src/app/router.tsx` is the authority on which
+routes exist — a count here would rot, and has twice. The person sheet is **not** a route: it
+is an overlay over the graph (the comp's `sel` selection — a route-based sheet unmounted the
+graph and was reverted in PR #80). One `<RequireSession>` wrapper redirecting
+`anonymous → /signin` and `not-onboarded → /onboarding`.
 
 Theme: light-only CSS custom properties in `apps/web/src/app/theme/tokens.css`, values read
 from `design/Playa Post.dc.html` (repo-map: *"never copy its structure — but the deployed UI
@@ -413,7 +413,7 @@ root. No component calls `fetch` directly.
 renders the structured handle errors from M2-AC25 by code (reserved / duplicate / confusable /
 charset / length) — the codes are the server's; the copy is the client's.
 
-**S5 — shell, routing, theme.** `createBrowserRouter` with the five routes; tokens from the
+**S5 — shell, routing, theme.** `createBrowserRouter` with the routes (see `router.tsx`); tokens from the
 design prototype; the pending-badge slot in the shell header (populated in S8).
 
 **S6 — graph home + person sheet.** `graph.list` → first-degree list (`degree === 1`),

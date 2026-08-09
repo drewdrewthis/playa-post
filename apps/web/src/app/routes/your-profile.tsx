@@ -8,6 +8,7 @@ import type { VisibleToDistance } from '@playa-post/contracts';
 import { useApi } from '../api/api-provider';
 import { useSession } from '../auth/session-provider';
 import { summariseGraph, VIEWER_DEGREE } from '../graph/graph-counts';
+import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
 import { useOffline } from '../offline/offline-provider';
 import { describeQueuedMutation, sortedQueue } from '../offline/sync-queue-view';
 import { inviteShareText, inviteUrl } from '../profile/invite-share';
@@ -55,7 +56,7 @@ export function YourProfileRoute(): JSX.Element {
   // for "who am I" would be a second answer to a question `graph.list` has answered since
   // M2.7 — and two answers eventually disagree.
   const graph = useQuery({
-    queryKey: ['graph', 'list'],
+    queryKey: GRAPH_LIST_QUERY_KEY,
     queryFn: () => api.query('graph.list', undefined),
   });
 

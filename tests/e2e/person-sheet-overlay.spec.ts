@@ -81,10 +81,20 @@ test.describe('tapping a graph node', () => {
         });
       }
 
-      // Trust is settable from the sheet, and the sheet says so afterwards (AC3): the
-      // saved value round-trips through the server back into the visible label.
+      // Trust is settable from the sheet (AC3). The sheet's own label is bound to the
+      // local draft — it reads 60 the moment the slider moves, saved or not — so the
+      // save is proven by what only the server can cause: the graph's TRUSTED count
+      // behind the scrim flips to 1 (60 ≥ the threshold of 50) when the save lands and
+      // the `graph.list` invalidation refetches.
       await pageA.getByRole('slider', { name: 'Trust' }).fill('60');
       await pageA.getByTestId('person-sheet-save-trust-button').click();
+      await expect(pageA.getByTestId('graph-counts')).toHaveText(/· 1 TRUSTED/);
+
+      // And it round-trips: a fresh page load reads trust back from the server, not
+      // from anything this tab remembers. This assertion fails if the mutation is
+      // neutered — the label on a fresh mount renders the refetched connection.
+      await pageA.reload();
+      await pageA.getByTestId(`graph-connection-node-${userBHandle}`).click();
       await expect(pageA.getByTestId('person-sheet-trust-value')).toHaveText('Your trust: 60');
 
       // CLOSE puts the viewer back on the graph they never left.
