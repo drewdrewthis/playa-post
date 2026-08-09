@@ -1,5 +1,6 @@
 import type { Handle } from './handle';
 import type { User } from './user';
+import type { VisibleToDistance } from './visible-to-distance';
 
 /**
  * Everything needed to create one `app.users` row.
@@ -39,6 +40,15 @@ export interface UserRepository {
   findByAuthUserId(authUserId: string): Promise<User | null>;
 
   /**
+   * The user behind an internal `app.users.id` a layer above already resolved.
+   *
+   * Exists for reads that start from a verified actor rather than from a token —
+   * the actor carries the internal id, and re-deriving it from `auth_user_id` would
+   * pay ADR-0008 rule 8's one-hop cost a second time on the same request.
+   */
+  findById(userId: string): Promise<User | null>;
+
+  /**
    * The holder of a handle, compared case-insensitively.
    *
    * `handle` is `citext`, so equality is already case-insensitive in the database and
@@ -65,4 +75,16 @@ export interface UserRepository {
    *   already has a user — the same race, on the other unique constraint.
    */
   add(user: NewUser): Promise<User>;
+
+  /**
+   * Store this user's own "who can see me at all" setting and return the stored row.
+   *
+   * Keyed on the internal `app.users.id` the caller already resolved from its verified
+   * token — never on a client-supplied identifier (ADR-0002:180-181).
+   *
+   * Returns `null` if no such user exists, for the same reason the finders do: the
+   * row can be erased between resolving the actor and this write, and that is an
+   * ordinary answer rather than a 500.
+   */
+  setVisibleToDistance(userId: string, distance: VisibleToDistance): Promise<User | null>;
 }

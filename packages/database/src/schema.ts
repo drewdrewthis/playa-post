@@ -224,6 +224,7 @@ export interface AppUsers {
   id: Generated<string>;
   status: Generated<string>;
   version: Generated<number>;
+  visible_to_distance: Generated<string>;
 }
 
 export interface DB {

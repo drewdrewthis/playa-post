@@ -69,6 +69,13 @@ describe('app.users migration (ADR-0008:22-34, M1b.5/M2.4)', () => {
       expect(byName['status']?.column_default).toContain('active');
       expect(byName['version']?.column_default).toContain('1');
 
+      // 20260809140000 added the "who can see you at all" radius; 20260810090000 set
+      // its ceiling and default to 'sixth' — the six-degrees principle, the product
+      // owner's call: the most open a person can be is the whole small world, never
+      // an unbounded 'anyone'.
+      expect(byName['visible_to_distance']?.is_nullable).toBe('NO');
+      expect(byName['visible_to_distance']?.column_default).toContain('sixth');
+
       expect(Object.keys(byName).sort()).toEqual(
         [
           'id',
@@ -81,6 +88,7 @@ describe('app.users migration (ADR-0008:22-34, M1b.5/M2.4)', () => {
           'deactivated_at',
           'erased_at',
           'version',
+          'visible_to_distance',
         ].sort(),
       );
     });

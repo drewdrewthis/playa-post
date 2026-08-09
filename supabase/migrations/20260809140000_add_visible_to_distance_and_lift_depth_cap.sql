@@ -1,3 +1,48 @@
+-- Multi-hop visibility, and the setting that bounds it.
+--
+-- Two changes that only make sense together:
+--
+-- 1. `app.visible_people` stops clamping the traversal to one hop. ADR-0004 decision 2
+--    says there is no product depth cap and that `max_depth` is an operational safety
+--    bound; the `least(max_depth, 1)` installed by 20260805234326 was M2's feature scope,
+--    which the ADR said M5 would delete rather than raise. It is deleted here.
+--
+-- 2. `app.users` gains `visible_to_distance` — the person's own answer to "who can see me
+--    at all", enforced inside the same function. Without it, lifting the cap would put
+--    every person in the network into every other person's result with no way to opt out.
+--
+-- ⚠ **Known, accepted deviation from ADR-0004 decision 4.** Ghost surrogate IDs are still
+-- not implemented, so a `topology_only` person is returned carrying their real
+-- `app.users.id` and is correlatable across views. Before the cap was lifted this only
+-- reached first-degree connections the viewer already knew; it now reaches everyone within
+-- `max_depth` who has not narrowed their own setting. The product owner was shown this
+-- specific trade and took it deliberately to get multi-hop visibility into alpha. It is
+-- recorded here so the next reader finds a decision rather than a bug. Closing it is M5 B1.
+--
+-- Forward-only: 20260805234326 keeps its original text and is never edited. This migration
+-- carries the new body, and visible-people-migration.integration.test.ts asserts the
+-- checked-in modules/graph/persistence/sql/visible-people.sql appears verbatim in exactly
+-- one migration — which, once this lands, is this one.
+
+-- `text` with a check constraint rather than an enum: ADR-0012 §2 already models
+-- disclosure as a text vocabulary, and widening a check constraint is a plain DDL
+-- statement where widening an enum is a type change other objects depend on.
+--
+-- `default 'anyone'` is a product decision, not a neutral one. The prototype's dial
+-- defaults to a narrower setting, but this column lands on an existing network whose
+-- members never chose anything — and silently hiding people who had been visible would
+-- read as data loss rather than as privacy. New accounts start open and narrow by choice;
+-- when real users arrive that default deserves revisiting.
+alter table app.users
+  add column visible_to_distance text not null default 'anyone';
+
+-- Named, so a future migration can widen it by name rather than by hunting for a
+-- system-generated constraint. The four values are the dial in design/Playa Post.dc.html,
+-- least-restrictive last so the ordering reads as distance.
+alter table app.users
+  add constraint users_visible_to_distance_check
+  check (visible_to_distance in ('first', 'second', 'third', 'anyone'));
+
 -- app.visible_people — the one definition of "who can this viewer reach".
 --
 -- ADR-0004 decisions 1-8, ADR-0002 §5 (viewer_id passed explicitly), §6 (one
@@ -85,19 +130,16 @@ as $$
     select e.target_id, t.degree + 1
       from traversal t
       join edge e on e.source_id = t.person_id
-     -- `max_depth` is the operational safety bound ADR-0004 decision 2 always intended,
-     -- never a product depth cap — the M2 `least(max_depth, 1)` clamp was feature scope
-     -- and is gone. The `least(..., 6)` here is different in kind: six degrees is the
-     -- *product ceiling* of the visibility scale itself (`visible_to_distance` tops out
-     -- at 'sixth'), so no row found past degree 6 can survive `reachable`'s filter.
-     -- Clamping the traversal there changes no output; it only stops the recursion
-     -- doing work whose results are unconditionally discarded.
+     -- `max_depth` alone, as ADR-0004 decision 2 always intended: an operational safety
+     -- bound, never a product depth cap. The `least(max_depth, 1)` that used to sit here
+     -- was M2's feature scope, and the ADR said M5 would delete it rather than raise the
+     -- default — so it is deleted rather than raised.
      --
      -- ⚠ This bound is the traversal's, not a person's. How far *this viewer* may travel
      -- is `max_depth`; how far away someone may stand and still see *you* is your own
      -- `visible_to_distance`, applied in `reachable` below. Conflating the two would let
      -- one person's privacy setting shorten everybody else's view of the network.
-     where t.degree + 1 <= least(max_depth, 6)
+     where t.degree + 1 <= max_depth
   ),
   -- One row per person at their shortest distance, then each person's own reach
   -- setting, then the node budget. Ordering before the limit is what makes truncation
@@ -111,12 +153,8 @@ as $$
   --
   -- ⚠ It fails **closed**: only the four values below are honoured, and anything else —
   -- a value written by a future migration, a typo — collapses to first-degree-only
-  -- rather than to the ceiling. A privacy setting whose unknown state is "visible to
+  -- rather than to `anyone`. A privacy setting whose unknown state is "visible to
   -- everybody" is a privacy setting that fails in the one direction that matters.
-  --
-  -- The scale tops out at 'sixth', not "anyone": six degrees is the product's own
-  -- principle of reach, so the most open a person can be is the whole small world,
-  -- not an unbounded graph walk.
   --
   -- The filter runs BEFORE `limit node_budget` so that hidden people do not spend
   -- budget and push visible ones off the far edge of the result.
@@ -132,14 +170,9 @@ as $$
     select t.person_id, pg_catalog.min(t.degree) as degree
       from traversal t
       join app.users setter on setter.id = t.person_id
-     -- Status is filtered here, not only in the final select: an inactive person must
-     -- not spend a node_budget slot and push an active one off the far edge, for the
-     -- same reason a person past their own radius must not. The final `where u.status`
-     -- stays as the fail-closed backstop (ADR-0002 B11), but the budget is counted here.
-     where setter.status = 'active'
      group by t.person_id, setter.visible_to_distance
     having pg_catalog.min(t.degree) <= case setter.visible_to_distance
-             when 'sixth'  then 6
+             when 'anyone' then 2147483647
              when 'third'  then 3
              when 'second' then 2
              else 1

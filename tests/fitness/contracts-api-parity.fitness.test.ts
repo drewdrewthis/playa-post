@@ -96,6 +96,8 @@ type OutputParity = {
 const inputParity: InputParity = {
   'health.check': true,
   'identity.completeOnboarding': true,
+  'identity.visibility.get': true,
+  'identity.visibility.set': true,
   'connections.invitations.create': true,
   'connections.invitations.open': true,
   'connections.connection.accept': true,
@@ -124,6 +126,8 @@ const inputParity: InputParity = {
 const outputParity: OutputParity = {
   'health.check': true,
   'identity.completeOnboarding': true,
+  'identity.visibility.get': true,
+  'identity.visibility.set': true,
   'connections.invitations.create': true,
   'connections.invitations.open': true,
   'connections.connection.accept': true,

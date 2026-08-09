@@ -233,3 +233,29 @@
   align-self: flex-start;
   margin-top: var(--pp-space-2);
 }
+
+/*
+ * The Who-can-see-you dial: the comp's tappable privacy pill, as a real button.
+ * Reuses `.profile__pill--good`'s palette; only the affordances a button needs are
+ * added here.
+ */
+.profile__dial {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.profile__dial:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+/* The comp's "REPLAY WELCOME →" line: an accent-coloured text link, not a button. */
+.profile__replay {
+  align-self: flex-start;
+  font-size: var(--pp-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--pp-accent);
+  text-decoration: none;
+}

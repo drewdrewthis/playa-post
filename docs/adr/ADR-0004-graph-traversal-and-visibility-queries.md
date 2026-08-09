@@ -52,6 +52,20 @@ No projections, no cache, no graph database in v1.**
    mutual count — only their depth from the viewer (1st/2nd/3rd) and the restricted adjacency of
    decision 5. ("Depth" here is distance from the viewer; it is not a count of the ghost's connections,
    which decision 5 withholds.)
+
+   > **Accepted deviation as of PR #78 (2026-08-09):** ghost surrogate IDs are not yet
+   > implemented — `topology_only` rows returned by `app.visible_people` carry the real
+   > `app.users.id`, so a client holding two views of the network can correlate a hidden
+   > person against a named one. The product owner was shown this trade and accepted it
+   > explicitly for alpha in order to ship multi-hop visibility now. What *is* enforced
+   > is `visible_to_distance` (each person's own "who can see you" radius, ceiling
+   > `sixth` per the six-degrees principle): past that distance a person is **absent
+   > from the result entirely** — no row, not an unnamed node — which is the weaker half
+   > of this decision doing the work the surrogate would otherwise do. The deviation is
+   > also recorded in migration `20260810090000_visibility_ceiling_sixth.sql` and in
+   > `modules/graph/persistence/sql/visible-people.sql`'s header. Implementing the
+   > surrogate closes this deviation; nothing else in this decision changes.
+
 5. **Ghost adjacency is restricted to fully-visible neighbours; topology-only nodes carry no counts.**
    The surrogate ID (decision 4) makes a hidden person non-correlatable *across* viewers; it does nothing
    about re-identification *within* one viewer's own view — a ghost adjacent to exactly {Moss, Juniper,
@@ -93,7 +107,7 @@ test checked in at M2 and run in CI as a non-blocking report, blocking in M5.
 | **Graph database (Neo4j / AGE)** | A second datastore, second consistency model, and second authorization surface for a graph that is small and shallow. PostgreSQL is named as the source of truth (PDF §8). |
 | **Postgres `ltree` / closure table** | Both model hierarchies; this is a general undirected graph with per-viewer pruning. Materialized closure would need invalidation on every connection, block, and erasure. |
 | **Depth cap of 3 (as the prototype shows)** | The PDF explicitly forbids an arbitrary *product* depth cap. Our bound is operational and disclosed. |
-| **Real IDs on ghost nodes** | Enables cross-referencing that defeats the disclosure rule. See B8 in ADR-0002. |
+| **Real IDs on ghost nodes** | Enables cross-referencing that defeats the disclosure rule. See B8 in ADR-0002. *(Alpha temporarily ships this rejected alternative — see the accepted deviation under decision 4.)* |
 
 ## Consequences
 
@@ -102,7 +116,8 @@ test checked in at M2 and run in CI as a non-blocking report, blocking in M5.
 - **Negative:** every graph load costs a recursive CTE. Accepted at v1 scale; step 9 is the escape hatch,
   gated on measurement.
 - **Negative:** surrogate ghost IDs mean the client cannot cache ghost nodes across viewers or sessions
-  keyed by identity. That is intended.
+  keyed by identity. That is intended. *(Not yet in effect — see the accepted deviation under decision 4:
+  alpha returns real `app.users.id` values on `topology_only` rows.)*
 - **Negative (accepted residual):** structural re-identification of ghosts is bounded, not eliminated —
   restricting adjacency to fully-visible neighbours (decision 5) removes the neighbour-set fingerprint but
   a ghost adjacent to three or more fully-visible people remains narrowable by ordinary social knowledge.

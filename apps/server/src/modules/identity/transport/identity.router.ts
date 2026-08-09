@@ -1,16 +1,25 @@
 import { TRPCError } from '@trpc/server';
 
 import { ApplicationError } from '../../../shared/errors/application-error';
-import { router, signedInProcedure } from '../../../shared/trpc/trpc';
+import { authenticatedProcedure, router, signedInProcedure } from '../../../shared/trpc/trpc';
 import type { CompleteOnboardingService } from '../application/complete-onboarding.service';
+import type { VisibilitySettingService } from '../application/visibility-setting.service';
 import { HandleImmutableError } from '../domain/user.errors';
+import type { VisibleToDistance } from '../domain/visible-to-distance';
 
 import { completeOnboardingInput } from './complete-onboarding.input';
+import { setVisibilityInput } from './set-visibility.input';
 import { presentUser, type PresentedUser } from './user.presenter';
 
-/** The application operations this router speaks for. One use case, one procedure. */
+/** The application operations this router speaks for. */
 export interface IdentityRouterDependencies {
   readonly completeOnboarding: CompleteOnboardingService;
+  readonly visibilitySetting: VisibilitySettingService;
+}
+
+/** `identity.visibility.*`'s output — the caller's own setting, nothing else. */
+export interface PresentedVisibilitySetting {
+  readonly visibleToDistance: VisibleToDistance;
 }
 
 /**
@@ -40,7 +49,7 @@ function asTrpcError(error: ApplicationError): TRPCError {
 /**
  * The identity module's tRPC surface.
  *
- * **There is exactly one procedure, and there is deliberately no handle-availability
+ * **There is deliberately no handle-availability
  * check** (escalation E5). An availability endpoint is a people-existence oracle, in a
  * product whose PDF §4 promises there is no people search: anyone could enumerate who
  * exists by guessing handles, without ever signing in. Submitting is how a handle
@@ -69,6 +78,29 @@ export function createIdentityRouter(dependencies: IdentityRouterDependencies) {
           throw error;
         }
       }),
+
+    // The caller's own "who can see you at all" dial. `authenticatedProcedure`, not
+    // `signedInProcedure`: a privacy setting belongs to an onboarded actor, and
+    // `ctx.actor.userId` is the only identifier either operation ever sees — there is
+    // no input field that could name somebody else (ADR-0002:180-181).
+    visibility: router({
+      get: authenticatedProcedure.query(
+        async ({ ctx }): Promise<PresentedVisibilitySetting> => ({
+          visibleToDistance: await dependencies.visibilitySetting.get(ctx.actor.userId),
+        }),
+      ),
+
+      set: authenticatedProcedure
+        .input(setVisibilityInput)
+        .mutation(async ({ ctx, input }): Promise<PresentedVisibilitySetting> => {
+          return {
+            visibleToDistance: await dependencies.visibilitySetting.set(
+              ctx.actor.userId,
+              input.visibleToDistance,
+            ),
+          };
+        }),
+    }),
   });
 }
 

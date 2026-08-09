@@ -38,7 +38,10 @@ const unreachable = (): Promise<never> =>
 
 const appRouter = (): ReturnType<typeof createAppRouter> =>
   createAppRouter({
-    identity: createIdentityRouter({ completeOnboarding: { complete: unreachable } }),
+    identity: createIdentityRouter({
+      completeOnboarding: { complete: unreachable },
+      visibilitySetting: { get: unreachable, set: unreachable },
+    }),
     connections: createConnectionsRouter({
       createInvite: { create: unreachable },
       openInvite: { open: unreachable },

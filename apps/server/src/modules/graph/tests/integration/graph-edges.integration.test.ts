@@ -144,11 +144,19 @@ describe('graph edges (#44 cluster view)', () => {
       // The privacy invariant, stated as the case that would break it: `left` is
       // visible, `stranger` is not, and the edge between them must not be emitted —
       // otherwise a cluster view becomes a way to enumerate people outside the network.
+      //
+      // Since 20260809140000 lifted the M2 one-hop clamp, a person two hops out is
+      // visible by default — so the stranger's invisibility comes from the mechanism
+      // that now creates it: their own visible_to_distance keeps the viewer out.
       const viewer = await seedOnboardedUser('dusty_stranger_v');
       const left = await seedOnboardedUser('dusty_stranger_l');
       const stranger = await seedOnboardedUser('dusty_stranger_s');
       await seedConnection(viewer.userId, left.userId);
       await seedConnection(left.userId, stranger.userId);
+      await testDatabase.client.query(
+        `update app.users set visible_to_distance = 'first' where id = $1`,
+        [stranger.userId],
+      );
 
       const edges = await edgesFor(viewer.userId, 'dusty_stranger_v');
 

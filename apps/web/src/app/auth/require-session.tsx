@@ -4,11 +4,13 @@ import { Navigate, useLocation } from 'react-router';
 
 import { useApi } from '../api/api-provider';
 import { procedureErrorCode } from '../api/client';
+import { hasSeenWelcome } from '../welcome/welcome-steps';
 
 import { useSession } from './session-provider';
 
 const ONBOARDING_PATH = '/onboarding';
 const SIGN_IN_PATH = '/signin';
+const WELCOME_PATH = '/welcome';
 
 /**
  * The gate every signed-in route sits behind.
@@ -75,7 +77,10 @@ export function RequireSession({ children }: { readonly children: ReactNode }): 
   }
 
   if (status === 'anonymous') {
-    return <Navigate to={SIGN_IN_PATH} replace />;
+    // A first-ever visit gets the pitch before the form; the welcome screen itself
+    // drops through to `/signin`. One device-scoped flag decides, so a returning
+    // signed-out user is never made to sit through it again.
+    return <Navigate to={hasSeenWelcome() ? SIGN_IN_PATH : WELCOME_PATH} replace />;
   }
 
   // Cached data outranks a live error: see the offline note above.

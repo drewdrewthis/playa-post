@@ -1,0 +1,83 @@
+/*
+ * `/welcome` — the comp's Onboarding takeover (`data-screen-label="Onboarding"`),
+ * translated from its inline styles into the app's tokens: content centred in the top
+ * flex region, then dots, the pill-shaped Next, and a faint Skip stacked at the bottom.
+ */
+
+.welcome {
+  justify-content: center;
+  /* The screen is a flex column; without this, `stretch` left-anchors the
+   * max-width children (`__body`, `__next`) and the dots row. */
+  align-items: center;
+  gap: var(--pp-space-4);
+  text-align: center;
+}
+
+.welcome__icon {
+  font-size: 2.75rem;
+  line-height: 1;
+}
+
+/* The comp's italic-serif hero register, at its 32px scale. */
+.welcome__title {
+  margin: 0;
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 2rem;
+  line-height: 1.15;
+}
+
+.welcome__body {
+  margin: 0;
+  max-width: 18.125rem;
+  font-size: var(--pp-text-sm);
+  line-height: 1.6;
+  color: var(--pp-sub);
+}
+
+.welcome__code {
+  padding: var(--pp-space-2) var(--pp-space-3);
+  border: 1px dashed var(--pp-accent);
+  border-radius: var(--pp-radius);
+  font-family: var(--pp-font-mono);
+  font-size: var(--pp-text-xs);
+  color: var(--pp-accent);
+}
+
+.welcome__dots {
+  display: flex;
+  gap: var(--pp-space-2);
+  margin-top: var(--pp-space-4);
+}
+
+.welcome__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--pp-card-border);
+}
+
+.welcome__dot--active {
+  background: var(--pp-accent);
+}
+
+.welcome__next {
+  width: 100%;
+  max-width: 20rem;
+  border-radius: var(--pp-radius-pill);
+  letter-spacing: 0.03em;
+}
+
+/* The comp's faint dismissal, under the primary action rather than in a corner. */
+.welcome__skip {
+  order: 1;
+  border: none;
+  background: none;
+  padding: var(--pp-space-1);
+  font: inherit;
+  font-size: var(--pp-text-xs);
+  font-weight: 600;
+  color: var(--pp-faint);
+  cursor: pointer;
+}

@@ -4,6 +4,7 @@ import { confusableTranslationTable } from '../domain/handle';
 import type { User } from '../domain/user';
 import { HandleCaseCollisionError, HandleImmutableError } from '../domain/user.errors';
 import type { NewUser, UserRepository } from '../domain/user.repository';
+import type { VisibleToDistance } from '../domain/visible-to-distance';
 
 import { toUser, type UserRow } from './user.mapper';
 
@@ -65,6 +66,16 @@ export function createPostgresUserRepository(
           .selectFrom('app.users')
           .selectAll()
           .where('auth_user_id', '=', authUserId)
+          .executeTakeFirst(),
+      );
+    },
+
+    async findById(userId: string): Promise<User | null> {
+      return firstOrNull(
+        await database
+          .selectFrom('app.users')
+          .selectAll()
+          .where('id', '=', userId)
           .executeTakeFirst(),
       );
     },
@@ -131,6 +142,26 @@ export function createPostgresUserRepository(
         }
         throw error;
       }
+    },
+
+    async setVisibleToDistance(
+      userId: string,
+      distance: VisibleToDistance,
+    ): Promise<User | null> {
+      // `version` is deliberately not bumped and no expected version is required.
+      // ADR-0005's optimistic concurrency exists to stop two writers clobbering each
+      // other's *content*; this column is a single-writer preference whose only writer
+      // is its owner, and last-write-wins is the behaviour a dial that cycles on tap
+      // should have. A conflict error here would surface as "your privacy change was
+      // rejected" for two taps of the user's own thumb.
+      return firstOrNull(
+        await database
+          .updateTable('app.users')
+          .set({ visible_to_distance: distance })
+          .where('id', '=', userId)
+          .returningAll()
+          .executeTakeFirst(),
+      );
     },
   };
 }
