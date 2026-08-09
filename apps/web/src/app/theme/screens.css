@@ -71,7 +71,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--pp-space-4);
-  padding: var(--pp-space-4) var(--pp-space-5) var(--pp-space-6);
+  padding: var(--pp-space-4) var(--pp-screen-inline) var(--pp-space-6);
 }
 
 /** For a screen that *is* the scrolling region — i.e. one rendered outside the shell. */
@@ -82,6 +82,42 @@
 
 .screen--centred {
   justify-content: center;
+}
+
+/**
+ * For a screen whose body is an edge-to-edge canvas rather than a scrolling column:
+ * it pins to the shell's full height (`.app-shell__main` is `flex: 1`, so `100%`
+ * resolves against the space the shell gives the column), keeps only the top
+ * padding, and expects its chrome (heading, actions) in a `.screen__chrome` block
+ * that restores the side inset the screen gave up so the canvas alone reaches the
+ * edges. The canvas itself is whatever sibling of the chrome declares `flex: 1`.
+ */
+.screen--canvas {
+  height: 100%;
+  padding: var(--pp-space-4) 0 0;
+}
+
+/*
+ * The chrome can grow after mount (creating an invite reveals the token block).
+ * It yields to the canvas but never clips silently: on a viewport too short for
+ * both, the chrome itself scrolls while the canvas keeps its floor — the screen
+ * has no scrolling escape of its own.
+ */
+.screen--canvas > .screen__chrome {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  gap: var(--pp-space-4);
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--pp-screen-inline);
+}
+
+/* An empty canvas slot: the message sits where the picture would be, centred. */
+.screen--canvas > .screen__empty {
+  flex: 1;
+  display: grid;
+  place-content: center;
 }
 
 .screen__header {
