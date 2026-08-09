@@ -17,6 +17,11 @@ Decision: **Cut private notes from v1.** They are fixed-recipient messaging in d
 Conflict: prototype report-sheet copy promises "stewards will review"; PDF specifies single-operator moderation with no report aggregation and no outcome visibility.
 Decision: **Implement operator moderation exactly per PDF §5 and addendum §16.** UI copy may use community-toned language ("stewards") if final copy wants it, but it must not promise review timelines, outcomes, or community juries. Default copy: "Your report was sent privately for review."
 
+## D4 — Notifications entry is a drawn bell, not the comp's ◔ glyph (2026-08-10, owner-directed)
+
+Conflict: the comp (`design/Playa Post.dc.html`) draws the notifications button's mark as the text glyph ◔; owner directive #91 says the entry "should actually be a little bell icon."
+Decision: **Owner wins — inline SVG bell.** ◔ does not read as notifications at a glance, and an emoji bell cannot take the theme's ink colour; an inline SVG stroked in `currentColor` and sized in `em` follows `.icon-button`'s theme ink and font-size scaling like the glyph it replaced. Scope: a one-off override, not the start of an icon migration — the remaining chrome glyphs (☾/☀ theme toggle, tab bar, graph zoom) stay text glyphs until a reason arrives. If a second drawn icon lands, decide the chrome icon convention first (the precedent set here: inline SVG, `currentColor` stroke, `em`-sized) and consider a shared icon module at the third.
+
 ---
 
 Escalation threshold for future decisions: addendum §24. Anything touching user experience, trust/privacy model, irreversible data constraints, significant operational cost, or custom infrastructure goes back to the owner.
