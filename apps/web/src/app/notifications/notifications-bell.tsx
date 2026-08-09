@@ -6,14 +6,14 @@ import { unreadNotificationCount } from './notifications-view';
 /**
  * The bell in the app chrome, with the comp's count badge on its shoulder.
  *
- * A drawn bell, not the comp's ◔ glyph — an owner override (#91): ◔ does not read as
- * notifications at a glance, and the emoji bell cannot take the theme's ink colour.
- * Stroked in `currentColor` so it follows `.icon-button`'s colour like a glyph would.
- *
  * ⚠ **The badge counts *unread* notifications, not the length of the list.** A dismissed
  * notification stays in `notifications.list` marked `unread: false` so the panel can keep
  * history; counting the list would mean a badge that never returned to zero once anything
  * had ever arrived.
+ *
+ * The drawn bell (not the comp's ◔ glyph) is an owner override — see D4 in
+ * docs/product/decisions.md. `currentColor` stroke and `em` sizing keep it following
+ * `.icon-button`'s ink and font-size like the glyph it replaced.
  */
 export function NotificationsBell({
   open,
@@ -40,8 +40,8 @@ export function NotificationsBell({
     >
       <svg
         aria-hidden="true"
-        width="18"
-        height="18"
+        width="1.125em"
+        height="1.125em"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"

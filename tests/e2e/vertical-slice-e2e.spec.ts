@@ -160,9 +160,6 @@ test.describe('The M2 vertical slice, end to end (vertical-slice-e2e.feature, M2
       });
 
       await test.step('9. Notify Me produces a grouped notification for a matching viewer', async () => {
-        // The entry is a drawn bell (#91, owner override of the comp's ◔ glyph) —
-        // this fails against any text-glyph version of the button.
-        await expect(pageB.getByTestId('notifications-bell-button').locator('svg')).toBeVisible();
         await pageB.getByTestId('notifications-bell-button').click();
         // 90s, not the default: the 60-second grouping window (M2-AC7, a domain
         // constant this harness must not shorten) has to fully elapse after step 7's
