@@ -69,6 +69,12 @@ describe('app.users migration (ADR-0008:22-34, M1b.5/M2.4)', () => {
       expect(byName['status']?.column_default).toContain('active');
       expect(byName['version']?.column_default).toContain('1');
 
+      // 20260809140000: the "who can see you at all" radius. `'anyone'` by default —
+      // the column landed on a network whose members never chose anything, and
+      // silently hiding people who had been visible would read as data loss.
+      expect(byName['visible_to_distance']?.is_nullable).toBe('NO');
+      expect(byName['visible_to_distance']?.column_default).toContain('anyone');
+
       expect(Object.keys(byName).sort()).toEqual(
         [
           'id',
@@ -81,6 +87,7 @@ describe('app.users migration (ADR-0008:22-34, M1b.5/M2.4)', () => {
           'deactivated_at',
           'erased_at',
           'version',
+          'visible_to_distance',
         ].sort(),
       );
     });
