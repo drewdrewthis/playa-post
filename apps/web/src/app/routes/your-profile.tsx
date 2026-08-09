@@ -1,6 +1,9 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { JSX } from 'react';
+import { Link } from 'react-router';
+
+import type { VisibleToDistance } from '@playa-post/contracts';
 
 import { useApi } from '../api/api-provider';
 import { useSession } from '../auth/session-provider';
@@ -8,6 +11,11 @@ import { summariseGraph, VIEWER_DEGREE } from '../graph/graph-counts';
 import { useOffline } from '../offline/offline-provider';
 import { describeQueuedMutation, sortedQueue } from '../offline/sync-queue-view';
 import { inviteShareText, inviteUrl } from '../profile/invite-share';
+import {
+  describeVisibility,
+  nextVisibility,
+  VISIBILITY_DIAL_LABELS,
+} from '../profile/visibility-dial';
 
 import '../profile/your-profile.css';
 
@@ -19,13 +27,15 @@ import '../profile/your-profile.css';
  * serves — `graph.list`, `connections.invitations.create`, and the Dexie queue the sync
  * runner drains.
  *
- * ⚠ **Three of the comp's blocks are deliberately absent rather than mocked**, because a
+ * The **Who can see you** dial is the comp's privacy block, corrected: the comp labels it
+ * "who sees your name", the product owner renamed it to what it actually does — beyond
+ * your limit you are absent from the other person's graph entirely, not unnamed on it.
+ * Its trust half ("visible to trust 50+") is a later version; the "who can pin to your
+ * board" limit stays deferred with it.
+ *
+ * ⚠ **Two of the comp's blocks are deliberately absent rather than mocked**, because a
  * control that renders and does nothing is a lie told in the user's own settings screen:
  *
- * - **The two standing privacy limits** ("who sees your name", "who can pin to your
- *   board"). Their *default* is an open product question, and a default that ships
- *   becomes a migration and a backfill to change. Deferred whole — server module,
- *   contract, and migration together — so nothing half-wired is left behind.
  * - **Blocked people.** `moderation` reports and dismisses *bulletins*; blocking a
  *   *person* has no table, no procedure, and no contract, so there is nothing for a list
  *   to read.
@@ -52,6 +62,20 @@ export function YourProfileRoute(): JSX.Element {
   const invite = useMutation({
     mutationFn: () => api.mutate('connections.invitations.create', undefined),
   });
+
+  const queryClient = useQueryClient();
+  const visibility = useQuery({
+    queryKey: ['identity', 'visibility'],
+    queryFn: () => api.query('identity.visibility.get', undefined),
+  });
+  const setVisibility = useMutation({
+    mutationFn: (visibleToDistance: VisibleToDistance) =>
+      api.mutate('identity.visibility.set', { visibleToDistance }),
+    // The server's echo is the truth the cache keeps — not the value we asked for, so a
+    // race between two taps settles on what was actually stored.
+    onSuccess: (stored) => queryClient.setQueryData(['identity', 'visibility'], stored),
+  });
+  const visibilityValue = visibility.data?.visibleToDistance;
 
   // `useLiveQuery` rather than a copy of the queue in React state: Dexie is already the
   // source of truth, and a mirrored copy is a mirror that can be wrong. `[]` is the
@@ -132,6 +156,36 @@ export function YourProfileRoute(): JSX.Element {
       </div>
 
       <div className="profile__section">
+        <h2 className="profile__section-label">Who can see you</h2>
+
+        {visibilityValue === undefined ? (
+          <p className="profile__quiet">Loading your visibility…</p>
+        ) : (
+          <>
+            <div className="profile__row">
+              <span className="profile__queue-text">Visible up to</span>
+              <button
+                className="profile__pill profile__pill--good profile__dial"
+                data-testid="visibility-dial"
+                type="button"
+                disabled={setVisibility.isPending}
+                onClick={() => setVisibility.mutate(nextVisibility(visibilityValue))}
+              >
+                {VISIBILITY_DIAL_LABELS[visibilityValue]}
+              </button>
+            </div>
+            <p className="screen__aside">{describeVisibility(visibilityValue)}</p>
+          </>
+        )}
+
+        {setVisibility.error === null ? null : (
+          <p className="form__error" role="alert">
+            That change did not save. Tap it again.
+          </p>
+        )}
+      </div>
+
+      <div className="profile__section">
         <h2 className="profile__section-label">Sync</h2>
 
         {queued.length === 0 ? (
@@ -161,6 +215,12 @@ export function YourProfileRoute(): JSX.Element {
           syncs later.
         </p>
       </div>
+
+      {/* The comp's "REPLAY WELCOME →" link. A route, not an overlay: the welcome
+          screen exits to /signin, which bounces a signed-in replayer straight home. */}
+      <Link className="profile__replay" data-testid="replay-welcome" to="/welcome">
+        Replay welcome →
+      </Link>
 
       <button
         className="button button--quiet profile__sign-out"

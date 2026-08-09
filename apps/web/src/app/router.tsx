@@ -11,6 +11,7 @@ import { OnboardingRoute } from './routes/onboarding';
 import { PersonSheetRoute } from './routes/person-sheet';
 import { SavedViewsRoute } from './routes/saved-views';
 import { SignInRoute } from './routes/sign-in';
+import { WelcomeRoute } from './routes/welcome';
 import { YourProfileRoute } from './routes/your-profile';
 import { AppShell } from './shell/app-shell';
 
@@ -59,6 +60,7 @@ function OnboardingLayout(): JSX.Element {
  */
 const router = createBrowserRouter([
   { path: '/signin', element: <SignInRoute /> },
+  { path: '/welcome', element: <WelcomeRoute /> },
   {
     element: <OnboardingLayout />,
     children: [{ path: '/onboarding', element: <OnboardingRoute /> }],
