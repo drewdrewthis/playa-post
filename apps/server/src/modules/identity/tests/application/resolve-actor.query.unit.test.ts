@@ -32,7 +32,7 @@ function userWith(status: string): User {
     displayName: 'Dusty Rhodes',
     avatarPath: null,
     status,
-    visibleToDistance: 'anyone',
+    visibleToDistance: 'sixth',
     createdAt: new Date('2026-08-05T00:00:00.000Z'),
     deactivatedAt: null,
     erasedAt: null,

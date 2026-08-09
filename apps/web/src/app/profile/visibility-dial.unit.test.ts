@@ -5,11 +5,11 @@ import { VISIBLE_TO_DISTANCE_OPTIONS } from '@playa-post/contracts';
 import { describeVisibility, nextVisibility, VISIBILITY_DIAL_LABELS } from './visibility-dial';
 
 describe('the Who-can-see-you dial', () => {
-  it('cycles 1st → 2nd → 3rd → anyone and loops, like the comp', () => {
+  it('cycles 1st → 2nd → 3rd → 6th and loops, like the comp', () => {
     expect(nextVisibility('first')).toBe('second');
     expect(nextVisibility('second')).toBe('third');
-    expect(nextVisibility('third')).toBe('anyone');
-    expect(nextVisibility('anyone')).toBe('first');
+    expect(nextVisibility('third')).toBe('sixth');
+    expect(nextVisibility('sixth')).toBe('first');
   });
 
   it('has a label and a description for every value the server accepts', () => {

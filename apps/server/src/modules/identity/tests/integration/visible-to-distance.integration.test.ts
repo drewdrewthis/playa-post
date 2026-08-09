@@ -26,15 +26,14 @@ describe('visible_to_distance (who can see you at all)', () => {
 
   beforeAll(async () => {
     testDatabase = await startPostgresTestDatabase();
-    await testDatabase.client.query(
-      `alter role app_rw with password 'app_rw_in_a_throwaway_container'`,
-    );
+    // Generated per run, never source-controlled: a literal here would trip secret
+    // scanners and teach the wrong habit even though the container is throwaway. A
+    // UUID is [0-9a-f-] only, so interpolating it into ALTER ROLE (which cannot take
+    // a bind parameter) is safe.
+    const appRwPassword = randomUUID();
+    await testDatabase.client.query(`alter role app_rw with password '${appRwPassword}'`);
     database = createDatabaseConnection({
-      connectionString: asRole(
-        testDatabase.connectionString,
-        'app_rw',
-        'app_rw_in_a_throwaway_container',
-      ),
+      connectionString: asRole(testDatabase.connectionString, 'app_rw', appRwPassword),
     });
   }, 300_000);
 
@@ -69,10 +68,13 @@ describe('visible_to_distance (who can see you at all)', () => {
     );
   }
 
-  async function visibleTo(viewerId: string): Promise<ReadonlyArray<{ user_id: string; degree: number }>> {
+  async function visibleTo(
+    viewerId: string,
+    { maxDepth = 4, nodeBudget = 1500 }: { maxDepth?: number; nodeBudget?: number } = {},
+  ): Promise<ReadonlyArray<{ user_id: string; degree: number }>> {
     const { rows } = await testDatabase.client.query<{ user_id: string; degree: number }>(
-      `select user_id, degree from app.visible_people($1)`,
-      [viewerId],
+      `select user_id, degree from app.visible_people($1, $2, $3)`,
+      [viewerId, maxDepth, nodeBudget],
     );
     return rows;
   }
@@ -107,13 +109,54 @@ describe('visible_to_distance (who can see you at all)', () => {
     expect((await visibleTo(b)).some((row) => row.user_id === c)).toBe(true);
   });
 
-  it('round-trips through the service: defaults to anyone, stores what is set', async () => {
+  it("caps the whole scale at six degrees — 'sixth' is a ceiling, not an 'anyone'", async () => {
+    // A chain of eight people: the viewer at one end, someone at degree 6, someone at
+    // degree 7. Everyone sits at the default 'sixth', and max_depth is deliberately
+    // passed higher than the ceiling to prove the ceiling is the function's, not the
+    // caller's: six degrees is the product's principle of reach (20260810090000).
+    const chain: string[] = [];
+    for (let i = 0; i < 8; i += 1) {
+      chain.push(await seedUser(`dusty_chain_${i}`));
+    }
+    for (let i = 0; i < 7; i += 1) {
+      await connect(chain[i]!, chain[i + 1]!);
+    }
+
+    const visible = await visibleTo(chain[0]!, { maxDepth: 10 });
+
+    expect(visible.find((row) => row.user_id === chain[6])?.degree).toBe(6);
+    expect(visible.some((row) => row.user_id === chain[7])).toBe(false);
+  });
+
+  it('does not let an inactive person spend node_budget and push an active one out', async () => {
+    // v — i (deactivated) — b. With node_budget 2, the budget must go to v and b: if
+    // the status filter ran only after the limit, i would take the second slot inside
+    // `reachable`, be dropped by the final status filter, and b — reachable and
+    // active — would silently vanish. The path still routes THROUGH i (pruning
+    // traversal is a block's behaviour, ADR-0004 decision 1, not deactivation's).
+    const v = await seedUser('dusty_budget_v');
+    const i = await seedUser('dusty_budget_i');
+    const b = await seedUser('dusty_budget_b');
+    await connect(v, i);
+    await connect(i, b);
+    await testDatabase.client.query(
+      `update app.users set status = 'deactivated', deactivated_at = now() where id = $1`,
+      [i],
+    );
+
+    const visible = await visibleTo(v, { nodeBudget: 2 });
+
+    expect(visible.some((row) => row.user_id === i)).toBe(false);
+    expect(visible.find((row) => row.user_id === b)?.degree).toBe(2);
+  });
+
+  it('round-trips through the service: defaults to sixth, stores what is set', async () => {
     const userId = await seedUser('dusty_dist_dial');
     const service = createVisibilitySettingService({
       users: createPostgresUserRepository({ database }),
     });
 
-    expect(await service.get(userId)).toBe('anyone');
+    expect(await service.get(userId)).toBe('sixth');
     expect(await service.set(userId, 'second')).toBe('second');
     expect(await service.get(userId)).toBe('second');
   });

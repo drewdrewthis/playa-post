@@ -19,8 +19,8 @@ export const VISIBLE_TO_DISTANCE = {
   first: 'first',
   second: 'second',
   third: 'third',
-  /** Everyone the viewer's own traversal reaches, bounded only by `max_depth`. */
-  anyone: 'anyone',
+  /** The whole small world — six degrees of separation, the scale's ceiling. */
+  sixth: 'sixth',
 } as const;
 
 /** One of {@link VISIBLE_TO_DISTANCE}'s values. */
@@ -36,7 +36,9 @@ export type VisibleToDistance = (typeof VISIBLE_TO_DISTANCE)[keyof typeof VISIBL
  * is "visible to everybody" fails in the one direction that matters.
  */
 export function toVisibleToDistance(stored: string): VisibleToDistance {
-  return stored in VISIBLE_TO_DISTANCE
+  // Object.hasOwn, not `in`: `in` also matches Object.prototype members, so a stored
+  // value of 'constructor' would defeat the narrowing instead of failing closed.
+  return Object.hasOwn(VISIBLE_TO_DISTANCE, stored)
     ? VISIBLE_TO_DISTANCE[stored as VisibleToDistance]
     : VISIBLE_TO_DISTANCE.first;
 }

@@ -18,7 +18,7 @@ export const setVisibilityInput = z.object({
     VISIBLE_TO_DISTANCE.first,
     VISIBLE_TO_DISTANCE.second,
     VISIBLE_TO_DISTANCE.third,
-    VISIBLE_TO_DISTANCE.anyone,
+    VISIBLE_TO_DISTANCE.sixth,
   ]),
 });
 

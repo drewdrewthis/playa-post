@@ -1,3 +1,33 @@
+-- Visibility ceiling becomes 'sixth' — the six-degrees principle, decided by the
+-- product owner: "anyone is wrong, it should be 6". The most open a person can be is
+-- the whole small world (six degrees of separation), never an unbounded graph walk.
+--
+-- Three coupled changes, one migration:
+--   1. `app.users.visible_to_distance` swaps 'anyone' for 'sixth' — allowed values,
+--      existing rows, and the column default (previously 'anyone'; that default was
+--      an open question on PR #78 and this is its answer).
+--   2. `app.visible_people` is reinstalled with the 'sixth' ceiling, an inactive-user
+--      filter inside `reachable` (an inactive person must not spend node_budget), and
+--      a traversal clamp at 6 that the ceiling makes free.
+--   3. Forward-only: the previous migration (20260809140000) is untouched; this file
+--      carries the new function text byte-identical to the checked-in
+--      modules/graph/persistence/sql/visible-people.sql, and
+--      visible-people-migration.integration.test.ts holds the two together.
+
+alter table app.users
+  alter column visible_to_distance set default 'sixth';
+
+update app.users
+   set visible_to_distance = 'sixth'
+ where visible_to_distance = 'anyone';
+
+alter table app.users
+  drop constraint users_visible_to_distance_check;
+
+alter table app.users
+  add constraint users_visible_to_distance_check
+  check (visible_to_distance in ('first', 'second', 'third', 'sixth'));
+
 -- app.visible_people — the one definition of "who can this viewer reach".
 --
 -- ADR-0004 decisions 1-8, ADR-0002 §5 (viewer_id passed explicitly), §6 (one

@@ -158,7 +158,20 @@ export function YourProfileRoute(): JSX.Element {
       <div className="profile__section">
         <h2 className="profile__section-label">Who can see you</h2>
 
-        {visibilityValue === undefined ? (
+        {visibility.isError ? (
+          <div className="profile__row">
+            <p className="form__error" role="alert">
+              Your visibility setting did not load.
+            </p>
+            <button
+              className="profile__pill profile__dial"
+              type="button"
+              onClick={() => void visibility.refetch()}
+            >
+              TRY AGAIN
+            </button>
+          </div>
+        ) : visibilityValue === undefined ? (
           <p className="profile__quiet">Loading your visibility…</p>
         ) : (
           <>

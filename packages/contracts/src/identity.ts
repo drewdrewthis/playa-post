@@ -43,14 +43,15 @@ export interface OnboardedUser {
  * built yet.
  *
  * Ordered least-permissive first, which is also the order the You screen's dial cycles
- * through. `'anyone'` means the whole reachable network, bounded only by the traversal's
- * own operational `max_depth` (ADR-0004 decision 2 — never a product depth cap).
+ * through. The scale tops out at `'sixth'` — the six-degrees principle: the most open a
+ * person can be is the whole small world, never an unbounded graph walk. The traversal's
+ * own operational `max_depth` (ADR-0004 decision 2) remains a separate safety bound.
  *
  * The **trust** half of the prototype's privacy block ("name visible to: anyone /
  * trust 50+ / trust 75+") is deliberately absent: it is a later version's problem, and a
  * half-wired dial in a privacy screen is worse than an absent one.
  */
-export const VISIBLE_TO_DISTANCE_OPTIONS = ['first', 'second', 'third', 'anyone'] as const;
+export const VISIBLE_TO_DISTANCE_OPTIONS = ['first', 'second', 'third', 'sixth'] as const;
 
 /** One of {@link VISIBLE_TO_DISTANCE_OPTIONS}. */
 export type VisibleToDistance = (typeof VISIBLE_TO_DISTANCE_OPTIONS)[number];
