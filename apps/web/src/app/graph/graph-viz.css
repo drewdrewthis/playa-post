@@ -82,13 +82,14 @@
 /*
  * Full-bleed, like the comp: the graph screen (`.screen--canvas`) pins to the shell's
  * height and this panel absorbs everything below the chrome, edge to edge, on the
- * app's own background — no border, no card. `min-height: 0` is what lets a flex
- * child actually shrink to the space the column has left instead of overflowing it.
+ * app's own background — no border, no card. The floor keeps some picture visible
+ * on a viewport too short for chrome + canvas — past that point it is the *chrome*
+ * that scrolls (`.screen__chrome`), because the screen itself has no scrollbar.
  */
 .graph-viz {
   position: relative;
   flex: 1;
-  min-height: 0;
+  min-height: 10rem;
   width: 100%;
   overflow: hidden;
 }

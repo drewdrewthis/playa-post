@@ -60,16 +60,24 @@ test.describe('tapping a graph node', () => {
       await expect(pageB.getByTestId('connection-accepted-banner')).toBeVisible();
 
       await pageA.goto('/graph');
+      await expect(pageA.getByTestId(`graph-connection-node-${userBHandle}`)).toBeVisible();
+
+      // The canvas is full-bleed (#84): it spans the graph screen's entire width,
+      // which the framed-card version it replaced never did (the card sat inside the
+      // screen's side padding). Bounding boxes, because this is a question about
+      // rendered geometry that no DOM assertion can answer.
+      const screenBox = await pageA.getByTestId('graph-home').boundingBox();
+      const canvasBox = await pageA.locator('.graph-viz').boundingBox();
+      expect(canvasBox?.width).toBe(screenBox?.width);
 
       // Screenshot of the bare graph screen only when `E2E_GRAPH_SCREENSHOT_DIR` is
       // set — the same opt-in shape as `E2E_YOU_SCREENSHOT_DIR`; a normal run writes
-      // nothing.
+      // nothing. Viewport-sized, not `fullPage`: the claim under review is what fits
+      // the shell's own height.
       const graphDirectory = process.env['E2E_GRAPH_SCREENSHOT_DIR'];
       if (graphDirectory !== undefined && graphDirectory !== '') {
-        await expect(pageA.getByTestId(`graph-connection-node-${userBHandle}`)).toBeVisible();
         await pageA.screenshot({
           path: `${graphDirectory}/graph-home.png`,
-          fullPage: true,
           animations: 'disabled',
         });
       }

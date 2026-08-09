@@ -51,6 +51,7 @@ export function GraphHomeRoute(): JSX.Element {
 
   const network = graph.data;
   const summary = summariseGraph(network?.people ?? []);
+  const hasNetwork = network !== undefined && summary.people > 0;
 
   /*
    * The one place the snapshot must yield: if a *settled* refetch positively omits the
@@ -103,15 +104,16 @@ export function GraphHomeRoute(): JSX.Element {
           </p>
         )}
 
-        {network === undefined || summary.people === 0 ? (
-          <p className="screen__empty">
-            Nobody yet. Create an invite and send it to someone you know.
-          </p>
-        ) : null}
       </div>
 
-      {network === undefined || summary.people === 0 ? null : (
+      {/* One slot, two occupants: the canvas when there is a network, the empty-state
+          message centred in the same space when there is not. */}
+      {hasNetwork ? (
         <GraphNetwork graph={network} onOpenPerson={setSelectedPerson} />
+      ) : (
+        <p className="screen__empty">
+          Nobody yet. Create an invite and send it to someone you know.
+        </p>
       )}
 
       {selectedPerson === null ? null : (

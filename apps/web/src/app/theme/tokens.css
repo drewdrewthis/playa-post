@@ -87,6 +87,13 @@
   --pp-space-5: 1.5rem;
   --pp-space-6: 2rem;
 
+  /*
+   * The one horizontal inset every screen shares. `.screen` pads with it, and
+   * `.screen--canvas` hands it to `.screen__chrome` instead — one value, so the
+   * chrome on a canvas screen can never drift out of column with every other screen.
+   */
+  --pp-screen-inline: var(--pp-space-5);
+
   /* Radii — the prototype's 8 / 12 / 18px steps, plus the pill */
   --pp-radius-sm: 0.5rem;
   --pp-radius: 0.75rem;
