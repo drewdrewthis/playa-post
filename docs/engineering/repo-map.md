@@ -84,6 +84,13 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  element), typefaces.ts (the self-hosted font imports, which double as the service
                  worker's precache budget), and the theme provider/toggle — ADR-0015. Values come
                  from design/Playa Post.dc.html, which is product evidence and never imported.
+                 public/ holds only finished, served-as-is static assets — favicon-32x32.png,
+                 favicon.ico, apple-touch-icon.png, and the PWA manifest icon set
+                 (pwa-192x192.png, pwa-512x512.png, maskable-512x512.png; issue #162). It
+                 ships straight into dist/ and the service-worker precache, so nothing that
+                 is merely a build input belongs here: the archival source artwork and its
+                 regeneration script live in design/ instead (design/icon-source.png,
+                 design/generate-icons.py), which is never served or bundled.
 apps/server/     The modular monolith.
   composition/   The ONLY place that knows about the object graph, and the only place that reads
                  process.env (ADR-0003). config.ts · container.ts · request-scope.ts ·
