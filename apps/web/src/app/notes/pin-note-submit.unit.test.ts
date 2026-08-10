@@ -47,6 +47,10 @@ function fakeStore(fault: { readonly writes?: boolean; readonly reads?: boolean 
         rows.set(mutationId, { ...row, state, lastError });
       }
     },
+    /** What a drain that already synced and pruned this row on an earlier pass leaves behind: nothing (issue #180). */
+    prune(mutationId: string): void {
+      rows.delete(mutationId);
+    },
   };
 }
 
@@ -110,6 +114,60 @@ describe('submitPinNote', () => {
         mutationType: 'note.pin',
         payload: { recipientId: 'person-1', body: 'Come find me.' },
       });
+    });
+  });
+
+  describe('when a drain elsewhere already synced and pruned the row before this reads it back', () => {
+    /*
+     * ⚠ The bug `pruneSyncedMutations` introduced (issue #180): before it existed, a row
+     * this call just wrote and just drained could only be missing from the store if the
+     * store itself was unreadable, and `pending` was the safe reading of that. Now a
+     * mutationId this call minted can be missing because a drain — this one, an
+     * overlapping one, or another tab's — already synced and swept it. Reading that as
+     * still queued is what let a posted note be shown as "Queued", and worse, let a
+     * second press mint a fresh envelope for a note the server already held.
+     */
+    it('reports the note as pinned, not queued', async () => {
+      const store = fakeStore();
+      const drainer = fakeRunner(() => {
+        const [row] = store.queued();
+
+        if (row) {
+          store.prune(row.mutationId);
+        }
+      });
+
+      const result = await submitPinNote({
+        database: store.database,
+        syncRunner: drainer.runner,
+        recipientId: 'person-1',
+        body: 'Come find me.',
+        recipientName: 'Lena',
+      });
+
+      expect(result.kind).toBe('pinned');
+      expect(result.message).toBe('Pinned to Lena’s board — only they see it');
+    });
+
+    it('hands back no mutationId, so a next press cannot mint a duplicate envelope over it', async () => {
+      const store = fakeStore();
+      const drainer = fakeRunner(() => {
+        const [row] = store.queued();
+
+        if (row) {
+          store.prune(row.mutationId);
+        }
+      });
+
+      const result = await submitPinNote({
+        database: store.database,
+        syncRunner: drainer.runner,
+        recipientId: 'person-1',
+        body: 'Come find me.',
+        recipientName: null,
+      });
+
+      expect(result.mutationId).toBeNull();
     });
   });
 

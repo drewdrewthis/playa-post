@@ -31,7 +31,8 @@ export interface SyncRunnerOptions {
 }
 
 /**
- * Replays queued mutations, in order, exactly once each.
+ * Replays queued mutations, in order, exactly once each — and, ahead of any of that,
+ * sweeps rows a previous pass already synced.
  *
  * Two replay routes, chosen by mutation type — see `replay-routes.ts`, whose table
  * `replay-routes.unit.test.ts` holds against `QUEUED_MUTATION_TYPES` so a newly queued

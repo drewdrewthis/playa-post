@@ -15,11 +15,10 @@ import {
   type DraftFieldIssue,
   type ExpiryPreset,
 } from '../bulletins/compose-bulletin-draft';
-import { describeSubmissionOutcome } from '../bulletins/compose-bulletin-outcome';
+import { submitBulletin } from '../bulletins/submit-bulletin';
 import { ComposeNote } from '../notes/compose-note';
 import { noteRecipientParam } from '../notes/note-recipient';
 import { useOffline } from '../offline/offline-provider';
-import { queueMutation } from '../offline/pending-mutations';
 
 import '../bulletins/compose-bulletin.css';
 
@@ -76,9 +75,11 @@ export function ComposeBulletinRoute(): JSX.Element {
  *
  * **The screen only leaves on a success.** Where it used to navigate unconditionally, it
  * now reads the settled queue row back and stays put on a refusal, showing what the
- * server said (`compose-bulletin-outcome.ts`). A refused row stays in the queue rather
- * than being deleted — it is a write somebody made, the shell's pending badge is the
- * surface for it, and clearing it here would be this screen quietly discarding it.
+ * server said. The submit itself is `submit-bulletin.ts`: what an absent row after a
+ * drain means, and what to say about the row that settled, are decisions that can be
+ * asserted without a DOM, so they are not made in here. A refused row stays in the queue
+ * rather than being deleted — it is a write somebody made, the shell's pending badge is
+ * the surface for it, and clearing it here would be this screen quietly discarding it.
  *
  * This is a route rather than the comp's overlay because the FAB navigates to
  * `/board/new`; it takes the sheet's shape without taking the router's. Turning it into a
@@ -125,21 +126,11 @@ function ComposeBulletinForm(): JSX.Element {
     setSubmitting(true);
     setRefusal(null);
 
-    // The payload is built once and never touched again: the server hashes it to
-    // decide replay-versus-duplicate, so rebuilding it later — even from an unchanged
-    // form — would break idempotency and move the expiry the user chose.
-    const queued = await queueMutation(database, {
-      mutationType: 'bulletin.create',
+    const outcome = await submitBulletin({
+      database,
+      syncRunner,
       payload: buildCreateBulletinPayload({ type, title, body, loc, expiry }, new Date()),
     });
-
-    await syncRunner.drain();
-
-    const settled = await database.pendingMutations.get(queued.mutationId);
-    const outcome = describeSubmissionOutcome(
-      settled?.state ?? 'pending',
-      settled?.lastError ?? null,
-    );
 
     if (outcome.kind === 'refused') {
       setRefusal(outcome.message);

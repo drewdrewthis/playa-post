@@ -80,11 +80,14 @@ export async function requeueMutation(
  *
  * ⚠ Called at the top of a drain pass, never from `markMutation`. Pruning the instant a
  * row is marked `synced` would mean the SYNCED pill (`sync-queue-view.ts`) is never
- * actually seen; pruning it one pass later gives it exactly one drain's worth of
- * visibility — enough to confirm the write landed, never enough to become a history
- * (issue #174: nothing ever deleted a row, so the Sync section grew forever). `failed`,
- * `conflicted`, and `inflight` rows are untouched — they wait for a retry, an explicit
- * clear, or reload recovery (issue #159), never a timer.
+ * actually seen; pruning one pass later means a row survives until the next drain pass
+ * begins — usually long enough to be seen, never a history (issue #174: nothing ever
+ * deleted a row, so the Sync section grew forever). A burst of consecutive drains can
+ * still sweep a row before a frame paints it — the normal case for back-to-back submits,
+ * not an edge case, and not a promise this function makes; a caller reading a row back
+ * after its own drain must treat absence as `synced`, not `pending` (issue #180).
+ * `failed`, `conflicted`, and `inflight` rows are untouched — they wait for a retry, an
+ * explicit clear, or reload recovery (issue #159), never a timer.
  */
 export async function pruneSyncedMutations(database: OfflineDatabase): Promise<void> {
   await database.pendingMutations.where('state').equals('synced').delete();
