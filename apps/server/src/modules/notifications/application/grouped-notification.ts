@@ -1,18 +1,17 @@
 /**
- * One notification as a viewer reads it — the panel-side counterpart of the push the
- * flush already sent.
+ * What every notification carries, whatever caused it.
  *
  * **Identifiers and a timestamp, and nothing else.** M2-AC5 forbids an author name,
  * handle or avatar "in notifications" and M2-AC10 forbids any response containing a
  * hidden person's identifier "across bulletin read, notifications, and A's own bulletin
  * list". Satisfying both by *carrying no such field* is stronger than satisfying them by
  * redacting one: there is nothing here for a future edit to forget to redact, and the
- * client's follow-up read through `bulletins.*` is where §6a author projection already
- * happens.
+ * client's follow-up read through `bulletins.*` or `notes.*` is where §6a author
+ * projection already happens.
  */
-export interface GroupedNotification {
+interface NotificationBase {
   /**
-   * Stable key for this group — the `event_id` of the match that opened its window.
+   * Stable key for this notification, and the id a dismissal names.
    *
    * An opaque identifier a client can key a list by. It is not a row in a notifications
    * table, because there is none: ADR-0006 makes the outbox row plus its consumer receipt
@@ -21,19 +20,12 @@ export interface GroupedNotification {
    */
   readonly notificationId: string;
   /**
-   * When the window opened — the `occurred_at` of the bulletin that started it.
+   * When the thing happened — the bulletin's or the note's own `occurred_at`.
    *
-   * Not when the flush ran: a person reads "what happened", and two windows flushed by
-   * the same scheduled run are two moments, not one.
+   * Not when it was delivered: a person reads "what happened", and two notifications
+   * produced by the same drain or the same flush are two moments, not one.
    */
   readonly occurredAt: Date;
-  /**
-   * The bulletins in this group, de-duplicated, and only those the viewer may still see.
-   *
-   * Never empty — a group with nothing left to show is dropped rather than reported as
-   * an empty notification.
-   */
-  readonly bulletinIds: readonly string[];
   /**
    * `false` once this recipient has dismissed it; `true` until then.
    *
@@ -46,7 +38,7 @@ export interface GroupedNotification {
    * one read serves both. And a dismissal stays *observable*: a client confirms the
    * write landed by seeing the item return with `unread: false`, rather than inferring
    * it from an absence — which would be ambiguous here, because a notification also
-   * disappears when its bulletins stop being visible (ADR-0002 §11's read-time
+   * disappears when what it points at stops being visible (ADR-0002 §11's read-time
    * re-check). Subtracting instead would also make this field a constant, which is the
    * shape `modules/bulletins`' `VisibleBulletin` refuses `archivedAt` for.
    *
@@ -55,3 +47,43 @@ export interface GroupedNotification {
    */
   readonly unread: boolean;
 }
+
+/** One Notify Me notification — a closed 60-second window's worth of bulletins. */
+export interface GroupedBulletinNotification extends NotificationBase {
+  readonly kind: 'bulletins';
+  /**
+   * The bulletins in this group, de-duplicated, and only those the viewer may still see.
+   *
+   * Never empty — a group with nothing left to show is dropped rather than reported as
+   * an empty notification.
+   */
+  readonly bulletinIds: readonly string[];
+}
+
+/**
+ * One note somebody pinned to this viewer's board (issue #149).
+ *
+ * ⚠ **A singleton, never a window.** Grouping exists because a saved query can match an
+ * unbounded number of bulletins at once; a note is one deliberate act aimed at one
+ * person, and collapsing two into "2 notes" would hide that two people wrote to them.
+ *
+ * ⚠ **`noteId` and nothing more — never the body, never the author.** A note is the most
+ * private thing this product stores. The bell says one arrived; reading it is a separate,
+ * visibility-checked call through `notes.*`, which is also where §6a decides whether the
+ * viewer may be told who wrote it.
+ */
+export interface PinnedNoteNotification extends NotificationBase {
+  readonly kind: 'note';
+  readonly noteId: string;
+}
+
+/**
+ * One notification as a viewer reads it.
+ *
+ * **A discriminated union rather than one shape with optional fields**: `bulletinIds` and
+ * `noteId` are never both meaningful, and a client that must branch to render a title
+ * should be made to branch by the type rather than by a runtime guess about which field
+ * arrived. It also keeps "a bulletin group is never empty" and "a note always names one
+ * note" as facts the compiler holds, instead of invariants a presenter has to defend.
+ */
+export type GroupedNotification = GroupedBulletinNotification | PinnedNoteNotification;

@@ -11,6 +11,17 @@
  */
 export const BULLETIN_CREATED = 'BulletinCreated';
 
+/**
+ * The second event this module **subscribes to**, restated for the reason above.
+ *
+ * `modules/notes` publishes it and owns the name. ⚠ Its payload is identifiers only and
+ * **carries no note body** — a note is the most private thing this product stores, so
+ * this module never learns what one says: it records that a note arrived and the read
+ * path re-reads visibility through `app.visible_notes`. Nothing here may start reading
+ * the payload for text that is deliberately not in it.
+ */
+export const NOTE_PINNED = 'NotePinned';
+
 /** Event type name, past tense (addendum §20). Stable — consumers subscribe to it. */
 export const NOTIFY_ME_MATCHED = 'NotifyMeMatched';
 
@@ -33,9 +44,11 @@ export const NOTIFY_ME_MATCHED = 'NotifyMeMatched';
  * work" lists the grouping-window flush as its own job): the 60-second window is a
  * decision about time, and only a clock-driven reader can make it.
  *
- * `BULLETIN_CREATED` is deliberately **not** here — that one arrives through the
- * drainer, which is exactly what {@link import('../application/evaluate-notify-me.handler').EvaluateNotifyMeHandler}
- * is registered for.
+ * `BULLETIN_CREATED` and `NOTE_PINNED` are deliberately **not** here — both arrive
+ * through the drainer, which is exactly what
+ * {@link import('../application/evaluate-notify-me.handler').EvaluateNotifyMeHandler}
+ * and {@link import('../application/deliver-note-pinned.handler').DeliverNotePinnedHandler}
+ * are registered for.
  */
 export const SELF_DRAINED_EVENT_TYPES: readonly string[] = [NOTIFY_ME_MATCHED];
 

@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SELF_DRAINED_EVENT_TYPES } from '../modules/notifications/domain/notification.events';
+import { DELIVER_NOTE_PINNED_CONSUMER } from '../modules/notifications/application/deliver-note-pinned.handler';
+import {
+  NOTE_PINNED,
+  SELF_DRAINED_EVENT_TYPES,
+} from '../modules/notifications/domain/notification.events';
 
 import type { Configuration } from './config';
 import { buildAppContainer } from './container';
@@ -38,6 +42,24 @@ afterEach(() => {
 describe('notification.events.ts SELF_DRAINED_EVENT_TYPES', () => {
   it('contains NotifyMeMatched, the row the drainer must never claim', () => {
     expect(SELF_DRAINED_EVENT_TYPES).toContain('NotifyMeMatched');
+  });
+
+  it('does NOT contain NotePinned, which the generic drainer must deliver (#149)', () => {
+    // The other half of the same coupling, and its failure is just as silent: excluding
+    // `NotePinned` would leave every pinned note `pending` forever with nothing reading
+    // it, because — unlike `NotifyMeMatched` — no scheduled job sweeps it.
+    expect(SELF_DRAINED_EVENT_TYPES).not.toContain(NOTE_PINNED);
+  });
+});
+
+describe('DeliverNotePinnedHandler receipt name', () => {
+  it('is the literal DeliverNotePinnedHandler', () => {
+    // Pinned as a literal for the reason the event names above are: it is written into
+    // `app.consumer_receipts.consumer_name`, and every already-written receipt becomes
+    // invisible the moment it changes — which here means every note notification already
+    // in somebody's bell disappears. That the container actually registers this consumer
+    // needs a database and is `container-notification-wiring.integration.test.ts`'s job.
+    expect(DELIVER_NOTE_PINNED_CONSUMER).toBe('DeliverNotePinnedHandler');
   });
 });
 

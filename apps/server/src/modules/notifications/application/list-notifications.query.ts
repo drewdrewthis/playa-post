@@ -6,6 +6,7 @@ import {
 } from '../domain/notification-window';
 
 import type {
+  DeliveredNoteNotification,
   DeliveredNotificationMatch,
   DeliveredNotificationRepository,
 } from './delivered-notification.repository';
@@ -34,23 +35,30 @@ export interface ListNotificationsDependencies {
 }
 
 /**
- * The notifications read (issue #31) — what `SendGroupedPushHandler` already delivered,
- * as the viewer's own list.
+ * The notifications read (issue #31, extended for pinned notes by issue #149) — what the
+ * module's consumers already delivered, as the viewer's own list.
  *
- * **Three steps, and their order is the design:**
+ * **Two kinds, one list, and only one of them is grouped.** A `NotifyMeMatched` match
+ * belongs to a 60-second window; a `NotePinned` note is one act aimed at one person and
+ * is emitted as a singleton. Merging them before the grouper would either window the
+ * notes or force the grouper to learn a second rule — so they are read separately,
+ * shaped separately, and meet only in the final sort.
  *
- * 1. **Read what the flush produced.** The writer is the source of truth; a match still
- *    awaiting its window is not a notification yet and is absent by construction.
+ * **Four steps, and their order is the design:**
+ *
+ * 1. **Read what the writers produced.** The writer is the source of truth; a match still
+ *    awaiting its window, or a note the drainer has not delivered, is not a notification
+ *    yet and is absent by construction.
  * 2. **Group with the module's one grouping rule** —
  *    {@link groupIntoNotificationWindows}, the same function the flush calls. The read
  *    path does not re-derive M2-AC7's window, so the two cannot disagree about which
- *    bulletins arrived together.
+ *    bulletins arrived together. Notes never reach it.
  * 3. **Re-check authorization, as a post-filter.** ⚠ After grouping, never before:
  *    windows are anchored to their opening match, so filtering first would let a
  *    bulletin the viewer has since lost access to *move* the boundaries of a window that
  *    was already committed, and a person would see a regrouping their device never got.
  *    A group left with nothing visible disappears entirely rather than reading as an
- *    empty notification.
+ *    empty notification, and a note that has left `app.visible_notes` disappears with it.
  * 4. **Mark, never subtract.** A dismissal sets `unread: false` and leaves the
  *    notification in the list. Removing it here would be a *second* rule about what is
  *    in somebody's panel, sitting beside step 3's — and the two are answers to different
@@ -69,32 +77,41 @@ export function createListNotificationsQuery(
 ): ListNotificationsQuery {
   return {
     async list(command: ListNotificationsCommand): Promise<readonly GroupedNotification[]> {
-      const delivered = await dependencies.deliveredNotifications.findDeliveredMatches(
-        command.viewerId,
-      );
+      // Concurrent, because neither read informs the other — and because a viewer with
+      // both kinds waiting should not pay for them in series.
+      const [delivered, deliveredNotes] = await Promise.all([
+        dependencies.deliveredNotifications.findDeliveredMatches(command.viewerId),
+        dependencies.deliveredNotifications.findDeliveredNoteNotifications(command.viewerId),
+      ]);
 
-      if (delivered.length === 0) {
-        // Nothing has been flushed for this viewer, so there is no visibility question
-        // to ask and no reason to pay for `app.visible_bulletins`.
+      if (delivered.length === 0 && deliveredNotes.length === 0) {
+        // Nothing has been delivered to this viewer, so there is no visibility question
+        // to ask and no reason to pay for either authorized-set function.
         return [];
       }
 
       const windows = groupIntoNotificationWindows(delivered);
-      // Concurrent, because neither read informs the other: what the viewer may still
-      // see is a fact about authorization, and what they have dismissed is a fact about
-      // their own choices — the same shape `modules/bulletins`' board read uses for its
-      // own two.
-      const [visibleIds, dismissed] = await Promise.all([
+      // Concurrent for the same reason: what the viewer may still see is a fact about
+      // authorization, and what they have dismissed is a fact about their own choices —
+      // the same shape `modules/bulletins`' board read uses for its own two. Both
+      // visibility reads answer `[]` for an empty candidate list, so a viewer with only
+      // one kind of notification pays for only one function.
+      const [visibleBulletinIds, visibleNoteIds, dismissed] = await Promise.all([
         dependencies.deliveredNotifications.findVisibleBulletinIds(command.viewerId, [
           ...new Set(delivered.map((match) => match.bulletinId)),
         ]),
+        dependencies.deliveredNotifications.findVisibleNoteIds(command.viewerId, [
+          ...new Set(deliveredNotes.map((note) => note.noteId)),
+        ]),
         dependencies.dismissals.findDismissedFor(command.viewerId),
       ]);
-      const visible = new Set(visibleIds);
+      const visibleBulletins = new Set(visibleBulletinIds);
+      const visibleNotes = new Set(visibleNoteIds);
 
-      return windows
-        .flatMap((window) => presentableWindow(window, visible, dismissed))
-        .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime());
+      return [
+        ...windows.flatMap((window) => presentableWindow(window, visibleBulletins, dismissed)),
+        ...deliveredNotes.flatMap((note) => presentableNote(note, visibleNotes, dismissed)),
+      ].sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime());
     },
   };
 }
@@ -127,6 +144,7 @@ function presentableWindow(
     ? []
     : [
         {
+          kind: 'bulletins',
           notificationId: opening.eventId,
           occurredAt: window.startsAt,
           bulletinIds,
@@ -136,4 +154,34 @@ function presentableWindow(
           unread: !dismissed.has(opening.eventId),
         },
       ];
+}
+
+/**
+ * One delivered note as a notification, or nothing at all.
+ *
+ * The same `flatMap`-over-an-array shape its sibling uses, for the same reason: a note
+ * the viewer may no longer read is dropped, not reported as a notification pointing at
+ * something they would be refused.
+ *
+ * There is no window and no de-duplication to do — one `NotePinned` event is one note is
+ * one notification — so the whole rule is the visibility post-filter.
+ */
+function presentableNote(
+  note: DeliveredNoteNotification,
+  visible: ReadonlySet<string>,
+  dismissed: ReadonlySet<string>,
+): readonly GroupedNotification[] {
+  return visible.has(note.noteId)
+    ? [
+        {
+          kind: 'note',
+          // The `NotePinned` event's own id, which is what a dismissal names — the same
+          // relationship a grouped notification has to its window opener.
+          notificationId: note.eventId,
+          occurredAt: note.occurredAt,
+          noteId: note.noteId,
+          unread: !dismissed.has(note.eventId),
+        },
+      ]
+    : [];
 }

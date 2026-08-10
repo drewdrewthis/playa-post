@@ -32,10 +32,12 @@ const WITHHELD: DisclosableIdentity = { disclosure: 'topology_only' };
  * Intros waiting on this viewer, at the top of their graph.
  *
  * ⚠ **This is the authoritative surface for an intro request, and the notifications
- * contract is deliberately untouched** (#89, §4): `GroupedNotification` has no `kind`
- * discriminator and groups into windows, which is the wrong shape for an individual
- * request that one person has to decide. The bell may one day count these; it will do it
- * by reading `intros.listInbox` alongside its own query, additively.
+ * contract is deliberately untouched** (#89, §4): a notification is a thing you read and
+ * dismiss, which is the wrong shape for a request one person has to *decide*. (#149 has
+ * since given `GroupedNotification` a `kind` discriminator, so a third kind is now
+ * cheap — that changes what it would cost, not what it would mean.) The bell may one day
+ * count these; it will do it by reading `intros.listInbox` alongside its own query,
+ * additively.
  *
  * It lives on `/graph` because an intro *is* graph-shaped — it is a request to add an
  * edge — and because there is no inbox screen to add it to.
