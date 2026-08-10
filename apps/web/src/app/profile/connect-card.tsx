@@ -9,8 +9,9 @@ import { RetryRow } from './retry-row';
 
 /** How long the copy button's "Copied" confirmation holds before reverting — the same
  *  shape as `ComposeBulletinForm`'s toast timer, held a little shorter since nothing
- *  here navigates the user away when it ends. */
-const COPIED_HOLD_MS = 1500;
+ *  here navigates the user away when it ends. Exported so the AC5 revert test waits on
+ *  the real value rather than a second, driftable copy of the literal. */
+export const COPIED_HOLD_MS = 1500;
 
 /**
  * The one spelling of the invite-card query key, the discipline
@@ -149,9 +150,13 @@ function CopyLinkButton({ url }: { readonly url: string }): JSX.Element {
   const [copied, setCopied] = useState(false);
 
   // Mirrors `ComposeBulletinForm`'s toast timer: setting `copied` is what schedules its
-  // own reversal, so there is one place the transient state's lifetime is decided, and
-  // clearing the timer on unmount (or on a second copy landing before the first expires)
-  // keeps two clicks from racing each other's reversion.
+  // own reversal, so there is one place the transient state's lifetime is decided.
+  //
+  // ⚠ The cleanup below only matters for unmount. React bails out of a `setCopied(true)`
+  // call when `copied` is already `true` — same value, no re-render — so a second click
+  // landing inside the hold window neither restarts this timer nor cancels it; the label
+  // still reverts on the schedule the *first* click set, not a fresh `COPIED_HOLD_MS` from
+  // the second.
   useEffect(() => {
     if (!copied) {
       return;

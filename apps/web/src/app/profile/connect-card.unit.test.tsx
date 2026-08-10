@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { useState, type JSX } from 'react';
+import { act, useState, type JSX } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -9,7 +9,7 @@ import {
   type MountedTree,
 } from '../testing/mount-with-api';
 
-import { ConnectCard } from './connect-card';
+import { COPIED_HOLD_MS, ConnectCard } from './connect-card';
 import { inviteShareBlurb, inviteShareText } from './invite-share';
 
 /**
@@ -235,6 +235,36 @@ describe('sharing and copying the invite link', () => {
     // from the share button rather than a second way to trigger the same payload.
     expect(writeTextMock).toHaveBeenCalledWith(url);
     expect(copyButton.getAttribute('aria-label')).toBe('Copied');
+  });
+
+  /** AC5 — the "Copied" confirmation is transient: it reverts once `COPIED_HOLD_MS` passes. */
+  it('reverts the "Copied" confirmation back to the resting label after the hold', async () => {
+    stubClipboard();
+
+    tree = await mountWithApi(<ConnectCard />, createReadyApi());
+
+    const copyButton = requireElement<HTMLButtonElement>(
+      tree.container,
+      '[data-testid="copy-invite-link-button"]',
+    );
+
+    await tree.run(() => {
+      copyButton.click();
+    });
+    expect(copyButton.getAttribute('aria-label')).toBe('Copied');
+
+    // Real time, not `vi.useFakeTimers()`: `mountWithApi`'s own `settle()` flushes through
+    // a real `setTimeout(resolve, 0)`, and faking the clock here would freeze that right
+    // alongside the button's own revert timer. Waiting past `COPIED_HOLD_MS` for real,
+    // wrapped in `act` the same way `settle()` is, is what lets React apply the timer's
+    // `setCopied(false)` before the assertion below reads the DOM.
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, COPIED_HOLD_MS + 50);
+      });
+    });
+
+    expect(copyButton.getAttribute('aria-label')).toBe('Copy invite link');
   });
 });
 
