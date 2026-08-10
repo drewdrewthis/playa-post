@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { GroupedNotification } from '@playa-post/contracts';
+import type { GroupedBulletinNotification, PinnedNoteNotification } from '@playa-post/contracts';
 
 import {
   dismissedNotifications,
@@ -10,11 +10,27 @@ import {
   unreadNotifications,
 } from './notifications-view';
 
-function notification(overrides: Partial<GroupedNotification> = {}): GroupedNotification {
+function notification(
+  overrides: Partial<GroupedBulletinNotification> = {},
+): GroupedBulletinNotification {
   return {
+    kind: 'bulletins',
     notificationId: 'n1',
     occurredAt: '2026-08-08T12:00:00.000Z',
     bulletinIds: ['b1'],
+    unread: true,
+    ...overrides,
+  };
+}
+
+function noteNotification(
+  overrides: Partial<PinnedNoteNotification> = {},
+): PinnedNoteNotification {
+  return {
+    kind: 'note',
+    notificationId: 'n-note',
+    occurredAt: '2026-08-08T12:00:00.000Z',
+    noteId: 'note-1',
     unread: true,
     ...overrides,
   };
@@ -116,6 +132,43 @@ describe('notificationTitle', () => {
         '3 new bulletins match your Notify Me query',
       );
     });
+  });
+
+  describe('given a pinned note', () => {
+    it('says a note was pinned, without naming who pinned it', () => {
+      // The contract carries no author for a note (§6a decides who a viewer may be told
+      // about, on the read that resolves the note), so the copy must not imply one.
+      expect(notificationTitle(noteNotification())).toBe(
+        'Someone pinned a note to your board',
+      );
+    });
+
+    it('reads the same for a second note — notes are never counted or grouped', () => {
+      // One note is one notification. A "2 notes" line would hide that two different
+      // people wrote to this viewer.
+      expect(notificationTitle(noteNotification({ notificationId: 'n-note-2' }))).toBe(
+        'Someone pinned a note to your board',
+      );
+    });
+  });
+});
+
+describe('a mixed list of both kinds', () => {
+  it('splits on unread rather than on kind, so notes and bulletins share the panel', () => {
+    const list = [
+      notification({ notificationId: 'bulletin-unread', unread: true }),
+      noteNotification({ notificationId: 'note-dismissed', unread: false }),
+      noteNotification({ notificationId: 'note-unread', unread: true }),
+    ];
+
+    expect(unreadNotifications(list).map((item) => item.notificationId)).toEqual([
+      'bulletin-unread',
+      'note-unread',
+    ]);
+    expect(dismissedNotifications(list).map((item) => item.notificationId)).toEqual([
+      'note-dismissed',
+    ]);
+    expect(unreadNotificationCount(list)).toBe(2);
   });
 });
 

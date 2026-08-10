@@ -17,6 +17,28 @@ export interface DeliveredNotificationMatch extends GroupableMatch {
 }
 
 /**
+ * One pinned note this recipient has already been notified about.
+ *
+ * ⚠ **Deliberately not a {@link GroupableMatch}.** A note is one event for one named
+ * recipient, so there is no window to group it into and no `recipientId` for a grouper
+ * to key on — the read already filtered on the viewer. Giving it the grouping shape
+ * would invite somebody to run it through
+ * {@link import('../domain/notification-window').groupIntoNotificationWindows} and
+ * quietly collapse two separate notes into "2 notes", which is a thing nobody decided.
+ *
+ * No body, no author: the payload it is read from carries neither, and the listing
+ * serves identifiers only (M2-AC5's rule, applied to a channel whose content is the most
+ * private thing this product stores).
+ */
+export interface DeliveredNoteNotification {
+  /** `app.outbox_events.event_id` of the `NotePinned` row. The notification's id. */
+  readonly eventId: string;
+  readonly noteId: string;
+  /** When the note was pinned, not when it was delivered. */
+  readonly occurredAt: Date;
+}
+
+/**
  * The port onto notifications a viewer may read.
  *
  * Separate from
@@ -64,7 +86,43 @@ export interface DeliveredNotificationRepository {
   ): Promise<readonly string[]>;
 
   /**
-   * Whether `notificationId` names a flushed match belonging to this recipient.
+   * Every note this viewer has already been notified about.
+   *
+   * "Notified" is read from the
+   * {@link import('./deliver-note-pinned.handler').DeliverNotePinnedHandler} receipt, for
+   * the reason its bulletin sibling reads the flush receipt: ADR-0006 makes the receipt
+   * *the* record that a consumer processed an event, so a `NotePinned` row the drainer
+   * has not yet delivered is not a notification and does not appear.
+   *
+   * ⚠ **Not merged into {@link findDeliveredMatches}.** The two answer different
+   * questions — one produces windows to be grouped, the other singletons that must not
+   * be — and a union that returned both would have to carry a discriminator down through
+   * the grouper to keep them apart. The application layer is where the two kinds meet.
+   *
+   * @param viewerId - A {@link ViewerId}, never a `string` (ADR-0002 §5a).
+   * @returns Oldest first, matching its sibling so the caller sorts once.
+   */
+  findDeliveredNoteNotifications(viewerId: ViewerId): Promise<readonly DeliveredNoteNotification[]>;
+
+  /**
+   * Of `noteIds`, the ones this viewer may **still** read.
+   *
+   * Asked through `app.visible_notes` — the one definition of which notes a viewer may
+   * read (ADR-0002 §6) — for the reason {@link findVisibleBulletinIds} asks
+   * `app.visible_bulletins`: a notification is disclosed when it is read, not when it was
+   * delivered.
+   *
+   * ⚠ **Only the identifier crosses this boundary.** `app.visible_notes` returns the
+   * note's `body`, and nothing in the notifications module may select it: the bell says a
+   * note arrived and the note channel is where it is read.
+   *
+   * @returns A subset of `noteIds`, in no guaranteed order. Empty when none survive.
+   */
+  findVisibleNoteIds(viewerId: ViewerId, noteIds: readonly string[]): Promise<readonly string[]>;
+
+  /**
+   * Whether `notificationId` names a delivered notification belonging to this recipient
+   * — a flushed `NotifyMeMatched` match, or a `NotePinned` note addressed to them.
    *
    * The pre-write check behind `notifications.dismiss` — see
    * {@link import('../domain/notification.errors').NotificationUnavailableError} for why
@@ -75,7 +133,8 @@ export interface DeliveredNotificationRepository {
    * every dismissal, to refuse a case whose worst outcome is a dismissal row that
    * matches no notification — a harmless orphan, indistinguishable from one whose window
    * has since aged out. The check that is cheap is the one that closes the abuse
-   * surface; the one that is expensive buys tidiness.
+   * surface; the one that is expensive buys tidiness. A note notification has no window,
+   * so for that kind the two questions are the same one.
    *
    * @param recipientId - An `app.users.id` from the resolved actor. Taken as a `string`
    *   rather than a {@link ViewerId} because the write path's command carries the actor

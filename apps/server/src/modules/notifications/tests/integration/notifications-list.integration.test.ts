@@ -21,8 +21,10 @@ import { createCallerFactory, router } from '../../../../shared/trpc/trpc';
 import { createGraphModule } from '../../../graph/graph.module';
 // L1's public module factory, for the actor resolution the auth middleware performs.
 import { createIdentityModule } from '../../../identity/identity.module';
+import { DELIVER_NOTE_PINNED_CONSUMER } from '../../application/deliver-note-pinned.handler';
 import type { PushPayload, PushTransport } from '../../domain/push-transport';
 import { createNotificationsModule, type NotificationsModule } from '../../notifications.module';
+import type { PresentedNotification } from '../../transport/grouped-notification.presenter';
 
 /**
  * `notifications.list` — the read half of `modules/notifications` (issue #31).
@@ -55,6 +57,14 @@ import { createNotificationsModule, type NotificationsModule } from '../../notif
  *    panel's follow-up read through `bulletins.*` is what applies §6a author projection.
  *
  * The coder/reviewer owns ratifying all four, or replacing them with a better design.
+ *
+ * **Issue #149 added a second kind to this read** — a note somebody pinned to the
+ * viewer's board — and it obeys all four points above with one difference stated in its
+ * own block: a note is **never grouped**, so its notification is the `NotePinned` event
+ * itself and the third point's re-check is asked of `app.visible_notes`. That the
+ * composed drainer is actually wired to the consumer whose receipt makes a note
+ * notification exist is `composition/container-notification-wiring.integration.test.ts`'s
+ * subject — this suite wires the module by hand, so it could not see that regression.
  */
 describe('notifications.list (issue #31, vertical-slice step 9)', () => {
   let testDatabase: PostgresTestDatabase;
@@ -155,6 +165,59 @@ describe('notifications.list (issue #31, vertical-slice step 9)', () => {
   }
 
   /**
+   * A note on somebody's board, inserted directly — `modules/notes/persistence` is
+   * another module's and stays untouched, exactly as `seedBulletin` treats bulletins'.
+   */
+  async function seedNote(
+    authorId: string,
+    recipientId: string,
+    options: { readonly body: string; readonly createdAt: Date },
+  ): Promise<string> {
+    const { rows } = await testDatabase.client.query<{ id: string }>(
+      `insert into app.notes (author_id, recipient_id, body, created_at)
+       values ($1, $2, $3, $4) returning id`,
+      [authorId, recipientId, options.body, options.createdAt],
+    );
+    const id = rows[0]?.id;
+    if (id === undefined) {
+      throw new Error('seedNote: insert returned no row');
+    }
+    return id;
+  }
+
+  /** A `NotePinned` outbox row, inserted through the same sanctioned seam. */
+  async function insertNotePinnedEvent(options: {
+    readonly noteId: string;
+    readonly authorId: string;
+    readonly recipientId: string;
+    readonly occurredAt: Date;
+  }): Promise<OutboxEventRowForTest> {
+    const eventId = randomUUID();
+    // ⚠ Identifiers only, and no `body` — the shape `modules/notes` actually writes
+    // (see its `appendOutboxEvent`). A payload carrying note text here would make this
+    // suite prove the wrong thing.
+    const payload = {
+      noteId: options.noteId,
+      authorId: options.authorId,
+      recipientId: options.recipientId,
+    };
+    await testDatabase.client.query(
+      `insert into app.outbox_events
+         (event_id, event_type, occurred_at, actor_id, aggregate_id, payload)
+       values ($1, 'NotePinned', $2, $3, $4, $5::jsonb)`,
+      [eventId, options.occurredAt, options.authorId, options.noteId, JSON.stringify(payload)],
+    );
+    return {
+      eventId,
+      eventType: 'NotePinned',
+      occurredAt: options.occurredAt,
+      actorId: options.authorId,
+      aggregateId: options.noteId,
+      payload,
+    };
+  }
+
+  /**
    * A `BulletinCreated` outbox row, inserted directly — `app.outbox_events` is L2's
    * shared table (ratified decision (a)), so writing to it is the sanctioned seam and
    * `modules/bulletins/persistence` stays untouched.
@@ -184,6 +247,17 @@ describe('notifications.list (issue #31, vertical-slice step 9)', () => {
       aggregateId: options.bulletinId,
       payload,
     };
+  }
+
+  /** How many receipts the `NotePinned` consumer has written for one event. */
+  async function receiptCountFor(eventId: string): Promise<number> {
+    const { rows } = await testDatabase.client.query<{ count: string }>(
+      `select count(*)::text as count
+         from app.consumer_receipts
+        where consumer_name = $1 and event_id = $2`,
+      [DELIVER_NOTE_PINNED_CONSUMER, eventId],
+    );
+    return Number(rows[0]?.count ?? '0');
   }
 
   function createFakePushTransport(): PushTransport & { readonly calls: PushPayload[] } {
@@ -275,6 +349,48 @@ describe('notifications.list (issue #31, vertical-slice step 9)', () => {
     return { author, recipient, bulletinId, notifications };
   }
 
+  /**
+   * One recipient with one note pinned to their board, already delivered by the
+   * `NotePinned` consumer — the shape every note scenario below starts from.
+   *
+   * The delivery goes through `notifications.deliverNotePinned.handle(event)`, the same
+   * seam the bulletin helper uses for `evaluateNotifyMe`: what the *drainer* is wired
+   * with is `note-pinned-notification.integration.test.ts`'s subject, and asserting it
+   * twice would make one of the two the copy that rots.
+   */
+  async function seedDeliveredNote(options: {
+    readonly authorHandle: string;
+    readonly recipientHandle: string;
+    readonly occurredAt: Date;
+    readonly body?: string;
+  }): Promise<{
+    author: { userId: string; authUserId: string };
+    recipient: { userId: string; authUserId: string };
+    noteId: string;
+    eventId: string;
+    notifications: NotificationsModule;
+  }> {
+    const author = await seedOnboardedUser(options.authorHandle);
+    const recipient = await seedOnboardedUser(options.recipientHandle);
+    await seedAcceptedConnection(author.userId, recipient.userId);
+
+    const noteId = await seedNote(author.userId, recipient.userId, {
+      body: options.body ?? 'Meet me at the temple at sunrise.',
+      createdAt: options.occurredAt,
+    });
+    const event = await insertNotePinnedEvent({
+      noteId,
+      authorId: author.userId,
+      recipientId: recipient.userId,
+      occurredAt: options.occurredAt,
+    });
+
+    const notifications = buildNotificationsModule();
+    await notifications.deliverNotePinned.handle(event);
+
+    return { author, recipient, noteId, eventId: event.eventId, notifications };
+  }
+
   describe('Scenario: A viewer reads the grouped notification the flush produced', () => {
     it('answers one notification carrying the matched bulletin', async () => {
       const occurredAt = new Date('2026-08-01T12:00:00.000Z');
@@ -288,9 +404,242 @@ describe('notifications.list (issue #31, vertical-slice step 9)', () => {
       const listed = await caller.notifications.list();
 
       expect(listed).toHaveLength(1);
-      expect(listed[0]?.bulletinIds).toEqual([bulletinId]);
+      expect(listed[0]).toMatchObject({ kind: 'bulletins', bulletinIds: [bulletinId] });
       expect(listed[0]?.occurredAt).toBe(occurredAt.toISOString());
       expect(listed[0]?.notificationId).toEqual(expect.any(String));
+    });
+  });
+
+  describe('Scenario: A pinned note reaches its recipient’s bell (issue #149)', () => {
+    it('answers one note notification carrying the note identifier and nothing else', async () => {
+      const occurredAt = new Date('2026-08-01T12:00:00.000Z');
+      const { recipient, noteId, eventId, notifications } = await seedDeliveredNote({
+        authorHandle: 'dusty_note_a',
+        recipientHandle: 'dusty_note_b',
+        occurredAt,
+        body: 'A private line that must never appear in a notification payload.',
+      });
+
+      const caller = callerFor(notifications, await bearerFor(recipient.authUserId));
+      const listed = await caller.notifications.list();
+
+      expect(listed).toEqual([
+        {
+          kind: 'note',
+          // The `NotePinned` event's own id, which is also what a dismissal names.
+          notificationId: eventId,
+          occurredAt: occurredAt.toISOString(),
+          noteId,
+          unread: true,
+        },
+      ]);
+      // A full-equality assertion above already forbids an extra field; this says why it
+      // matters. A note is the most private thing this product stores, and the bell must
+      // say one arrived without ever quoting it or naming who wrote it.
+      const serialized = JSON.stringify(listed);
+      expect(serialized).not.toMatch(/private line/i);
+      expect(serialized).not.toMatch(/dusty_note_a/i);
+    });
+
+    it('answers nothing while the NotePinned event has no delivery receipt', async () => {
+      // ADR-0006 makes the receipt the record that a consumer processed an event, so an
+      // undrained `NotePinned` row is a note that has been pinned but not yet notified —
+      // it must not appear, or the bell would be reading the outbox rather than a
+      // delivery.
+      const occurredAt = new Date('2026-08-01T12:00:00.000Z');
+      const author = await seedOnboardedUser('dusty_note_undelivered_a');
+      const recipient = await seedOnboardedUser('dusty_note_undelivered_b');
+      await seedAcceptedConnection(author.userId, recipient.userId);
+      const noteId = await seedNote(author.userId, recipient.userId, {
+        body: 'Pinned, but not yet drained.',
+        createdAt: occurredAt,
+      });
+      await insertNotePinnedEvent({
+        noteId,
+        authorId: author.userId,
+        recipientId: recipient.userId,
+        occurredAt,
+      });
+      // Deliberately no `deliverNotePinned.handle`.
+
+      const caller = callerFor(buildNotificationsModule(), await bearerFor(recipient.authUserId));
+
+      await expect(caller.notifications.list()).resolves.toEqual([]);
+    });
+
+    it('drops the notification once the note leaves app.visible_notes', async () => {
+      const { recipient, noteId, notifications } = await seedDeliveredNote({
+        authorHandle: 'dusty_note_gone_a',
+        recipientHandle: 'dusty_note_gone_b',
+        occurredAt: new Date('2026-08-01T12:00:00.000Z'),
+      });
+
+      const caller = callerFor(notifications, await bearerFor(recipient.authUserId));
+      await expect(caller.notifications.list()).resolves.toHaveLength(1);
+
+      // ADR-0002 §11's re-check on the read path. Removing the row is the bluntest way to
+      // make `app.visible_notes` stop returning it, and the mechanism is not the point —
+      // the point is that the notification follows the authorized set rather than the
+      // delivery record, whatever makes the two diverge.
+      await testDatabase.client.query(`delete from app.notes where id = $1`, [noteId]);
+
+      await expect(caller.notifications.list()).resolves.toEqual([]);
+    });
+
+    it('refuses to disclose a note the event payload claims but app.visible_notes does not', async () => {
+      // The payload routes; it never authorizes. A `NotePinned` row naming this viewer as
+      // recipient while the note itself is addressed to somebody else must disclose
+      // nothing — otherwise the outbox, which any future writer can append to, would be a
+      // way to hand somebody another person's note identifier.
+      const occurredAt = new Date('2026-08-01T12:00:00.000Z');
+      const author = await seedOnboardedUser('dusty_note_lying_a');
+      const realRecipient = await seedOnboardedUser('dusty_note_lying_b');
+      const impostor = await seedOnboardedUser('dusty_note_lying_c');
+      await seedAcceptedConnection(author.userId, realRecipient.userId);
+
+      const noteId = await seedNote(author.userId, realRecipient.userId, {
+        body: 'Addressed to exactly one person.',
+        createdAt: occurredAt,
+      });
+      const event = await insertNotePinnedEvent({
+        noteId,
+        authorId: author.userId,
+        // The lie: the envelope says this note is for the impostor.
+        recipientId: impostor.userId,
+        occurredAt,
+      });
+
+      const notifications = buildNotificationsModule();
+      await notifications.deliverNotePinned.handle(event);
+
+      const caller = callerFor(notifications, await bearerFor(impostor.authUserId));
+
+      await expect(caller.notifications.list()).resolves.toEqual([]);
+    });
+
+    it('marks the note read once its recipient dismisses it', async () => {
+      const { recipient, eventId, notifications } = await seedDeliveredNote({
+        authorHandle: 'dusty_note_dismiss_a',
+        recipientHandle: 'dusty_note_dismiss_b',
+        occurredAt: new Date('2026-08-01T12:00:00.000Z'),
+      });
+
+      const caller = callerFor(notifications, await bearerFor(recipient.authUserId));
+      await expect(
+        caller.notifications.dismiss({ notificationId: eventId }),
+      ).resolves.toMatchObject({ notificationId: eventId });
+
+      const listed = await caller.notifications.list();
+
+      // Marked, not subtracted — the same rule the grouped kind follows, so the panel's
+      // history section works identically for both.
+      expect(listed).toHaveLength(1);
+      expect(listed[0]?.unread).toBe(false);
+    });
+
+    it('refuses a dismissal of somebody else’s note notification', async () => {
+      const { eventId, notifications } = await seedDeliveredNote({
+        authorHandle: 'dusty_note_theirs_a',
+        recipientHandle: 'dusty_note_theirs_b',
+        occurredAt: new Date('2026-08-01T12:00:00.000Z'),
+      });
+      const stranger = await seedOnboardedUser('dusty_note_theirs_c');
+
+      const caller = callerFor(notifications, await bearerFor(stranger.authUserId));
+
+      await expect(
+        caller.notifications.dismiss({ notificationId: eventId }),
+      ).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+        cause: expect.objectContaining({ code: 'NOTIFICATION_UNAVAILABLE' }),
+      });
+    });
+  });
+
+  describe('Scenario: The NotePinned consumer is idempotent and minds its own events', () => {
+    it('lists one notification after the same event is delivered twice (M2-AC8)', async () => {
+      // ADR-0006 promises at-least-once, so a crash between dispatch and the drainer's
+      // status update genuinely replays a delivery. Asserted through the list rather than
+      // through a row count: two receipts would be invisible to a person, two
+      // notifications would not.
+      const occurredAt = new Date('2026-08-01T12:00:00.000Z');
+      const author = await seedOnboardedUser('dusty_note_replay_a');
+      const recipient = await seedOnboardedUser('dusty_note_replay_b');
+      await seedAcceptedConnection(author.userId, recipient.userId);
+      const noteId = await seedNote(author.userId, recipient.userId, {
+        body: 'Delivered once, replayed once.',
+        createdAt: occurredAt,
+      });
+      const event = await insertNotePinnedEvent({
+        noteId,
+        authorId: author.userId,
+        recipientId: recipient.userId,
+        occurredAt,
+      });
+
+      const notifications = buildNotificationsModule();
+      await notifications.deliverNotePinned.handle(event);
+      await notifications.deliverNotePinned.handle(event);
+
+      const caller = callerFor(notifications, await bearerFor(recipient.authUserId));
+
+      await expect(caller.notifications.list()).resolves.toHaveLength(1);
+      expect(await receiptCountFor(event.eventId)).toBe(1);
+    });
+
+    it('writes no receipt for an event it does not subscribe to, and does not throw', async () => {
+      // The drainer routes every event to every consumer. Throwing would push an
+      // irrelevant delivery through the retry-and-dead-letter path (ADR-0006, M2-AC23)
+      // and eventually raise an alert about nothing; claiming a receipt would be worse,
+      // because here the receipt *is* the notification.
+      const author = await seedOnboardedUser('dusty_note_foreign_a');
+      const bulletinId = await seedBulletin(author.userId, {
+        title: 'Not a note',
+        body: 'A BulletinCreated has no business with the note consumer.',
+        createdAt: new Date('2026-08-01T12:00:00.000Z'),
+      });
+      const event = await insertBulletinCreatedEvent({
+        bulletinId,
+        authorId: author.userId,
+        occurredAt: new Date('2026-08-01T12:00:00.000Z'),
+      });
+
+      const notifications = buildNotificationsModule();
+
+      await expect(notifications.deliverNotePinned.handle(event)).resolves.toBeUndefined();
+      expect(await receiptCountFor(event.eventId)).toBe(0);
+    });
+  });
+
+  describe('Scenario: Both kinds share one list', () => {
+    it('serves the note and the grouped bulletins together, newest first', async () => {
+      const bulletinAt = new Date('2026-08-01T12:00:00.000Z');
+      const { author, recipient, bulletinId, notifications } = await seedFlushedNotification({
+        authorHandle: 'dusty_mixed_a',
+        recipientHandle: 'dusty_mixed_b',
+        occurredAt: bulletinAt,
+      });
+
+      const noteAt = new Date(bulletinAt.getTime() + 600_000);
+      const noteId = await seedNote(author.userId, recipient.userId, {
+        body: 'Later than the bulletin.',
+        createdAt: noteAt,
+      });
+      await notifications.deliverNotePinned.handle(
+        await insertNotePinnedEvent({
+          noteId,
+          authorId: author.userId,
+          recipientId: recipient.userId,
+          occurredAt: noteAt,
+        }),
+      );
+
+      const caller = callerFor(notifications, await bearerFor(recipient.authUserId));
+      const listed = await caller.notifications.list();
+
+      expect(listed).toHaveLength(2);
+      expect(listed[0]).toMatchObject({ kind: 'note', noteId });
+      expect(listed[1]).toMatchObject({ kind: 'bulletins', bulletinIds: [bulletinId] });
     });
   });
 
@@ -353,7 +702,7 @@ describe('notifications.list (issue #31, vertical-slice step 9)', () => {
       const listed = await caller.notifications.list();
 
       expect(listed).toHaveLength(1);
-      expect(new Set(listed[0]?.bulletinIds)).toEqual(new Set([first, second]));
+      expect(new Set(bulletinIdsOf(listed[0]))).toEqual(new Set([first, second]));
     });
   });
 
@@ -401,8 +750,8 @@ describe('notifications.list (issue #31, vertical-slice step 9)', () => {
       expect(listed).toHaveLength(2);
       // Newest first: a panel reads top-down, and the most recent notification is the
       // one a person opened the panel to see.
-      expect(listed[0]?.bulletinIds).toEqual([second]);
-      expect(listed[1]?.bulletinIds).toEqual([first]);
+      expect(bulletinIdsOf(listed[0])).toEqual([second]);
+      expect(bulletinIdsOf(listed[1])).toEqual([first]);
     });
   });
 
@@ -482,6 +831,7 @@ describe('notifications.list (issue #31, vertical-slice step 9)', () => {
       // drift.
       expect(Object.keys(notification as object).sort()).toEqual([
         'bulletinIds',
+        'kind',
         'notificationId',
         'occurredAt',
         'unread',
@@ -516,6 +866,23 @@ describe('notifications.list (issue #31, vertical-slice step 9)', () => {
     });
   });
 });
+
+/**
+ * The bulletin ids of a notification that must be a grouped-bulletin one.
+ *
+ * A narrowing helper rather than a property access: `notifications.list` has served a
+ * discriminated union since #149, so a test reaching straight for `bulletinIds` would
+ * read `undefined` off a note notification and quietly pass a comparison that means
+ * nothing. Throwing names the wrong kind instead.
+ */
+function bulletinIdsOf(notification: PresentedNotification | undefined): readonly string[] {
+  if (notification?.kind !== 'bulletins') {
+    throw new Error(
+      `expected a grouped-bulletin notification, got ${notification?.kind ?? 'nothing'}`,
+    );
+  }
+  return notification.bulletinIds;
+}
 
 interface OutboxEventRowForTest {
   readonly eventId: string;

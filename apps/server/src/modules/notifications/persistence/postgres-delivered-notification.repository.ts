@@ -1,12 +1,14 @@
 import { sql, type DatabaseConnection } from '@playa-post/database';
 
 import type { ViewerId } from '../../../shared/auth/viewer-id';
+import { DELIVER_NOTE_PINNED_CONSUMER } from '../application/deliver-note-pinned.handler';
 import type {
+  DeliveredNoteNotification,
   DeliveredNotificationMatch,
   DeliveredNotificationRepository,
 } from '../application/delivered-notification.repository';
 import { SEND_GROUPED_PUSH_CONSUMER } from '../application/send-grouped-push.handler';
-import { NOTIFY_ME_MATCHED } from '../domain/notification.events';
+import { NOTE_PINNED, NOTIFY_ME_MATCHED } from '../domain/notification.events';
 
 /** Everything the repository needs, injected (addendum §12). */
 export interface PostgresDeliveredNotificationRepositoryDependencies {
@@ -21,9 +23,21 @@ interface DeliveredMatchRow {
   readonly aggregate_id: string;
 }
 
+/** One delivered `NotePinned` row, as the database returns it. */
+interface DeliveredNoteRow {
+  readonly event_id: string;
+  readonly occurred_at: Date;
+  readonly aggregate_id: string;
+}
+
 /** One surviving bulletin identifier from `app.visible_bulletins`. */
 interface VisibleBulletinIdRow {
   readonly bulletin_id: string;
+}
+
+/** One surviving note identifier from `app.visible_notes`. */
+interface VisibleNoteIdRow {
+  readonly note_id: string;
 }
 
 /** Existence probe for one recipient's flushed match. */
@@ -35,18 +49,23 @@ interface DeliveredMatchExistsRow {
  * The read side of this module's outbox rows, behind
  * {@link DeliveredNotificationRepository}.
  *
- * **Two statements, and they are separate on purpose.** The first reports what the flush
- * produced; the second asks `app.visible_bulletins` what the viewer may still see. Fusing
- * them into one join would filter *before* grouping — see
+ * **What was delivered and what may still be seen are separate statements, on purpose.**
+ * One pair reports what the flush produced and what `app.visible_bulletins` still allows;
+ * the other pair does the same for pinned notes through `app.visible_notes`. Fusing a
+ * pair into one join would filter *before* grouping — see
  * {@link import('../application/list-notifications.query').createListNotificationsQuery},
  * whose step 3 explains why that silently re-shapes a window the flush already committed
  * to. Keeping them apart is what lets the application layer choose the order.
  *
+ * **The two kinds are two statements rather than one union**, for the same reason: a
+ * union would have to carry a discriminator, and every caller downstream would then be
+ * separating them again — including the grouper, which must see bulletin matches only.
+ *
  * `recipientId` lives in the `jsonb` payload rather than in a column, because
  * `app.outbox_events` is L2's shared envelope and this module does not migrate columns
- * onto a table it does not own. `aggregate_id` carries the bulletin and the viewer is a
- * bound parameter, so the only field read out of `jsonb` is the one being *filtered on*
- * — never one whose absence would have to be guessed at.
+ * onto a table it does not own. `aggregate_id` carries the bulletin or the note and the
+ * viewer is a bound parameter, so the only field read out of `jsonb` is the one being
+ * *filtered on* — never one whose absence would have to be guessed at.
  *
  * Every statement is schema-qualified per ADR-0002's pooler-safety rules.
  */
@@ -112,23 +131,85 @@ export function createPostgresDeliveredNotificationRepository(
       return rows.map((row) => row.bulletin_id);
     },
 
+    async findDeliveredNoteNotifications(
+      viewerId: ViewerId,
+    ): Promise<readonly DeliveredNoteNotification[]> {
+      // The same shape as `findDeliveredMatches`, against the other event type and the
+      // other consumer's receipt: the join is the "already delivered" test, and a
+      // `NotePinned` row the drainer has not reached yet has no receipt and is therefore
+      // not yet a notification.
+      //
+      // ⚠ `app.notes` is not named here and must not be. Whether the viewer may still
+      // read the note is `findVisibleNoteIds`' question, asked through
+      // `app.visible_notes`; joining the table would be the second definition of that
+      // ADR-0002 §6 forbids, in the one place only the recipient would ever notice.
+      const { rows } = await sql<DeliveredNoteRow>`
+        select pinned.event_id, pinned.occurred_at, pinned.aggregate_id
+          from app.outbox_events as pinned
+          join app.consumer_receipts as receipt
+            on receipt.event_id = pinned.event_id
+           and receipt.consumer_name = ${DELIVER_NOTE_PINNED_CONSUMER}
+         where pinned.event_type = ${NOTE_PINNED}
+           and pinned.payload ->> 'recipientId' = ${viewerId}::text
+         order by pinned.occurred_at asc, pinned.event_id asc
+      `.execute(database);
+
+      return rows.map((row) => ({
+        eventId: row.event_id,
+        noteId: row.aggregate_id,
+        occurredAt: row.occurred_at,
+      }));
+    },
+
+    async findVisibleNoteIds(
+      viewerId: ViewerId,
+      noteIds: readonly string[],
+    ): Promise<readonly string[]> {
+      if (noteIds.length === 0) {
+        return [];
+      }
+
+      const candidates = [...noteIds];
+
+      // ⚠ `note_id` and nothing else. `app.visible_notes` also returns `body` and an
+      // author card; selecting either would put a note's text — the most private thing
+      // this product stores — into the notifications path, where the whole design is
+      // that it never arrives.
+      const { rows } = await sql<VisibleNoteIdRow>`
+        select note_id
+          from app.visible_notes(${viewerId})
+         where note_id = any(${candidates}::uuid[])
+      `.execute(database);
+
+      return rows.map((row) => row.note_id);
+    },
+
     async hasDeliveredMatch(recipientId: string, notificationId: string): Promise<boolean> {
-      // The same three predicates `findDeliveredMatches` uses — the event type, the
-      // recipient in the payload, and the flush receipt — narrowed to one identifier.
-      // Written as `exists` rather than as a `findDeliveredMatches(…).some(…)` in the
-      // service, so a caller cannot accidentally pay for the whole history to answer a
-      // yes/no, and so the two spellings of "is this a delivered match" stay one
-      // statement's worth of SQL apart rather than one layer's.
+      // The same predicates the two read statements use — the event type, the recipient
+      // in the payload, and *that kind's* receipt — narrowed to one identifier. Written
+      // as `exists` rather than as a `findDeliveredMatches(…).some(…)` in the service, so
+      // a caller cannot accidentally pay for the whole history to answer a yes/no, and so
+      // the two spellings of "is this a delivered notification" stay one statement's
+      // worth of SQL apart rather than one layer's.
+      //
+      // ⚠ **Each event type is paired with its own consumer inside the `or`**, never
+      // reduced to "has some receipt". The receipt is what makes a notification exist, so
+      // a `NotePinned` row carrying only an audit receipt is not one — and a check that
+      // accepted any receipt would let a caller dismiss a delivery that had not happened.
       const { rows } = await sql<DeliveredMatchExistsRow>`
         select exists (
           select 1
-            from app.outbox_events as matched
+            from app.outbox_events as delivered
             join app.consumer_receipts as receipt
-              on receipt.event_id = matched.event_id
-             and receipt.consumer_name = ${SEND_GROUPED_PUSH_CONSUMER}
-           where matched.event_id = ${notificationId}
-             and matched.event_type = ${NOTIFY_ME_MATCHED}
-             and matched.payload ->> 'recipientId' = ${recipientId}
+              on receipt.event_id = delivered.event_id
+           where delivered.event_id = ${notificationId}
+             and delivered.payload ->> 'recipientId' = ${recipientId}
+             and (
+                   (delivered.event_type = ${NOTIFY_ME_MATCHED}
+                    and receipt.consumer_name = ${SEND_GROUPED_PUSH_CONSUMER})
+                or (delivered.event_type = ${NOTE_PINNED}
+                    and receipt.consumer_name = ${DELIVER_NOTE_PINNED_CONSUMER})
+             )
         ) as exists
       `.execute(database);
 
