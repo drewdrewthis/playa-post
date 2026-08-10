@@ -54,9 +54,14 @@ The default is **dark** (issue #151, amending this decision — superseding issu
 original light default). Nothing stored, or a stored value that is not one of the three,
 resolves to dark outright; it is not `'system'`-resolved, because a first-run default is
 itself a product choice and this one is dark regardless of the device it lands on.
-`'system'` itself resolves live via `matchMedia('(prefers-color-scheme: dark)')`, with a
-change listener kept while it is the active preference; `'light'` and `'dark'` stay
-pinned regardless of what the OS reports.
+`'system'` itself resolves live via `matchMedia('(prefers-color-scheme: dark)')`;
+`'light'` and `'dark'` stay pinned regardless of what the OS reports. The provider
+subscribes to that query through `useSyncExternalStore` and derives the resolved theme
+from React state, so a single layout effect is the **only** writer of `data-theme` and
+pinning is enforced by the derivation rather than by unsubscribing. Painting straight
+from the media-query listener is what the earlier shape did, and it desynchronised the
+document from React's committed theme: the following tap resolved to the stale value,
+changed no effect dependency, and repainted nothing.
 
 **First paint is handled by an inline, render-blocking script in `index.html`** that
 stamps `data-theme` before the body renders. `ThemeProvider` owns every change after

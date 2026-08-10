@@ -2,10 +2,10 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type JSX,
   type ReactNode,
 } from 'react';
@@ -16,6 +16,7 @@ import {
   readStoredThemePreference,
   resolveTheme,
   storeThemePreference,
+  SYSTEM_DARK_SCHEME_QUERY,
   type Theme,
   type ThemePreference,
 } from './theme-preference';
@@ -34,6 +35,28 @@ export interface ThemeControls {
 const ThemeContext = createContext<ThemeControls | null>(null);
 
 /**
+ * Subscribes React to the OS colour scheme.
+ *
+ * Module-level so its identity is stable — `useSyncExternalStore` tears the subscription
+ * down and rebuilds it whenever this function changes.
+ */
+function subscribeToSystemTheme(onSchemeChange: () => void): () => void {
+  const query = globalThis.matchMedia(SYSTEM_DARK_SCHEME_QUERY);
+
+  query.addEventListener('change', onSchemeChange);
+
+  return () => {
+    query.removeEventListener('change', onSchemeChange);
+  };
+}
+
+/** What the OS is asking for right now. A primitive, so React's snapshot comparison is
+ *  stable across calls and never loops. */
+function readSystemTheme(): Theme {
+  return resolveTheme('system');
+}
+
+/**
  * Holds the theme preference and keeps the document in sync with its resolved theme.
  *
  * Three preferences, per issue #151 (supersedes #43's light-only default): 'light',
@@ -46,33 +69,26 @@ const ThemeContext = createContext<ThemeControls | null>(null);
  * in the same frame as the render that changed it — with `useEffect` the toggle paints
  * one frame of the old palette. First paint is handled earlier still, by the inline
  * script in `index.html`; this provider only has to keep up with changes after mount.
+ *
+ * ⚠ **That layout effect is the only writer of `data-theme`.** The OS's scheme reaches it
+ * as React state, through `useSyncExternalStore`, rather than being painted straight from
+ * a `matchMedia` listener: a listener that writes the document behind React's back leaves
+ * the committed `theme` stale, and the next tap resolving to that stale value changes no
+ * dependency — so the effect never runs and the document keeps the OS's colour while the
+ * button announces the other one.
  */
 export function ThemeProvider({ children }: { readonly children: ReactNode }): JSX.Element {
   const [preference, setPreference] = useState<ThemePreference>(readStoredThemePreference);
-  const theme = resolveTheme(preference);
+  const systemTheme = useSyncExternalStore(subscribeToSystemTheme, readSystemTheme);
+  // A pinned 'light' or 'dark' never repaints because the OS changed its mind: that
+  // guarantee lives in this line, not in a conditional subscription. Keeping the
+  // subscription unconditional is what lets a preference cycled back to 'system' resolve
+  // against where the OS is *now*, rather than where it was when we stopped listening.
+  const theme: Theme = preference === 'system' ? systemTheme : preference;
 
   useLayoutEffect(() => {
     applyTheme(theme);
   }, [theme]);
-
-  // Live-follows the OS only while the stored preference is 'system' — a pinned 'light'
-  // or 'dark' preference must never repaint just because the OS changed its mind.
-  useEffect(() => {
-    if (preference !== 'system') {
-      return undefined;
-    }
-
-    const query = globalThis.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = (): void => {
-      applyTheme(resolveTheme('system'));
-    };
-
-    query.addEventListener('change', onChange);
-
-    return () => {
-      query.removeEventListener('change', onChange);
-    };
-  }, [preference]);
 
   const toggleTheme = useCallback(() => {
     setPreference((current) => {

@@ -51,19 +51,30 @@ export function storeThemePreference(preference: ThemePreference): void {
 }
 
 /**
+ * The media query 'system' resolves against.
+ *
+ * Exported so that `ThemeProvider`, which subscribes to the same query for change
+ * events, names it rather than repeating the string — a listener watching one query
+ * while this function reads another would drift silently, and the symptom would be a
+ * theme that only sometimes follows the OS.
+ */
+export const SYSTEM_DARK_SCHEME_QUERY = '(prefers-color-scheme: dark)';
+
+/**
  * Resolves a preference to the theme that actually paints.
  *
  * 'light' and 'dark' resolve to themselves; 'system' asks the OS via
- * `prefers-color-scheme`. This is the only place that media query is read, so a caller
- * that needs to react to the OS changing its mind (`ThemeProvider`) listens on the same
- * query itself rather than polling this function.
+ * `prefers-color-scheme`. This is the only place that media query is *read*, so the
+ * resolved theme has one source; a caller that needs to know when the OS changes its
+ * mind (`ThemeProvider`) subscribes to {@link SYSTEM_DARK_SCHEME_QUERY} and calls back
+ * here for the value.
  */
 export function resolveTheme(preference: ThemePreference): Theme {
   if (preference !== 'system') {
     return preference;
   }
 
-  return globalThis.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return globalThis.matchMedia(SYSTEM_DARK_SCHEME_QUERY).matches ? 'dark' : 'light';
 }
 
 const PREFERENCE_AFTER: Readonly<Record<ThemePreference, ThemePreference>> = {
