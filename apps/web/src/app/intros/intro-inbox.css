@@ -24,7 +24,18 @@
   font-size: var(--pp-text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--pp-accent);
+
+  /* `--pp-accent-ink`, not `--pp-accent`: tiny text, and the accent proper sits under
+     the 4.5:1 AA floor on the light background (see `theme/tokens.css`). */
+  color: var(--pp-accent-ink);
+}
+
+/* The decision's receipt — same voice as the standing lines on the other intro surfaces. */
+.intro-inbox__confirmation {
+  margin: 0;
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-accent-ink);
 }
 
 .intro-inbox__list {
@@ -78,5 +89,9 @@
 .intro-inbox__actions .button {
   flex: 1;
   padding: var(--pp-space-2) var(--pp-space-3);
+
+  /* 2.75rem = 44px, the WCAG 2.5.5 / platform-HIG touch-target floor: these two sit a
+     thumb-width apart and decide something irreversible. */
+  min-height: 2.75rem;
   font-size: var(--pp-text-xs);
 }

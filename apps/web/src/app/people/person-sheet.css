@@ -120,7 +120,10 @@
   margin: 0;
   font-weight: 600;
   font-size: var(--pp-text-sm);
-  color: var(--pp-accent);
+
+  /* `--pp-accent-ink`, not `--pp-accent`: this is small text, and the accent proper
+     sits under the 4.5:1 AA floor on the light surfaces (see `theme/tokens.css`). */
+  color: var(--pp-accent-ink);
 }
 
 /*

@@ -113,6 +113,16 @@ describe('the intro inbox', () => {
           input: { introRequestId: 'request-1', decision: 'pass_on' },
         },
       ]);
+
+      // The row will vanish on the re-read; the receipt is what says the decision took —
+      // in a live region, because the presser's focus was on a button that just left.
+      const confirmation = requireElement(
+        mounted().container,
+        '[data-testid="intro-inbox-confirmation"]',
+      );
+
+      expect(confirmation.textContent).toBe('Passed on.');
+      expect(confirmation.getAttribute('role')).toBe('status');
     });
 
     /*
@@ -134,6 +144,11 @@ describe('the intro inbox', () => {
           input: { introRequestId: 'request-1', decision: 'decline' },
         },
       ]);
+
+      expect(
+        requireElement(mounted().container, '[data-testid="intro-inbox-confirmation"]')
+          .textContent,
+      ).toBe('Declined.');
     });
 
     // An absent card is what the wire sends when the request outlived the relationship

@@ -308,7 +308,11 @@ function IntroAffordance({
 
   if (standing.kind !== 'none') {
     return (
-      <p className="person-sheet__intro-standing" data-testid="person-sheet-intro-standing">
+      <p
+        className="person-sheet__intro-standing"
+        role="status"
+        data-testid="person-sheet-intro-standing"
+      >
         {standing.line}
       </p>
     );

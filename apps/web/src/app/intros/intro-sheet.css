@@ -142,6 +142,10 @@
 
 .intro-sheet__chip {
   padding: 0.4375rem 0.6875rem;
+
+  /* 2.75rem = 44px, the WCAG 2.5.5 / platform-HIG touch-target floor: the chips sit
+     side by side, and picking the wrong via sends the note to the wrong person. */
+  min-height: 2.75rem;
   border: 1px solid var(--pp-chip-off-border);
   border-radius: var(--pp-radius-pill);
   background: none;

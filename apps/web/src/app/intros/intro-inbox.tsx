@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 
 import {
   INTRO_DECISION,
@@ -13,7 +13,7 @@ import { useApi } from '../api/api-provider';
 import { applicationErrorCode } from '../api/client';
 import { PersonIdentity, type DisclosableIdentity } from '../people/person-identity';
 
-import { introRefusalMessage } from './intro-copy';
+import { INTRO_DECISION_CONFIRMATION_LINE, introRefusalMessage } from './intro-copy';
 import { INTRO_INBOX_QUERY_KEY } from './intro-query-keys';
 
 import './intro-inbox.css';
@@ -58,8 +58,18 @@ export function IntroInbox(): JSX.Element | null {
     queryFn: () => api.query('intros.listInbox', undefined),
   });
 
+  /*
+   * The last decision that *took*, in the words of `INTRO_DECISION_CONFIRMATION_LINE` —
+   * because a decided row disappears on the re-read, and a card vanishing under the
+   * finger with nothing said reads as a failure.
+   */
+  const [confirmation, setConfirmation] = useState<string | null>(null);
+
   const decide = useMutation({
     mutationFn: (command: DecideIntroRequest) => api.mutate('intros.decide', command),
+    onSuccess: (_result, command) => {
+      setConfirmation(INTRO_DECISION_CONFIRMATION_LINE[command.decision]);
+    },
     /*
      * `onSettled`, not `onSuccess`: a refusal here is usually the row having been decided
      * elsewhere, and the honest response to that is to re-read rather than to leave a
@@ -70,7 +80,11 @@ export function IntroInbox(): JSX.Element | null {
 
   const rows = inbox.data ?? [];
 
-  if (rows.length === 0) {
+  /*
+   * The confirmation holds the section open after the last row is decided: collapsing
+   * to nothing in the same frame the decision lands would drop the announcement with it.
+   */
+  if (rows.length === 0 && confirmation === null) {
     return null;
   }
 
@@ -81,6 +95,12 @@ export function IntroInbox(): JSX.Element | null {
       {decide.error === null ? null : (
         <p className="form__error" data-testid="intro-inbox-error" role="alert">
           {introRefusalMessage(applicationErrorCode(decide.error))}
+        </p>
+      )}
+
+      {confirmation === null ? null : (
+        <p className="intro-inbox__confirmation" role="status" data-testid="intro-inbox-confirmation">
+          {confirmation}
         </p>
       )}
 

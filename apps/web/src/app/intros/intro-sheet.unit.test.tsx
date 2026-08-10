@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { IntroPerson } from '@playa-post/contracts';
 
+import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
 import {
   allElements,
   createFakeApi,
@@ -12,6 +13,7 @@ import {
   type FakeApi,
   type FakeApiRoutes,
   type MountedTree,
+  type SeededQuery,
 } from '../testing/mount-with-api';
 
 import { INTRO_NO_CANDIDATES_LINE } from './intro-copy';
@@ -77,6 +79,7 @@ async function openSheet(
   vias: readonly IntroPerson[],
   extraRoutes: FakeApiRoutes = {},
   onClose: () => void = () => {},
+  seedQueries?: readonly SeededQuery[],
 ): Promise<FakeApi> {
   const api = createFakeApi({
     'intros.viaCandidates': () => vias,
@@ -86,6 +89,7 @@ async function openSheet(
   tree = await mountWithApi(
     <IntroSheet targetUserId={TARGET_ID} targetName="Kiki" onClose={onClose} />,
     api,
+    seedQueries === undefined ? undefined : { seedQueries },
   );
 
   return api;
@@ -221,7 +225,30 @@ describe('the intro sheet', () => {
      * likely to believe they already know who it is.
      */
     it('renders the chip with no name, and puts none of their identifiers in the DOM', async () => {
-      await openSheet([WITHHELD_VIA]);
+      /*
+       * ⚠ The shared query cache is seeded with the person's *true* identity under the
+       * graph-list key, exactly as it would be after a `/graph` visit. Without this the
+       * absence assertions below are a tautology — nothing in the tree ever held the
+       * name — and a future "resolve the label from the graph cache" change would pass.
+       */
+      await openSheet([WITHHELD_VIA], {}, () => {}, [
+        {
+          queryKey: GRAPH_LIST_QUERY_KEY,
+          data: {
+            people: [
+              {
+                userId: WITHHELD_VIA.userId,
+                degree: 2,
+                disclosure: 'full',
+                displayName: WITHHELD_TRUTH.displayName,
+                handle: WITHHELD_TRUTH.handle,
+                trust: null,
+              },
+            ],
+            edges: [],
+          },
+        },
+      ]);
 
       const container = mounted().container;
       const chip = requireElement(container, '[data-testid="intro-sheet-via-chip"]');

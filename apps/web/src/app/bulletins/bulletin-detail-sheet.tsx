@@ -5,6 +5,8 @@ import { Link } from 'react-router';
 import { useApi } from '../api/api-provider';
 import { applicationErrorCode } from '../api/client';
 import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
+import { describeIntroStanding, type IntroStanding } from '../intros/intro-outbox-state';
+import { INTRO_OUTBOX_QUERY_KEY } from '../intros/intro-query-keys';
 import { IntroSheet } from '../intros/intro-sheet';
 import { describeNoteReach, type NoteReach } from '../notes/note-reach';
 import { noteRecipientName } from '../notes/note-recipient';
@@ -82,6 +84,17 @@ export function BulletinDetailSheet({
     queryFn: () => api.query('graph.list', undefined),
   });
 
+  /*
+   * The viewer's own outbox, under the one shared key `people/person-sheet.tsx` reads
+   * and the intro sheet invalidates. While a request for this pair is open the server
+   * refuses a second one with any via, so without this read the footer would offer a
+   * button whose only outcome is `INTRO_UNAVAILABLE`.
+   */
+  const outbox = useQuery({
+    queryKey: INTRO_OUTBOX_QUERY_KEY,
+    queryFn: () => api.query('intros.listOutbox', undefined),
+  });
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
       if (event.key === 'Escape') {
@@ -142,6 +155,17 @@ export function BulletinDetailSheet({
           recipientName: noteRecipientName(authorPerson),
           reach: describeNoteReach(authorPerson),
         };
+
+  /*
+   * `null` until the outbox read settles — and it stays `null` if that read fails,
+   * matching `person-sheet.tsx`'s four-states discipline: silence is the honest answer
+   * when the record cannot be read, and the pessimistic direction never offers a button
+   * the server would refuse.
+   */
+  const standing =
+    noteAffordance === null || outbox.data === undefined
+      ? null
+      : describeIntroStanding(outbox.data, noteAffordance.recipientId);
 
   function endDrag(): void {
     if (dragOrigin.current === null) {
@@ -263,6 +287,7 @@ export function BulletinDetailSheet({
           <PinNoteFooter
             recipientId={noteAffordance.recipientId}
             reach={noteAffordance.reach}
+            standing={standing}
             onRequestIntro={() => {
               setAskingIntro(true);
             }}
@@ -358,10 +383,12 @@ export function BulletinDetailSheet({
 function PinNoteFooter({
   recipientId,
   reach,
+  standing,
   onRequestIntro,
 }: {
   readonly recipientId: string;
   readonly reach: NoteReach;
+  readonly standing: IntroStanding | null;
   readonly onRequestIntro: () => void;
 }): JSX.Element {
   if (reach.kind === 'can-pin') {
@@ -377,20 +404,51 @@ function PinNoteFooter({
   }
 
   if (reach.kind === 'can-request-intro') {
+    /*
+     * What already happened outranks what could happen — `person-sheet.tsx`'s
+     * `IntroAffordance` order. An unsettled outbox renders the hint and no control
+     * (offering "ask" before the record is read risks a button whose only outcome is
+     * `INTRO_UNAVAILABLE`); an open or passed-on ask renders its standing line and
+     * nothing to press.
+     *
+     * ⚠ A *declined* ask keeps the control here, unlike the person sheet. A decline
+     * leaves the pair free to ask again (the partial unique index covers open requests
+     * only), and this bulletin is a fresh reason to — but the "not passed on" line
+     * stays off this surface, because a re-ask control rendered *beside* that line
+     * would turn one person's decision into a prompt to overturn it. The person sheet
+     * reports the outcome; this sheet offers the new ask.
+     */
+    const showStandingLine =
+      standing !== null && (standing.kind === 'pending' || standing.kind === 'passed-on');
+    const showAskControl =
+      standing !== null && (standing.kind === 'none' || standing.kind === 'declined');
+
     return (
       <div className="detail-sheet__intro">
         <p className="detail-sheet__intro-hint" data-testid="bulletin-detail-intro-hint">
           {reach.hint}
         </p>
 
-        <button
-          className="detail-sheet__request-intro"
-          data-testid="bulletin-detail-request-intro-button"
-          type="button"
-          onClick={onRequestIntro}
-        >
-          {reach.label}
-        </button>
+        {showStandingLine ? (
+          <p
+            className="detail-sheet__intro-standing"
+            role="status"
+            data-testid="bulletin-detail-intro-standing"
+          >
+            {standing.line}
+          </p>
+        ) : null}
+
+        {showAskControl ? (
+          <button
+            className="detail-sheet__request-intro"
+            data-testid="bulletin-detail-request-intro-button"
+            type="button"
+            onClick={onRequestIntro}
+          >
+            {reach.label}
+          </button>
+        ) : null}
       </div>
     );
   }

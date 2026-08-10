@@ -257,11 +257,26 @@
   border: 1px solid var(--pp-accent);
   border-radius: var(--pp-radius-pill);
   background: transparent;
-  color: var(--pp-accent);
+
+  /* The border keeps `--pp-accent` (a 3:1 UI-component floor it clears); the label is
+     small text and takes `--pp-accent-ink` for the 4.5:1 floor (`theme/tokens.css`). */
+  color: var(--pp-accent-ink);
   font-weight: 600;
   font-size: var(--pp-text-sm);
   text-align: center;
   text-decoration: none;
+}
+
+/*
+ * The standing line, where the control was: an ask that is open or already passed on.
+ * The same sentence `people/person-sheet.css` sets, in the same voice — the viewer's
+ * own act, reported in the accent's text shade.
+ */
+.detail-sheet__intro-standing {
+  margin: 0;
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-accent-ink);
 }
 
 /*

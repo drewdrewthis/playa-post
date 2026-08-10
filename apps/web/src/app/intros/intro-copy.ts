@@ -67,6 +67,19 @@ export const INTRO_NOT_PASSED_ON_LINE = 'Your ask was not passed on.';
 export const INTRO_PASSED_ON_LINE = 'Passed on — they have your note now.';
 
 /**
+ * What the *via* reads after deciding, keyed by the decision they made.
+ *
+ * The inbox row disappears when a decision lands (the re-read finds it decided), and a
+ * card that vanishes under the finger, silently, reads as a failure — especially to a
+ * screen-reader user, whose focus was on the button that just left the tree. One short
+ * sentence in a live region says the decision took.
+ */
+export const INTRO_DECISION_CONFIRMATION_LINE = {
+  pass_on: 'Passed on.',
+  decline: 'Declined.',
+} as const;
+
+/**
  * The line above the note field, before anything is sent.
  *
  * ⚠ **Load-bearing, not decoration.** Sending an intro request *is* consent to be seen:

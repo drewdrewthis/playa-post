@@ -95,7 +95,12 @@ erased via is absent from the function and is therefore not a candidate (ADR-000
 and blocking will prune candidates the day it lands with nothing to change here.
 
 `modules/intros` therefore needs **no allowlist entry**. It owns `app.intro_requests` and
-`app.intro_via_candidates`; it names no other module's table.
+`app.intro_via_candidates`; it names no other module's table. The ownership walker's
+per-module registration (`sql-table-ownership.fitness.test.ts`) carries
+`intro_via_candidates` — a *function*, not a table — through its owned-names channel,
+because the walker's exemption is name-based and the module's own SQL must be allowed to
+name its own function; that widening is deliberate and ratified here, not a test-local
+convenience.
 
 Both writes compose that function inside their own statement — an `INSERT … SELECT …
 WHERE EXISTS` and a gated `UPDATE` — so there is no read-then-write window and no ordering
@@ -232,4 +237,4 @@ re-ask control** — honest without exposing the via's rationale.
 | 9 | Events ride the same transaction and carry no note | same suite — a forced `CHECK` on `app.outbox_events` proves the rollback; `intro-request.events.unit.test.ts` asserts over `JSON.stringify` |
 | 10 | Contract and router agree | `tests/fitness/contracts-api-parity.fitness.test.ts` at `EXPECTED_PROCEDURE_COUNT` 34 |
 | 11 | No procedure accepts a viewer identifier | `tests/fitness/viewer-id-provenance.fitness.test.ts`, walking the registered intros router |
-| 12 | The web surface states the consent before send | **owed by the web slice** — not proven by this PR |
+| 12 | The web surface states the consent before send | `intro-copy.ts`'s `INTRO_CONSENT_LINE`, rendered by `intro-sheet.tsx` above the note field; `intro-sheet.unit.test.tsx` asserts it on screen before the send is pressable |

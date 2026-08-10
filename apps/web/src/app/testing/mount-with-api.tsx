@@ -110,13 +110,28 @@ const actEnvironment = globalThis as typeof globalThis & {
 // environment is not configured to support act(...)" over the assertions.
 actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
+/** One cache entry to plant before the tree mounts. */
+export interface SeededQuery {
+  readonly queryKey: readonly unknown[];
+  readonly data: unknown;
+}
+
 /**
  * Mount one component over a fake API and a throwaway query cache.
  *
  * `retry: false` matches `ApiProvider`'s own default and is what keeps a refusal from
  * being retried behind the assertion that it was rendered.
+ *
+ * `seedQueries` plants cache entries *before* the tree mounts — for tests whose point is
+ * that a component does **not** read something the shared cache is genuinely holding
+ * (the §6a leak tests): an absence assertion against data that was never reachable is a
+ * tautology, and seeding is what makes it load-bearing.
  */
-export async function mountWithApi(element: ReactNode, api: PlayaPostClient): Promise<MountedTree> {
+export async function mountWithApi(
+  element: ReactNode,
+  api: PlayaPostClient,
+  options?: { readonly seedQueries?: readonly SeededQuery[] },
+): Promise<MountedTree> {
   const container = document.createElement('div');
 
   document.body.append(container);
@@ -127,6 +142,10 @@ export async function mountWithApi(element: ReactNode, api: PlayaPostClient): Pr
       mutations: { retry: false },
     },
   });
+
+  for (const seed of options?.seedQueries ?? []) {
+    queryClient.setQueryData(seed.queryKey, seed.data);
+  }
 
   const root: Root = createRoot(container);
 
