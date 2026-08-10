@@ -20,13 +20,20 @@ export interface NewPushSubscription extends PushSubscription {
  */
 export interface PushSubscriptionRepository {
   /**
-   * Store this actor's subscription.
+   * Store this actor's subscription, replacing the one stored for them before.
    *
-   * @throws {import('./push-subscription.errors').PushSubscriptionAlreadyExistsError}
-   *   when the actor already has one — the primary key is what detects it, not a
-   *   prior read, so two concurrent subscribes cannot both win (M2-AC18).
+   * Total, and deliberately so: there is no state of the world in which an enrolling
+   * device should be refused. One row per owner is still the M2 model (multi-device is
+   * M5), so a second subscribe overwrites rather than accumulating — which is the only
+   * shape that lets an account whose stored endpoint has died be pointed at a live one
+   * again. `SendGroupedPushHandler` reads exactly one subscription, and this is how it
+   * comes to be the current one.
+   *
+   * Refuses nothing, so it throws nothing the caller is expected to catch: the write
+   * is the enforcement, and two concurrent subscribes resolve to whichever committed
+   * last rather than to a winner and a rejection.
    */
-  add(subscription: NewPushSubscription): Promise<void>;
+  save(subscription: NewPushSubscription): Promise<void>;
 
   /**
    * The subscription to deliver to, or `null` when this person has none.

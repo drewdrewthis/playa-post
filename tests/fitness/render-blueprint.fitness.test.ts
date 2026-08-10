@@ -135,6 +135,41 @@ describe('render.yaml (ADR-0009)', () => {
     }
   });
 
+  it('declares the Web Push keys, which the undefaulted-key check above cannot see', () => {
+    // The parity check above derives its list from what an empty environment REJECTS,
+    // and the VAPID trio is optional — absent is a supported state (the server boots on
+    // the unconfigured transport). So nothing above couples these three keys to the
+    // blueprint, and an operator whose deploy is silently never sending a push has no
+    // failing check to read. This is that check.
+    //
+    // Asserted through the schema rather than as a literal list, so adding a fourth
+    // `VAPID_*` key to the environment fails here until the blueprint declares it too.
+    const vapidKeys = Object.keys(environmentSchema.shape).filter((key) =>
+      key.startsWith('VAPID_'),
+    );
+
+    expect(vapidKeys.length).toBeGreaterThan(0);
+
+    for (const key of vapidKeys) {
+      expect(blueprint).toMatch(new RegExp(String.raw`-[ \t]*key:[ \t]*${key}\b`));
+    }
+  });
+
+  it('keeps every Web Push key out of git, values in the secret store', () => {
+    // `sync: false` is how a Render blueprint says "prompt for this once and keep it".
+    // The private key is a genuine secret; the public key and the contact are not, and
+    // are here anyway because the pair rotates together — see the blueprint's comment.
+    // A `value:` line under any of them would be a credential in source control.
+    for (const key of Object.keys(environmentSchema.shape).filter((name) =>
+      name.startsWith('VAPID_'),
+    )) {
+      expect(declaredEnvVar(key)).toBeUndefined();
+      expect(blueprint).toMatch(
+        new RegExp(String.raw`-[ \t]*key:[ \t]*${key}[ \t]*\n\s*sync:[ \t]*false\b`),
+      );
+    }
+  });
+
   it('carries the Supabase project URL as a value, because it identifies rather than authenticates', () => {
     // The JWKS this server trusts is derived from it (ADR-0011), so this one line
     // decides whose users are accepted. `sync: false` would move that decision into

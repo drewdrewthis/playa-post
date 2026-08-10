@@ -369,7 +369,11 @@ B17 · M2.20 Playwright e2e for the slice.
 - **M2-AC18 (failure surface)** Each returns a structured error with a stable code and no stack or
   internal detail: accepting your own invite, accepting twice, setting trust on a non-connection,
   reporting your own bulletin, archiving another user's bulletin, subscribing push twice.
-  *Evidence: six quoted responses with codes.*
+  Two of the six are **repeats rather than refusals** — accepting twice and subscribing push twice —
+  and what they owe is a legible, stable outcome, which for both is a success with no second row
+  (no second connection; no second subscription). An error code there would be the wrong answer:
+  `push.subscribe` refusing a re-enrollment is what made a dead endpoint permanent.
+  *Evidence: six quoted responses — four codes, two successes.*
 - **M2-AC19 (write-path IDOR, B13)** For every mutation type M2 implements — `bulletin.create`,
   `bulletin.archive`, `bulletin.report`, `bulletin.dismiss`, `connection.accept`, `trust.set`,
   `notifyMe.update` — an actor with no relationship to the subject gets a structured failure with **zero

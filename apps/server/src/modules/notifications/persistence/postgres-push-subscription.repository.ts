@@ -1,6 +1,5 @@
 import type { DatabaseConnection } from '@playa-post/database';
 
-import { PushSubscriptionAlreadyExistsError } from '../domain/push-subscription.errors';
 import type {
   NewPushSubscription,
   PushSubscriptionRepository,
@@ -13,37 +12,14 @@ export interface PostgresPushSubscriptionRepositoryDependencies {
   readonly database: DatabaseConnection;
 }
 
-/** PostgreSQL's `unique_violation`. */
-const UNIQUE_VIOLATION = '23505';
-
-/**
- * The fields `pg` puts on a `DatabaseError`, read structurally.
- *
- * Structural rather than `instanceof DatabaseError` so this file needs no value import
- * from the driver, and so it keeps working if the error travels through a pool wrapper
- * that copies the fields rather than the prototype — the same shape
- * `modules/identity/persistence/postgres-user.repository.ts` established.
- */
-interface PostgresDriverError {
-  readonly code?: unknown;
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-
-  return (error as PostgresDriverError).code === UNIQUE_VIOLATION;
-}
-
 /**
  * `app.push_subscriptions`, behind the domain's {@link PushSubscriptionRepository} port.
  *
  * **The primary key on `owner_id` is the "one subscription per user" rule** (M2 scope;
- * multi-device is M5), so the second subscribe fails in the database rather than in a
- * check this file performs first. Translating that violation is all `add` does beyond
- * inserting: the constraint is the enforcement, and this is only its vocabulary
- * (M2-AC18).
+ * multi-device is M5) — and it is also the conflict target that makes `save` a single
+ * statement. There is no read before the write and no application-level "does one
+ * exist": the key decides which row this is, and the upsert decides what it now holds,
+ * so two concurrent subscribes cannot interleave into a lost row.
  *
  * Every statement is schema-qualified (`app.push_subscriptions`, never
  * `push_subscriptions`) per ADR-0002's pooler-safety rules.
@@ -54,29 +30,31 @@ export function createPostgresPushSubscriptionRepository(
   const { database } = dependencies;
 
   return {
-    async add(subscription: NewPushSubscription): Promise<void> {
-      try {
-        await database
-          .insertInto('app.push_subscriptions')
-          .values({
-            owner_id: subscription.ownerId,
+    async save(subscription: NewPushSubscription): Promise<void> {
+      await database
+        .insertInto('app.push_subscriptions')
+        .values({
+          owner_id: subscription.ownerId,
+          endpoint: subscription.endpoint,
+          p256dh_key: subscription.keys.p256dh,
+          auth_key: subscription.keys.auth,
+          created_at: subscription.createdAt,
+        })
+        .onConflict((conflict) =>
+          // Targeted at the owner key rather than a named constraint, so the statement
+          // says which rule it is reconciling against instead of which index happens to
+          // implement it.
+          conflict.column('owner_id').doUpdateSet({
             endpoint: subscription.endpoint,
             p256dh_key: subscription.keys.p256dh,
             auth_key: subscription.keys.auth,
+            // Replaced along with the credential: the row *is* the current subscription,
+            // and leaving the first enrollment's timestamp on a credential minted today
+            // would misreport its age to anything that later ages subscriptions out.
             created_at: subscription.createdAt,
-          })
-          .execute();
-      } catch (error) {
-        // Deliberately **not** `on conflict do update`. Silently replacing a stored
-        // subscription would let a new device take over an account's notifications
-        // while the old one keeps its permission grant and simply stops receiving —
-        // a state nobody can see and nobody chose. Refusing is the honest answer, and
-        // it is the one M2-AC18 asserts.
-        if (isUniqueViolation(error)) {
-          throw new PushSubscriptionAlreadyExistsError();
-        }
-        throw error;
-      }
+          }),
+        )
+        .execute();
     },
 
     async findByOwner(ownerId: string): Promise<PushSubscription | null> {

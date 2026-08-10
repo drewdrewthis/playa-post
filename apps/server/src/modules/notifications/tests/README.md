@@ -11,16 +11,24 @@ runs in the `integration` vitest project against a Testcontainers Postgres with
 |---|---|---|
 | `integration/` | `push-subscriptions-schema-migration.integration.test.ts` | `app.push_subscriptions`' catalog shape — RLS, ownership, grants, the primary key on `owner_id` that makes "one subscription per user" a constraint |
 | `integration/` | `notify-me-push.integration.test.ts` | `notify-me.feature` — two `@e2e` (API-level) + four `@integration` (M2-AC7 ×3, M2-AC8, M2-AC21, M2-AC22) |
-| `integration/` | `push-subscription.integration.test.ts` | `notify-me.feature` › "Subscribing to push twice is rejected" (M2-AC18) |
+| `integration/` | `push-subscription.integration.test.ts` | `notify-me.feature` › "Re-subscribing to push replaces the stored subscription" (M2-AC18) |
 | `integration/` | `notifications-list.integration.test.ts` | **none** — `notifications.list` (issue #31) is the data source `vertical-slice-e2e.feature` step 9 reads, and no feature-file scenario states it. Its own docblock carries the four design choices that stand in for the missing scenarios, the same disclosure discipline `notify-me-push.integration.test.ts` uses |
 
-There is no `unit/` directory, and that is a statement rather than an omission: the two
-pure rules this module owns — the 60-second tumbling window
+The two pure rules this module owns — the 60-second tumbling window
 (`domain/notification-window.ts`) and the payload's fixed shape
 (`domain/push-transport.ts`) — are asserted through the integration suite above, at
 both boundaries the feature file names (59 s joins, 61 s starts a new group) and by a
 full-object equality on the captured payload. A unit test of the grouper alone would
 re-assert the same two boundaries one layer down.
+
+Unit tests live **beside the file they cover**, not under `unit/`:
+`infrastructure/web-push.transport.unit.test.ts` holds the `web-push` adapter's three
+decisions — the VAPID details it signs each call with, the payload it puts on the wire
+(M2-AC21 one layer further out than the integration suite reaches), and what it does
+with a failure. That last one is the reason the file exists: a `404`/`410` endpoint-gone
+must **resolve**, because `send` runs inside the flush's receipt transaction and a throw
+would roll that window back on every round forever, starving every recipient sorted
+after it. Everything else must throw, because at-least-once is the contract (ADR-0006).
 
 `notify-me.feature`'s remaining two scenarios do not live here:
 

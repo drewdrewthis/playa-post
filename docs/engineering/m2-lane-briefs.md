@@ -661,7 +661,7 @@ subscription, or a Notify Me query — which is the whole reason this sub-lane e
 | `@e2e` | Delivering the same event twice produces one notification | M2-AC8 |
 | `@integration` | Push payload carries only identifiers and a generic string | M2-AC21 |
 | `@integration` | A recipient made unauthorized before flush does not receive the push | M2-AC22 |
-| `@integration` | Subscribing to push twice is rejected | M2-AC18 |
+| `@integration` | Re-subscribing to push replaces the stored subscription | M2-AC18 |
 | `@integration` | notifyMe.update fails closed for an actor unrelated to the query | M2-AC19 |
 
 **Migrations:** `app.notify_me_queries` (**PK on `owner_id`** — D1 becomes a database

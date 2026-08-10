@@ -6,7 +6,6 @@ import type { DismissNotificationService } from '../application/dismiss-notifica
 import type { ListNotificationsQuery } from '../application/list-notifications.query';
 import type { SubscribeToPushService } from '../application/subscribe-to-push.service';
 import { NotificationUnavailableError } from '../domain/notification.errors';
-import { PushSubscriptionAlreadyExistsError } from '../domain/push-subscription.errors';
 
 import {
   presentNotification,
@@ -27,22 +26,18 @@ export interface NotificationsRouterDependencies {
 /**
  * Give an {@link ApplicationError} the transport status it deserves.
  *
- * `PUSH_SUBSCRIPTION_EXISTS` is `CONFLICT`: the request was well formed and the state
- * refused it, which is what tells a client to stop retrying and reconcile instead. It
- * is deliberately not `BAD_REQUEST` — nothing about the submitted subscription was
- * wrong — and deliberately not silently successful, because a client that believes it
- * subscribed a second device would wait for pushes that go elsewhere.
- *
  * **`NOTIFICATION_UNAVAILABLE` is `NOT_FOUND`, and never `FORBIDDEN`.** A 403 would
  * confirm that the identifier names a real notification belonging to somebody else; 404
  * is the same answer an invented one gets, which is what ADR-0002 §10 asks for and the
  * identical decision `bulletins.router.ts` makes for `BULLETIN_GONE`.
+ *
+ * **`push.subscribe` has no refusal to map.** It answered `CONFLICT` on a second
+ * enrollment while the write was insert-only; it stores by replacement now
+ * (`subscribe-to-push.service.ts`), so there is no state in which a well-formed
+ * subscription is turned away. A status a client can only respond to by guessing —
+ * "is the stored subscription mine, or a dead one?" — is worse than no status.
  */
 function asTrpcError(error: ApplicationError): TRPCError {
-  if (error instanceof PushSubscriptionAlreadyExistsError) {
-    return new TRPCError({ code: 'CONFLICT', message: error.message, cause: error });
-  }
-
   const code = error instanceof NotificationUnavailableError ? 'NOT_FOUND' : 'BAD_REQUEST';
 
   return new TRPCError({ code, message: error.message, cause: error });

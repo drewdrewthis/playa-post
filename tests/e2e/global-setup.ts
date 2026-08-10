@@ -80,6 +80,10 @@ export default async function globalSetup(_config: FullConfig): Promise<() => Pr
       'e2e_app_rw_in_a_throwaway_container',
     ),
     supabaseUrl: jwtIssuer.baseUrl,
+    // No VAPID keys, and none needed: the override below replaces the transport
+    // outright, so this harness reaches a local HTTP recorder instead of a real push
+    // service. Configuring keys here would sign requests nothing verifies.
+    webPush: null,
   };
 
   const container: AppContainer = buildAppContainer(configuration, {

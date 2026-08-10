@@ -23,11 +23,11 @@ import { createHttpServer } from './http-server';
  * (`excludedEventTypes`, wired in the container) never to claim the rows the flush
  * owns.
  *
- * ⚠ **The flush loop is conditional and M2 skips it.** `container.notificationFlush` is
- * `null` when the wired push transport cannot deliver — which it cannot until a VAPID
- * key pair is configured — and a loop whose every round could only throw, roll back,
- * and log is worth less than the noise it makes. So this file starts it only when there
- * is something to deliver through, and **logs the skip on the way past**: an
+ * ⚠ **The flush loop is conditional.** `container.notificationFlush` is `null` when the
+ * wired push transport cannot deliver — which is any deployment without the three
+ * `VAPID_*` keys — and a loop whose every round could only throw, roll back, and log is
+ * worth less than the noise it makes. So this file starts it only when there is
+ * something to deliver through, and **logs the skip on the way past**: an
  * unscheduled background task that says nothing is indistinguishable from one somebody
  * forgot to wire, which is exactly the review blocker the drainer hit in PR #28. The
  * flush is fully wired either way; only the timer is conditional.

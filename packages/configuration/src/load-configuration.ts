@@ -2,6 +2,7 @@ import {
   environmentSchema,
   type Configuration,
   type ValidatedEnvironment,
+  type WebPushConfiguration,
 } from './environment-schema';
 
 /**
@@ -63,5 +64,31 @@ function toConfiguration(environment: ValidatedEnvironment): Configuration {
     logLevel: environment.LOG_LEVEL,
     databaseUrl: environment.DATABASE_URL,
     supabaseUrl: environment.SUPABASE_URL,
+    webPush: toWebPushConfiguration(environment),
+  };
+}
+
+/**
+ * The VAPID trio as one object, or `null` when this deployment configured none of it.
+ *
+ * Reads all three rather than testing one and asserting the rest: the schema already
+ * refused a partial set, so the only two states reaching here are all and none — and
+ * checking each key is what keeps that true if the schema's rule is ever loosened.
+ */
+function toWebPushConfiguration(environment: ValidatedEnvironment): WebPushConfiguration | null {
+  const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_CONTACT } = environment;
+
+  if (
+    VAPID_PUBLIC_KEY === undefined ||
+    VAPID_PRIVATE_KEY === undefined ||
+    VAPID_CONTACT === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    publicKey: VAPID_PUBLIC_KEY,
+    privateKey: VAPID_PRIVATE_KEY,
+    contact: VAPID_CONTACT,
   };
 }

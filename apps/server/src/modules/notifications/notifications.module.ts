@@ -49,8 +49,10 @@ export interface NotificationsModuleDependencies {
    * Injected because it is the one collaborator with a network on the other side: the
    * integration suite hands in a fake to prove the payload shape and the suppression,
    * and `composition/container.ts` hands in
+   * {@link import('./infrastructure/web-push.transport').createWebPushTransport}'s
+   * adapter when the deployment has VAPID keys and
    * {@link import('./infrastructure/unconfigured-push.transport').unconfiguredPushTransport}
-   * until VAPID configuration lands.
+   * when it does not.
    */
   readonly pushTransport: PushTransport;
 }

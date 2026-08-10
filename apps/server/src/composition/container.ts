@@ -31,6 +31,7 @@ import { pinNoteCommandFields, pinNoteInput } from '../modules/notes/transport/p
 import type { SendGroupedPushHandler } from '../modules/notifications/application/send-grouped-push.handler';
 import { isPushDeliveryConfigured, type PushTransport } from '../modules/notifications/domain/push-transport';
 import { unconfiguredPushTransport } from '../modules/notifications/infrastructure/unconfigured-push.transport';
+import { createWebPushTransport } from '../modules/notifications/infrastructure/web-push.transport';
 import { createNotificationsModule } from '../modules/notifications/notifications.module';
 import type {
   MutationActorshipCheck,
@@ -242,8 +243,8 @@ export interface AppContainer {
   readonly outboxDrainer: OutboxDrainer;
   /**
    * `flush({ now })` delivers every notification grouping window that has elapsed
-   * (M2.11), or **`null` when the wired push transport cannot deliver** — which is M2's
-   * state, because no VAPID key pair is configured.
+   * (M2.11), or **`null` when the wired push transport cannot deliver** — which is any
+   * deployment without the three `VAPID_*` keys, including every local checkout.
    *
    * Exposed unstarted for the same reason {@link outboxDrainer} is: *when* it runs is
    * `entrypoints/notification-flush/start-notification-flush-poller.ts`'s job. A second
@@ -284,10 +285,10 @@ export interface AppContainer {
  *
  * @param overrides - Composition-layer injection seam (issue #31, option 2). Today it
  *   carries exactly one thing: a `PushTransport` for a harness that needs the flush to
- *   be schedulable — the e2e's recording transport in `tests/e2e/global-setup.ts` is
- *   the one caller. Absent, the wiring is byte-identical to before the seam existed:
- *   `unconfiguredPushTransport`, so `notificationFlush` stays `null` until a real
- *   VAPID-configured adapter replaces that default here.
+ *   be schedulable without reaching a push service — the e2e's recording transport in
+ *   `tests/e2e/global-setup.ts` is the one caller. Absent, the transport follows
+ *   `configuration.webPush`: the real `web-push` adapter when the three VAPID keys are
+ *   set, `unconfiguredPushTransport` when they are not.
  *
  * @example
  * ```ts
@@ -361,13 +362,23 @@ export function buildAppContainer(
   // module's note on why the read does not come through this container.
   // Held in a local because two decisions read it: what the module delivers through,
   // and — via `isPushDeliveryConfigured` below — whether `main.ts` is given a flush to
-  // schedule at all. Swapping this one line for a real adapter turns the flush loop on;
-  // there is no second switch to remember.
+  // schedule at all. One switch, read twice; there is no second one to remember.
   //
-  // ⚠ Refuses every dispatch, on purpose. M2 configures no VAPID key pair, and a
-  // silently-dropping transport would mark windows delivered while nobody received
-  // anything — see the adapter's own docstring for what replacing it costs.
-  const pushTransport = overrides?.pushTransport ?? unconfiguredPushTransport;
+  // ⚠ **`configuration.webPush` is the whole switch.** With the three VAPID keys set,
+  // this is real delivery and the flush loop runs. Without them the transport refuses
+  // every dispatch on purpose, because a silently-dropping one would mark windows
+  // delivered while nobody received anything — see `unconfigured-push.transport.ts`.
+  // The environment is read here and only here: a module reaching for `process.env`
+  // would be a hidden dependency the boundary rules cannot see (addendum §12).
+  //
+  // The override stays outermost so a harness injecting its own transport is unaffected
+  // by whatever the environment happens to carry (the e2e's recording transport, issue
+  // #31 option 2).
+  const pushTransport =
+    overrides?.pushTransport ??
+    (configuration.webPush === null
+      ? unconfiguredPushTransport
+      : createWebPushTransport({ vapid: configuration.webPush, log: logger }));
   const notifications = createNotificationsModule({
     database,
     visiblePeople: graph.visiblePeople,

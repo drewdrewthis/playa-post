@@ -78,10 +78,16 @@ Feature: Notify Me — single saved-query notification
 
   @integration
   # @ac:M2-AC18
-  Scenario: Subscribing to push twice is rejected
+  # A repeat rather than a refusal, the same shape connections.feature gives "Accepting
+  # an already-accepted invite is idempotent": one row per owner is still the M2 model,
+  # and what the second submit is answered with is a legible success. Enrolling has to
+  # be repeatable — a device whose stored endpoint has died is pointed at a live one by
+  # pressing "Enable push" again, and nothing else in M2 can do it.
+  Scenario: Re-subscribing to push replaces the stored subscription
     Given a viewer who already has an active push subscription
-    When that viewer submits another push subscription request
-    Then the response is a structured error with a stable code
+    When that viewer submits a different push subscription
+    Then that viewer has exactly one stored push subscription
+    And it is the one most recently submitted
 
   @integration
   # @ac:M2-AC19

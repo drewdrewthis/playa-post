@@ -13,6 +13,18 @@ const REQUIRED_ENVIRONMENT = {
   SUPABASE_URL: 'https://project-ref.supabase.co',
 } as const;
 
+/**
+ * The three optional Web Push keys, together — the only way they may be set.
+ *
+ * Obvious placeholders for the same reason as above: `VAPID_PRIVATE_KEY` is a real
+ * secret in a real deployment, and a test fixture that looks like one is a finding.
+ */
+const VAPID_ENVIRONMENT = {
+  VAPID_PUBLIC_KEY: 'a-public-key-that-is-not-real',
+  VAPID_PRIVATE_KEY: 'a-private-key-that-is-not-real',
+  VAPID_CONTACT: 'mailto:nobody@example.invalid',
+} as const;
+
 describe('loadConfiguration', () => {
   it('applies defaults for every key that has one', () => {
     const configuration = loadConfiguration({ ...REQUIRED_ENVIRONMENT });
@@ -24,6 +36,7 @@ describe('loadConfiguration', () => {
       logLevel: 'info',
       databaseUrl: REQUIRED_ENVIRONMENT.DATABASE_URL,
       supabaseUrl: REQUIRED_ENVIRONMENT.SUPABASE_URL,
+      webPush: null,
     });
   });
 
@@ -73,6 +86,7 @@ describe('loadConfiguration', () => {
       logLevel: 'warn',
       databaseUrl: REQUIRED_ENVIRONMENT.DATABASE_URL,
       supabaseUrl: REQUIRED_ENVIRONMENT.SUPABASE_URL,
+      webPush: null,
     });
   });
 
@@ -139,5 +153,89 @@ describe('loadConfiguration', () => {
     expect(thrown).toBeInstanceOf(ConfigurationError);
     expect((thrown as ConfigurationError).message).toContain('SUPABASE_URL');
     expect((thrown as ConfigurationError).message).not.toContain(mispasted);
+  });
+
+  describe('Web Push configuration', () => {
+    it('reports no Web Push at all when none of the three keys is set', () => {
+      // The supported, ordinary state: every local checkout and every test harness.
+      // `null` rather than a partly-filled object, so the composition root's single
+      // check cannot be two-thirds right.
+      expect(loadConfiguration({ ...REQUIRED_ENVIRONMENT }).webPush).toBeNull();
+    });
+
+    it('groups the three keys into one object when all of them are set', () => {
+      const configuration = loadConfiguration({
+        ...REQUIRED_ENVIRONMENT,
+        ...VAPID_ENVIRONMENT,
+      });
+
+      expect(configuration.webPush).toEqual({
+        publicKey: VAPID_ENVIRONMENT.VAPID_PUBLIC_KEY,
+        privateKey: VAPID_ENVIRONMENT.VAPID_PRIVATE_KEY,
+        contact: VAPID_ENVIRONMENT.VAPID_CONTACT,
+      });
+    });
+
+    /*
+     * All-or-none, and the failure has to land at boot. A server that starts with two
+     * of three keys cannot sign a push, and the only place that shows up is inside the
+     * flush's receipt transaction — as a window that rolls back on every round with
+     * nothing naming the cause.
+     */
+    it('refuses a partial set, naming every key still missing', () => {
+      let thrown: unknown;
+      try {
+        loadConfiguration({
+          ...REQUIRED_ENVIRONMENT,
+          VAPID_PUBLIC_KEY: VAPID_ENVIRONMENT.VAPID_PUBLIC_KEY,
+        });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(ConfigurationError);
+      expect((thrown as ConfigurationError).invalidKeys).toEqual([
+        'VAPID_CONTACT',
+        'VAPID_PRIVATE_KEY',
+      ]);
+    });
+
+    it('refuses a set missing only the contact', () => {
+      // The likeliest partial set in practice: somebody pastes the generated key pair
+      // and never reads the line about RFC 8292 §2.1 needing a contact.
+      expect(() =>
+        loadConfiguration({
+          ...REQUIRED_ENVIRONMENT,
+          VAPID_PUBLIC_KEY: VAPID_ENVIRONMENT.VAPID_PUBLIC_KEY,
+          VAPID_PRIVATE_KEY: VAPID_ENVIRONMENT.VAPID_PRIVATE_KEY,
+        }),
+      ).toThrow(ConfigurationError);
+    });
+
+    it('never echoes the private key, whichever way the environment is wrong', () => {
+      let thrown: unknown;
+      try {
+        loadConfiguration({
+          ...REQUIRED_ENVIRONMENT,
+          VAPID_PRIVATE_KEY: VAPID_ENVIRONMENT.VAPID_PRIVATE_KEY,
+        });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(ConfigurationError);
+      expect((thrown as ConfigurationError).message).not.toContain(
+        VAPID_ENVIRONMENT.VAPID_PRIVATE_KEY,
+      );
+    });
+
+    it('rejects an empty string, which is how an unset key arrives from a shell', () => {
+      // `VAPID_CONTACT=` in a `.env` file is a *present* key with an empty value, not an
+      // absent one — so without a length rule it would sail past the all-or-none check
+      // and reach `web-push` as an empty VAPID subject.
+      expect(() =>
+        loadConfiguration({ ...REQUIRED_ENVIRONMENT, ...VAPID_ENVIRONMENT, VAPID_CONTACT: '' }),
+      ).toThrow(ConfigurationError);
+    });
   });
 });
