@@ -172,6 +172,37 @@ describe('invitations (invitations.feature @integration, M2-AC17)', () => {
       );
       expect(rows).toHaveLength(2);
     });
+
+    it('returns the same invite on every read when two pending invites tie on created_at', async () => {
+      const inviterId = await seedOnboardedUser('dusty_tied_pending_inviter');
+      const invitations = createPostgresInvitationRepository({ database });
+      const createInvite = createCreateInviteService({ invitations });
+
+      // Both rows share one createdAt — no gap for `created_at desc` to resolve, so
+      // this is the one case that actually exercises the `id desc` tiebreak (the test
+      // above has a timestamp gap and would pass even without it). Without a stable
+      // tiebreaker this read is nondeterministic: which row wins could flip from call
+      // to call, and no test with a timestamp gap can catch that.
+      const tiedAt = new Date('2026-01-01T00:00:00.000Z');
+      const seededTokens = [
+        await seedInvitation(inviterId, 'pending', tiedAt),
+        await seedInvitation(inviterId, 'pending', tiedAt),
+      ];
+
+      const firstRead = await createInvite.create({ inviterId });
+      const secondRead = await createInvite.create({ inviterId });
+      const thirdRead = await createInvite.create({ inviterId });
+
+      expect(seededTokens).toContain(firstRead.token);
+      expect(secondRead.token).toBe(firstRead.token);
+      expect(thirdRead.token).toBe(firstRead.token);
+
+      const { rows } = await testDatabase.client.query(
+        `select id from app.invitations where inviter_id = $1`,
+        [inviterId],
+      );
+      expect(rows).toHaveLength(2);
+    });
   });
 
   describe('Scenario: Spent invite token cannot be opened again', () => {

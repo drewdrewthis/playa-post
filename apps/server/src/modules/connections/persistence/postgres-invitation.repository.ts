@@ -47,10 +47,14 @@ export function createPostgresInvitationRepository(
       // minted before get-or-create existed may leave several pending, and the newest
       // is the one the You screen most recently displayed.
       //
-      // `id desc` tiebreaks it: `created_at` comes from a ms-precision clock, so two
-      // racing creates can tie, and without a stable tiebreaker "newest wins" is
-      // nondeterministic — successive reads could flip between tokens (same bug class
-      // as the outbox `available_at` precision fix, commit 6100377).
+      // `id desc` tiebreaks it — not by finding "the newest": `app.invitations.id` is
+      // `gen_random_uuid()` (migration 20260805234326), a random UUIDv4 with no time
+      // ordering to restore. What it actually buys is determinism. Two racing creates
+      // can land in the same millisecond, and without a stable tiebreaker the choice
+      // between them is nondeterministic — successive reads could flip between tokens
+      // (same bug class as the outbox `available_at` precision fix, commit 6100377).
+      // Among a true tie the winner is arbitrary but stable, which is all "the current
+      // invite" needs.
       const row = await database
         .selectFrom('app.invitations')
         .selectAll()
