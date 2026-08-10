@@ -19,12 +19,27 @@ export function inviteUrl(origin: string, token: string): string {
 }
 
 /**
- * What the share sheet sends alongside the link.
+ * The consent line alone, with no link folded into it.
  *
- * States the consent rule, because a bare URL in a messaging app asks somebody to trust a
- * link with no stated purpose — and consent is the thing this product will not skip. The
- * wording is the comp's own: *"Nothing happens until you both consent."*
+ * ⚠ **This is the whole `text` field whenever `url` travels alongside it** —
+ * `navigator.share({ text: inviteShareBlurb(), url })`. Folding the link into `text` too
+ * (the pre-#160 shape) meant a share target that reads both fields verbatim — the OS
+ * share sheet's own Copy action among them — pasted the link twice. `inviteShareText`
+ * below is the combined form, for the one case that has nowhere else to put the link.
+ * The wording is the comp's own: *"Nothing happens until you both consent."*
+ */
+export function inviteShareBlurb(): string {
+  return 'Connect with me on Playa Post. Nothing happens until you both consent.';
+}
+
+/**
+ * The blurb and the link, combined into one self-contained string.
+ *
+ * ⚠ **For the clipboard fallback only** — the one shape with exactly one field, so the
+ * link has to travel inside it or not at all. Never pass this as `navigator.share`'s
+ * `text` when a `url` field is also going along; see {@link inviteShareBlurb} for that
+ * case, and issue #160 for what happens when the two overlap.
  */
 export function inviteShareText(url: string): string {
-  return `Connect with me on Playa Post. Nothing happens until you both consent.\n${url}`;
+  return `${inviteShareBlurb()}\n${url}`;
 }

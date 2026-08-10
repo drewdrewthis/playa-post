@@ -1,11 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
-import type { JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import QRCode from 'react-qr-code';
 
 import { useApi } from '../api/api-provider';
 
-import { inviteShareText, inviteUrl } from './invite-share';
+import { inviteShareBlurb, inviteShareText, inviteUrl } from './invite-share';
 import { RetryRow } from './retry-row';
+
+/** How long the copy button's "Copied" confirmation holds before reverting — the same
+ *  shape as `ComposeBulletinForm`'s toast timer, held a little shorter since nothing
+ *  here navigates the user away when it ends. Exported so the AC5 revert test waits on
+ *  the real value rather than a second, driftable copy of the literal. */
+export const COPIED_HOLD_MS = 1500;
 
 /**
  * The one spelling of the invite-card query key, the discipline
@@ -78,9 +84,12 @@ export function ConnectCard(): JSX.Element {
       </div>
 
       <div className="profile__connect-body">
-        <span className="profile__invite-link" data-testid="invite-link">
-          {shareUrl}
-        </span>
+        <div className="profile__invite-row">
+          <span className="profile__invite-link" data-testid="invite-link">
+            {shareUrl}
+          </span>
+          <CopyLinkButton url={shareUrl} />
+        </div>
         <p className="screen__aside">
           Scan or tap to connect. Nothing happens until you both consent.
         </p>
@@ -102,6 +111,13 @@ export function ConnectCard(): JSX.Element {
 /**
  * Hand the invite to the platform's share sheet, or to the clipboard.
  *
+ * ⚠ **`text` and `url` never overlap.** `navigator.share`'s `text` field carries only the
+ * consent blurb; the link travels solely in `url`. Passing both fields with the link
+ * folded into `text` too used to mean a share target that reads both fields verbatim —
+ * the OS share sheet's own Copy action among them — pasted the link twice (issue #160).
+ * The clipboard fallback has no separate `url` field to lean on, so it gets the combined,
+ * self-contained form instead.
+ *
  * ⚠ Both branches can reject — `navigator.share` throws `AbortError` when the user
  * dismisses the sheet, and the clipboard throws when the document is not focused. Neither
  * is a failure worth interrupting anybody over, and neither leaves the app in a bad state,
@@ -111,12 +127,100 @@ export function ConnectCard(): JSX.Element {
 async function shareInvite(url: string): Promise<void> {
   try {
     if (typeof navigator.share === 'function') {
-      await navigator.share({ text: inviteShareText(url), url });
+      await navigator.share({ text: inviteShareBlurb(), url });
       return;
     }
 
-    await navigator.clipboard.writeText(url);
+    await navigator.clipboard.writeText(inviteShareText(url));
   } catch {
     // Deliberately silent; see above.
   }
+}
+
+/**
+ * The one-tap copy affordance beside the invite link (issue #160 AC3/AC4): the app's
+ * icon-button idiom — a round svg-glyph button whose accessible name carries state, the
+ * same shape `ThemeToggle` uses for its own multi-state glyph — sized to sit inline
+ * beside a text row instead of the header's chrome.
+ *
+ * Copies the **bare** URL, deliberately: this is the "grab the link" affordance, not the
+ * share sheet's, so there is no consent blurb to carry.
+ */
+function CopyLinkButton({ url }: { readonly url: string }): JSX.Element {
+  const [copied, setCopied] = useState(false);
+
+  // Mirrors `ComposeBulletinForm`'s toast timer: setting `copied` is what schedules its
+  // own reversal, so there is one place the transient state's lifetime is decided.
+  //
+  // ⚠ The cleanup below only matters for unmount. React bails out of a `setCopied(true)`
+  // call when `copied` is already `true` — same value, no re-render — so a second click
+  // landing inside the hold window neither restarts this timer nor cancels it; the label
+  // still reverts on the schedule the *first* click set, not a fresh `COPIED_HOLD_MS` from
+  // the second.
+  useEffect(() => {
+    if (!copied) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setCopied(false);
+    }, COPIED_HOLD_MS);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [copied]);
+
+  async function onCopy(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      // Deliberately silent, matching `shareInvite` above: the link is still on screen
+      // to copy by hand, and nothing else here depends on this succeeding.
+    }
+  }
+
+  return (
+    <button
+      className={copied ? 'icon-button profile__copy profile__copy--copied' : 'icon-button profile__copy'}
+      data-testid="copy-invite-link-button"
+      type="button"
+      aria-label={copied ? 'Copied' : 'Copy invite link'}
+      onClick={() => {
+        void onCopy();
+      }}
+    >
+      {copied ? (
+        <svg
+          aria-hidden="true"
+          width="1.125em"
+          height="1.125em"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      ) : (
+        <svg
+          aria-hidden="true"
+          width="1.125em"
+          height="1.125em"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+      )}
+    </button>
+  );
 }

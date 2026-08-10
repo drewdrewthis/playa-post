@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { inviteShareText, inviteUrl } from './invite-share';
+import { inviteShareBlurb, inviteShareText, inviteUrl } from './invite-share';
 
 /**
  * The CONNECT card's link (design/Playa Post.dc.html: `playapost.net/j/RAE-7Q2F`).
@@ -44,5 +44,28 @@ describe('the invite link', () => {
 
     expect(text).toContain('https://playapost.example/invite/RAE-7Q2F');
     expect(text.toLowerCase()).toContain('consent');
+  });
+
+  /**
+   * Issue #160: this is what `navigator.share`'s `text` field carries whenever a `url`
+   * field travels alongside it. A link folded in here too is a link the OS share sheet's
+   * own Copy action would paste a second time, on top of the one already in `url`.
+   */
+  it('states the consent rule with no link folded into it', () => {
+    const blurb = inviteShareBlurb();
+
+    expect(blurb.toLowerCase()).toContain('consent');
+    expect(blurb).not.toContain('http');
+    expect(blurb).not.toContain('/invite/');
+  });
+
+  /**
+   * The clipboard fallback's one field has nowhere else to put the link, so this is the
+   * blurb and the link, exactly once each, self-contained.
+   */
+  it('is the blurb and the link exactly once, self-contained', () => {
+    const url = 'https://playapost.example/invite/RAE-7Q2F';
+
+    expect(inviteShareText(url)).toBe(`${inviteShareBlurb()}\n${url}`);
   });
 });
