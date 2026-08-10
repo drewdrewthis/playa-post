@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useState, type JSX } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createFakeApi,
@@ -10,6 +10,7 @@ import {
 } from '../testing/mount-with-api';
 
 import { ConnectCard } from './connect-card';
+import { inviteShareBlurb, inviteShareText } from './invite-share';
 
 /**
  * The CONNECT card's three states, mounted over the fake API (PR #144 review).
@@ -119,6 +120,121 @@ describe('ConnectCard', () => {
     const link = requireElement(tree.container, '[data-testid="invite-link"]');
     expect(link.textContent).toContain(TOKEN);
     expect(createCalls(api)).toBe(1);
+  });
+});
+
+/**
+ * Issue #160: the share sheet's `text` field pasted the link a second time because it
+ * carried the same link `url` was already carrying — the OS share sheet's own Copy
+ * action reads both fields verbatim. These assert the two never overlap again, the
+ * clipboard fallback stays self-contained, and the new copy affordance beside the link
+ * does its own, separate job.
+ *
+ * ⚠ jsdom implements neither `navigator.share` nor `navigator.clipboard` by default, so
+ * each test stubs only the one property it needs via `Object.defineProperty` — never
+ * `vi.stubGlobal('navigator', ...)`, which would replace the whole jsdom `navigator` and
+ * risk breaking whatever else here reads it. The `afterEach` below removes both own
+ * properties again so a stub from one test cannot leak into the next.
+ */
+describe('sharing and copying the invite link', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'share');
+    Reflect.deleteProperty(navigator, 'clipboard');
+  });
+
+  function stubClipboard(): ReturnType<typeof vi.fn> {
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: writeTextMock },
+      configurable: true,
+    });
+
+    return writeTextMock;
+  }
+
+  function createReadyApi(): ReturnType<typeof createFakeApi> {
+    return createFakeApi({
+      [CREATE_PATH]: () => ({
+        token: TOKEN,
+        invitationId: 'inv-1',
+        createdAt: new Date().toISOString(),
+      }),
+    });
+  }
+
+  /**
+   * AC1 — the regression this issue fixes. `text` carries the blurb alone; the link
+   * travels solely in `url`. Asserted twice: the exact payload shape, and then directly
+   * that `text` does not contain the url, so a future edit to the blurb itself could not
+   * quietly reintroduce the duplication and still pass the first assertion alone.
+   */
+  it('gives navigator.share a blurb-only text field alongside the url', async () => {
+    const shareMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', { value: shareMock, configurable: true });
+
+    tree = await mountWithApi(<ConnectCard />, createReadyApi());
+
+    const link = requireElement(tree.container, '[data-testid="invite-link"]');
+    const url = link.textContent ?? '';
+
+    const shareButton = requireElement<HTMLButtonElement>(
+      tree.container,
+      '[data-testid="invite-share-button"]',
+    );
+    await tree.run(() => {
+      shareButton.click();
+    });
+
+    expect(shareMock).toHaveBeenCalledWith({ text: inviteShareBlurb(), url });
+
+    const [payload] = shareMock.mock.calls[0] as [{ text: string; url: string }];
+    expect(payload.text).not.toContain(payload.url);
+  });
+
+  /** AC2 — with no share sheet, the clipboard gets the one field it has: blurb and link, combined. */
+  it('writes the combined blurb-and-link form to the clipboard when there is no share sheet', async () => {
+    const writeTextMock = stubClipboard();
+
+    tree = await mountWithApi(<ConnectCard />, createReadyApi());
+
+    const link = requireElement(tree.container, '[data-testid="invite-link"]');
+    const url = link.textContent ?? '';
+
+    const shareButton = requireElement<HTMLButtonElement>(
+      tree.container,
+      '[data-testid="invite-share-button"]',
+    );
+    await tree.run(() => {
+      shareButton.click();
+    });
+
+    expect(writeTextMock).toHaveBeenCalledWith(inviteShareText(url));
+  });
+
+  /** AC3/AC4 — the standing copy affordance beside the link: bare url, transient confirmation. */
+  it('copies the bare link from the copy button and confirms it', async () => {
+    const writeTextMock = stubClipboard();
+
+    tree = await mountWithApi(<ConnectCard />, createReadyApi());
+
+    const link = requireElement(tree.container, '[data-testid="invite-link"]');
+    const url = link.textContent ?? '';
+
+    const copyButton = requireElement<HTMLButtonElement>(
+      tree.container,
+      '[data-testid="copy-invite-link-button"]',
+    );
+    expect(copyButton.getAttribute('aria-label')).toBe('Copy invite link');
+
+    await tree.run(() => {
+      copyButton.click();
+    });
+
+    // Bare link — no blurb folded in, which is what makes this a distinct affordance
+    // from the share button rather than a second way to trigger the same payload.
+    expect(writeTextMock).toHaveBeenCalledWith(url);
+    expect(copyButton.getAttribute('aria-label')).toBe('Copied');
   });
 });
 

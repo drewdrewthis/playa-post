@@ -136,15 +136,45 @@
   background: #fff;
 }
 
+/** The invite link and its copy button, side by side (issue #160 AC3/AC4). */
+.profile__invite-row {
+  display: flex;
+  align-items: center;
+  gap: var(--pp-space-2);
+  min-width: 0;
+}
+
 /** Mono, because a link a person may have to read out or retype is read character by character. */
 .profile__invite-link {
   overflow: hidden;
+  flex: 1;
+  min-width: 0;
   font-family: var(--pp-font-mono);
   font-weight: 500;
   font-size: var(--pp-text-sm);
   color: var(--pp-accent);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/*
+ * `.icon-button`'s own card surface and border read as flat here — this button sits on
+ * `.profile__connect`'s identical `--pp-card` background rather than the app chrome's
+ * `--pp-bg`, so the two would be indistinguishable. Stripped to a bare glyph in the
+ * link's own accent colour, the pair reads as one control instead of two.
+ */
+.profile__copy {
+  width: 1.75rem;
+  height: 1.75rem;
+  border: none;
+  background: transparent;
+  color: var(--pp-accent);
+  font-size: 0.75rem;
+}
+
+/** The post-copy checkmark, held for `COPIED_HOLD_MS` — the same "good" tone `.profile__pill--good` uses. */
+.profile__copy--copied {
+  color: var(--pp-ok);
 }
 
 .profile__share {
