@@ -11,6 +11,12 @@ import { buildAppContainer } from './container';
  * `notificationFlush`'s `SendGroupedPushHandler | null` decision through
  * `isPushDeliveryConfigured`.
  *
+ * That second decision is now driven by `configuration.webPush` — the three `VAPID_*`
+ * keys are the only switch that turns real delivery on, and this file is where "setting
+ * them schedules the flush, and the harness override still wins" is held. No
+ * infrastructure: `buildAppContainer` opens no socket, so the whole graph builds against
+ * a database that is not listening.
+ *
  * A new file rather than an edit to the not-yet-arrived `container.unit.test.ts`
  * (merged on origin/main, absent here, arrives clean at rebase) — mirrors that
  * file's fixture shape and network-stubbing idiom without touching it.
@@ -22,6 +28,24 @@ const configuration: Configuration = {
   logLevel: 'silent',
   databaseUrl: 'postgres://app_rw@127.0.0.1:1/nothing_listening_here',
   supabaseUrl: 'https://project-that-does-not-exist.supabase.co',
+  webPush: null,
+};
+
+/**
+ * The same configuration with Web Push actually configured.
+ *
+ * Obvious placeholder credentials — a realistic-looking VAPID key in a test file is a
+ * finding for `secret-scan` and for the next reader. Nothing here signs anything: the
+ * container builds its object graph without touching a socket, so these strings are
+ * only ever read into the adapter's closure.
+ */
+const configuredForWebPush: Configuration = {
+  ...configuration,
+  webPush: {
+    publicKey: 'a-public-key-that-is-not-real',
+    privateKey: 'a-private-key-that-is-not-real',
+    contact: 'mailto:nobody@example.invalid',
+  },
 };
 
 const networkAttempt = vi.fn(() => Promise.reject(new Error('unit tests do not use the network')));
@@ -42,11 +66,42 @@ describe('notification.events.ts SELF_DRAINED_EVENT_TYPES', () => {
 });
 
 describe('buildAppContainer notificationFlush wiring', () => {
-  it('is null when the composed transport is the unconfigured one', async () => {
-    // The default path: no override means `unconfiguredPushTransport`, so the flush
-    // must not be schedulable. This is the wiring production runs — the seam below
-    // exists for harnesses and must change nothing when it is not used.
+  it('is null when the environment configures no VAPID keys', async () => {
+    // The unconfigured path: `configuration.webPush` is null, so the composed transport
+    // is `unconfiguredPushTransport` and the flush must not be schedulable. Every local
+    // checkout and every harness without keys is in this state.
     const container = buildAppContainer(configuration);
+
+    expect(container.notificationFlush).toBeNull();
+
+    await container.dispose();
+  });
+
+  it('is the grouped-push flush when the environment configures VAPID keys', async () => {
+    // The whole point of this issue: the three keys are the only switch. Nothing else
+    // changes between this call and the one above — no override, no code edit — and
+    // `main.ts` reads exactly this field to decide whether to arm the poll loop.
+    const container = buildAppContainer(configuredForWebPush);
+
+    expect(container.notificationFlush).not.toBeNull();
+
+    await container.dispose();
+  });
+
+  it('lets a harness override win over configured VAPID keys', async () => {
+    /*
+     * The seam stays outermost. A harness that injects a transport must reach its own
+     * recorder rather than a real push service whatever the ambient environment says —
+     * otherwise a developer box with VAPID keys exported would send an e2e run's pushes
+     * to a live push service.
+     *
+     * Proven through `isConfigured: false`, which is the one difference observable from
+     * outside the container: the configured web-push adapter declares `true` and would
+     * make this non-null, so a null flush here can only mean the override was taken.
+     */
+    const container = buildAppContainer(configuredForWebPush, {
+      pushTransport: { isConfigured: false, send: () => Promise.resolve() },
+    });
 
     expect(container.notificationFlush).toBeNull();
 

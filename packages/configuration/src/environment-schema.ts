@@ -15,8 +15,11 @@ import { z } from 'zod';
  *   an empty abstraction (§4).
  * - Mirror every change in `.env.example`, which lists the same keys with safe
  *   placeholder values.
+ *
+ * Per-key validation only. A rule spanning two keys belongs on
+ * {@link environmentSchema}, which wraps this object with exactly one.
  */
-export const environmentSchema = z.object({
+const environmentKeys = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   HOST: z.string().min(1).default('127.0.0.1'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
@@ -49,10 +52,98 @@ export const environmentSchema = z.object({
    * served over plain `http`, and pinning `https` here would break every developer.
    */
   SUPABASE_URL: z.url(),
+  /**
+   * VAPID application server public key — URL-safe base64, and **not a secret**: the
+   * browser needs it to subscribe, so `apps/web` ships the same string as
+   * `VITE_VAPID_PUBLIC_KEY`. Optional; see {@link VAPID_KEYS}.
+   */
+  VAPID_PUBLIC_KEY: z.string().min(1).optional(),
+  /**
+   * VAPID application server private key. **A secret**, and length is the only shape
+   * asserted — enough to fail at boot rather than at the first push, never enough to
+   * encode its format here. Optional; see {@link VAPID_KEYS}.
+   */
+  VAPID_PRIVATE_KEY: z.string().min(1).optional(),
+  /**
+   * The `mailto:` or `https:` URI a push service contacts about this application
+   * server, as [RFC 8292](https://www.rfc-editor.org/rfc/rfc8292) §2.1 requires.
+   *
+   * Unvalidated beyond length on purpose: `web-push` is the authority on the accepted
+   * URI forms and rejects a malformed one itself, and a second, stricter rule here
+   * would refuse a legitimate contact the day that library widens what it accepts.
+   * Optional; see {@link VAPID_KEYS}.
+   */
+  VAPID_CONTACT: z.string().min(1).optional(),
+});
+
+/**
+ * The three keys that configure Web Push, which are **all-or-none**.
+ *
+ * A deployment with one or two of them set is a deployment somebody was in the middle
+ * of configuring: `web-push` cannot sign a request without the pair, and a push service
+ * refuses one without a contact. Accepting a partial set would boot a server that looks
+ * configured and fails at the first delivery — inside the flush's receipt transaction,
+ * where the only symptom is a window that rolls back forever.
+ *
+ * Absent entirely is a first-class, supported state: the composition root wires
+ * `unconfiguredPushTransport`, the flush is never scheduled, and matches accumulate as
+ * `pending` rows (`modules/notifications/infrastructure/unconfigured-push.transport.ts`).
+ */
+const VAPID_KEYS = ['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_CONTACT'] as const;
+
+/**
+ * Everything the environment declares, plus the one cross-key rule it carries.
+ *
+ * ⚠ **`.check()` and not `.refine()`**, because the error must name *every* missing key
+ * rather than one: `ConfigurationError` reports `invalidKeys`, and an operator who has
+ * set one of three wants both remaining names in the first boot failure, not the second.
+ *
+ * ⚠ **Still a `ZodObject`.** Zod 4 keeps refinements inside the schema, so `.shape` and
+ * `.safeParse` survive — `tests/fitness/render-blueprint.fitness.test.ts` reads both.
+ *
+ * The check does not run when a *required* key is also missing (Zod aborts first), so a
+ * boot missing `DATABASE_URL` and half a VAPID set reports the database key, then the
+ * VAPID keys on the next attempt. Two honest failures rather than one; the alternative
+ * is asserting cross-key rules against values that failed their own validation.
+ */
+export const environmentSchema = environmentKeys.check((context) => {
+  const present = VAPID_KEYS.filter((key) => context.value[key] !== undefined);
+
+  if (present.length === 0 || present.length === VAPID_KEYS.length) {
+    return;
+  }
+
+  for (const key of VAPID_KEYS.filter((candidate) => context.value[candidate] === undefined)) {
+    context.issues.push({
+      code: 'custom',
+      input: context.value,
+      path: [key],
+      message: `Web Push configuration is all-or-none: set every one of ${VAPID_KEYS.join(', ')}, or none of them.`,
+    });
+  }
 });
 
 /** Raw, validated environment. Prefer {@link Configuration} in consuming code. */
 export type ValidatedEnvironment = z.infer<typeof environmentSchema>;
+
+/**
+ * The VAPID credentials a Web Push adapter signs with, as one object.
+ *
+ * Grouped rather than spread across three fields on {@link Configuration} so that
+ * "is Web Push configured" is a single `null` check at the one place that asks
+ * (`composition/container.ts`), instead of three reads a future edit could get
+ * two-thirds right.
+ *
+ * ⚠ **Carries a secret** — `privateKey`. Same handling as `databaseUrl`: never logged,
+ * never in a span attribute, never in a response body.
+ */
+export interface WebPushConfiguration {
+  /** Not a secret: the browser subscribes with this same string. */
+  readonly publicKey: string;
+  readonly privateKey: string;
+  /** `mailto:` or `https:` URI, per RFC 8292 §2.1. */
+  readonly contact: string;
+}
 
 /**
  * The shape consumers actually receive.
@@ -61,10 +152,10 @@ export type ValidatedEnvironment = z.infer<typeof environmentSchema>;
  * as `LOG_LEVEL`, and renaming an environment variable should not ripple through
  * application code.
  *
- * ⚠ **This object carries a secret** — `databaseUrl`. Never log it, never put it in a
- * span attribute, never return it from a procedure. `createLogger`'s field allowlist
- * (`@playa-post/observability`) drops `databaseUrl` because it is not on it — that is a
- * backstop for a mistake, not a licence to make one.
+ * ⚠ **This object carries secrets** — `databaseUrl` and `webPush.privateKey`. Never log
+ * one, never put one in a span attribute, never return one from a procedure.
+ * `createLogger`'s field allowlist (`@playa-post/observability`) drops both because
+ * neither is on it — that is a backstop for a mistake, not a licence to make one.
  */
 export interface Configuration {
   readonly nodeEnv: ValidatedEnvironment['NODE_ENV'];
@@ -75,4 +166,16 @@ export interface Configuration {
   readonly databaseUrl: string;
   /** Supabase project base URL. Composition derives the JWKS endpoint from it (ADR-0011). */
   readonly supabaseUrl: string;
+  /**
+   * VAPID credentials, or **`null` when this deployment sends no Web Push** — the
+   * state every environment without the three `VAPID_*` keys is in, including every
+   * test harness and every local checkout.
+   *
+   * Required rather than optional, and `null` rather than an absent key, for the reason
+   * `AppContainer.notificationFlush` is: whether push is configured is a decision, and a
+   * decision stated in the type is one a new `Configuration` literal cannot forget to
+   * make. Composition reads it exactly once, to choose between the real transport and
+   * `unconfiguredPushTransport`.
+   */
+  readonly webPush: WebPushConfiguration | null;
 }

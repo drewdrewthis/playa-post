@@ -64,6 +64,71 @@
   line-height: 1.5;
 }
 
+/* Enable push ------------------------------------------------------------- */
+
+/*
+ * The panel's one offer, drawn as a card rather than a bare button: it asks for a
+ * permission, and a permission ask that looks like a list control gets pressed by
+ * accident. Rendered only when the browser and the build can actually do push, so this
+ * block is absent far more often than it is present.
+ */
+.notifications__push {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+  margin: 0;
+  padding: var(--pp-space-3);
+  border: 1px solid var(--pp-card-border);
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-card);
+}
+
+/* Enrolled: a settled fact, so it drops the frame and reads as an aside. */
+.notifications__push--on {
+  border-style: dashed;
+  color: var(--pp-sub);
+  font-size: var(--pp-text-xs);
+  line-height: 1.5;
+}
+
+.notifications__push-copy {
+  margin: 0;
+  color: var(--pp-sub);
+  font-size: var(--pp-text-xs);
+  line-height: 1.5;
+}
+
+.notifications__push-button {
+  align-self: flex-start;
+  padding: var(--pp-space-2) var(--pp-space-4);
+  border: none;
+  border-radius: var(--pp-radius-pill);
+
+  /* `background`, never `background-color`: this token is a gradient in dark. */
+  background: var(--pp-fab-bg);
+  color: var(--pp-fab-fg);
+  font-weight: 700;
+  font-size: var(--pp-text-xs);
+  letter-spacing: 0.03em;
+}
+
+/*
+ * Disabled covers two different states — a press in flight, and a browser that is
+ * blocking. Both are "not now", and the copy above the button is what tells them apart;
+ * a second visual treatment would be a second thing to read and no clearer.
+ */
+.notifications__push-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.notifications__push-failed {
+  margin: 0;
+  color: var(--pp-danger);
+  font-size: var(--pp-text-xs);
+  line-height: 1.5;
+}
+
 /* One row ----------------------------------------------------------------- */
 
 .notification-row {

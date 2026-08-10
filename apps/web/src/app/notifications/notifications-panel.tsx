@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 
 import type { GroupedNotification } from '@playa-post/contracts';
 
+import { EnablePushControl } from './enable-push-control';
 import { useNotificationDismissal } from './notifications-mutation';
 import { useGroupedNotifications } from './notifications-query';
 import {
@@ -79,6 +80,13 @@ export function NotificationsPanel({ onClose }: { readonly onClose: () => void }
           Everything that landed on your board or changed your graph. Open one to find it
           on your board.
         </p>
+
+        {/*
+          Above the list rather than below it: this is the panel's one offer, and a
+          reader with a full list would never scroll past it. It renders nothing at all
+          on a device or build that cannot do push — see `enable-push-control.tsx`.
+        */}
+        <EnablePushControl />
 
         {dismissal.refusedCount === 0 ? null : (
           <p className="notifications__refused" role="status" data-testid="notifications-refused">

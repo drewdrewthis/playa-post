@@ -15,13 +15,16 @@ export class PushTransportNotConfiguredError extends Error {
 }
 
 /**
- * The {@link PushTransport} this milestone deploys: one that refuses, loudly.
+ * The {@link PushTransport} for a deployment with no VAPID key pair: one that refuses,
+ * loudly.
  *
- * **M2 has no VAPID key pair.** Real Web Push needs an application server key pair, a
- * configured contact, and the encryption scheme
- * ([RFC 8291](https://www.rfc-editor.org/rfc/rfc8291)) — configuration this repo has
- * deliberately not taken on (`docs/engineering/secrets.md` lists what exists), and no
- * secret may enter a schema default to fake it (addendum §17).
+ * **Not the only transport any more.** {@link
+ * import('./web-push.transport').createWebPushTransport} is the real one, and
+ * `composition/container.ts` picks between the two on `configuration.webPush` — so this
+ * object is now what a deployment *without* the three `VAPID_*` keys gets: every local
+ * checkout, every test harness, and any environment somebody has not configured yet. No
+ * secret may enter a schema default to fake those keys (addendum §17), which is why
+ * "absent" has to be a state the server boots in rather than one it crashes on.
  *
  * ⚠ **Refusing rather than silently dropping is the whole point.** A no-op transport
  * would let the flush write receipts, mark windows delivered, and report success while
@@ -30,12 +33,12 @@ export class PushTransportNotConfiguredError extends Error {
  * the window back, leaves it pending, and makes "push is not wired up yet" a fact an
  * operator can see rather than one a user discovers.
  *
- * ⚠ **Nothing in the deployed process reaches this object, because `isConfigured: false`
+ * ⚠ **Nothing in a running process reaches this object, because `isConfigured: false`
  * is what stops the flush being scheduled at all** — not because no scheduler exists.
  * `entrypoints/notification-flush/` is built and wired; `composition/container.ts`
  * hands `main.ts` a `null` flush while this transport is the one in place, and `main.ts`
  * logs that it is skipping the loop on purpose. The refusal below is therefore the
- * backstop for a *direct* call (a test, a future caller), not the deployed behaviour.
+ * backstop for a *direct* call (a test, a future caller), not observed behaviour.
  *
  * That condition exists because the alternative is worse in both directions. Scheduling
  * the flush against this object would make every round throw, roll back, and log
@@ -46,15 +49,13 @@ export class PushTransportNotConfiguredError extends Error {
  *
  * **Nothing is lost while it is skipped.** The drainer and `EvaluateNotifyMeHandler`
  * still run, so matches keep being computed and written as `pending` `NotifyMeMatched`
- * rows; windows accumulate and are delivered by the first flush that runs once a real
- * transport replaces this object. Replacing it is a change to this file and to
- * `composition/container.ts`, and to nothing else — the scheduling follows from
- * `isConfigured`.
+ * rows; windows accumulate and are delivered by the first flush that runs once the
+ * three keys are set. Configuring them turns the loop on with no code change at all —
+ * the scheduling follows from `isConfigured`.
  *
  * The proof of the delivery *behaviour* lives where it belongs: the integration suite
  * hands `SendGroupedPushHandler` a fake transport and asserts the payload and the
- * suppression (M2-AC21, M2-AC22). Replacing this object with a real adapter is a change
- * to this file and to `composition/container.ts`, and to nothing else.
+ * suppression (M2-AC21, M2-AC22).
  */
 export const unconfiguredPushTransport: PushTransport = {
   isConfigured: false,

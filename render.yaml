@@ -86,3 +86,25 @@ services:
       # decision a pull request should show, not dashboard state nobody can diff.
       - key: SUPABASE_URL
         value: https://raiemsytiokplvmoqsze.supabase.co
+      # Web Push (RFC 8292). ALL-OR-NONE: with none of the three set the server
+      # boots on the unconfigured transport and never schedules the grouping-
+      # window flush; with a partial set it exits at boot naming what is missing.
+      #
+      # VAPID_PUBLIC_KEY is NOT a secret — the browser subscribes with it, and
+      # apps/web ships the same string as VITE_VAPID_PUBLIC_KEY. It is still
+      # `sync: false` rather than carried in git like SUPABASE_URL, because it is
+      # one half of a key PAIR: committing that half would fork rotation into two
+      # places that can silently half-apply, and a public key whose private half
+      # has moved on is a subscription nobody can push to. The pair travels
+      # together, in the secret store (docs/engineering/secrets.md).
+      #
+      # ⚠ The value here and apps/web's VITE_VAPID_PUBLIC_KEY must be the SAME
+      # key. A mismatch produces subscriptions this server is handed and cannot
+      # sign for — every push rejected, nothing in any log saying why.
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      # `mailto:` or `https:` URI a push service can reach the operator at.
+      - key: VAPID_CONTACT
+        sync: false

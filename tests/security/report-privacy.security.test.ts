@@ -67,6 +67,7 @@ describe('B9 — a reported author cannot reach the reporter (M2-AC10)', () => {
       ),
       // Never fetched: every caller is built with the locally generated verifier below.
       supabaseUrl: 'http://127.0.0.1:1/unused-by-this-suite',
+      webPush: null,
     };
 
     container = buildAppContainer(configuration);
