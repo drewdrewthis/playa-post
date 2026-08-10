@@ -5,7 +5,11 @@ import { Link } from 'react-router';
 import { useApi } from '../api/api-provider';
 import { applicationErrorCode } from '../api/client';
 import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
+import { describeIntroStanding, type IntroStanding } from '../intros/intro-outbox-state';
+import { INTRO_OUTBOX_QUERY_KEY } from '../intros/intro-query-keys';
+import { IntroSheet } from '../intros/intro-sheet';
 import { describeNoteReach, type NoteReach } from '../notes/note-reach';
+import { noteRecipientName } from '../notes/note-recipient';
 import { PersonIdentity } from '../people/person-identity';
 
 import type { BoardCardView } from './board-card-view';
@@ -29,19 +33,19 @@ const DISMISS_DRAG_DISTANCE = 80;
  * Four ways out, because a sheet that traps someone is worse than no sheet: the CLOSE
  * control, Escape, a tap on the scrim, and a drag downwards.
  *
- * **Pin-a-note is here; Request-intro is still not.** This is the comp's signature "reach
- * someone" gesture, and #88 gave it a server concept: `notes.pin`, gated on a first-degree
- * connection. The comp's condition is a degree test (`deg === 1`) and `BulletinAuthor`
- * carries a disclosure rather than a distance, so the degree is read from `graph.list` —
- * the payload that does carry one, and which the app is usually already holding.
- * Requesting an intro is issue #89 and has no procedure behind it, so the second-degree
- * case is the comp's hint and no button.
+ * **Both ways of reaching the author are here.** This is the comp's signature "reach
+ * someone" gesture: #88 gave the first degree a server concept (`notes.pin`) and #89 gave
+ * the second one its own (`intros.request`). The comp's condition is a degree test
+ * (`deg === 1`) and `BulletinAuthor` carries a disclosure rather than a distance, so the
+ * degree is read from `graph.list` — the payload that does carry one, and which the app
+ * is usually already holding. Past the second degree there is a hint and no control,
+ * because an intro travels one hop.
  *
  * ⚠ **The degree read here decides what is *offered*, never what is *allowed*.** The
- * authorization lives inside the insert statement (`postgres-note.repository.ts`), which
- * refuses a non-first-degree recipient identically to one who does not exist. A person
- * whose degree changes between this read and the write still gets the server's answer,
- * rendered by the compose screen.
+ * authorization lives inside the statements — `postgres-note.repository.ts`'s insert, and
+ * `app.intro_via_candidates` behind `intros.request` — each refusing an ineligible person
+ * identically to one who does not exist. A person whose degree changes between this read
+ * and the write still gets the server's answer, rendered by the screen that asked.
  */
 export function BulletinDetailSheet({
   card,
@@ -63,6 +67,7 @@ export function BulletinDetailSheet({
   const sheetRef = useRef<HTMLElement>(null);
   const dragOrigin = useRef<number | null>(null);
   const [dragOffset, setDragOffset] = useState(0);
+  const [askingIntro, setAskingIntro] = useState(false);
 
   const detail = useQuery({
     queryKey: ['bulletins', 'getById', card.id],
@@ -77,6 +82,17 @@ export function BulletinDetailSheet({
   const graph = useQuery({
     queryKey: GRAPH_LIST_QUERY_KEY,
     queryFn: () => api.query('graph.list', undefined),
+  });
+
+  /*
+   * The viewer's own outbox, under the one shared key `people/person-sheet.tsx` reads
+   * and the intro sheet invalidates. While a request for this pair is open the server
+   * refuses a second one with any via, so without this read the footer would offer a
+   * button whose only outcome is `INTRO_UNAVAILABLE`.
+   */
+  const outbox = useQuery({
+    queryKey: INTRO_OUTBOX_QUERY_KEY,
+    queryFn: () => api.query('intros.listOutbox', undefined),
   });
 
   useEffect(() => {
@@ -117,20 +133,39 @@ export function BulletinDetailSheet({
     author === undefined ? (card.own ? 'You' : null) : <PersonIdentity identity={author} />;
 
   /*
-   * Whether to offer pinning a note back, and to whom.
+   * Whether to offer reaching the author, how, and to whom.
    *
    * `null` while the graph read is unsettled, and for one's own post. A pending read
-   * rendering as "not connected" would flash the intro hint at somebody who is in fact a
-   * direct connection — the same four-states discipline `people/person-sheet.tsx` keeps.
+   * rendering as "not connected" would flash the intro control at somebody who is in fact
+   * a direct connection — the same four-states discipline `people/person-sheet.tsx` keeps.
+   *
+   * `recipientName` is what §6a lets this viewer call them, or `null`; the intro sheet
+   * needs it for its own heading and must never derive one from the id.
    */
   const people = graph.data?.people;
+  const authorPerson =
+    author === undefined || people === undefined
+      ? undefined
+      : people.find((person) => person.userId === author.userId);
   const noteAffordance =
     card.own || author === undefined || people === undefined
       ? null
       : {
           recipientId: author.userId,
-          reach: describeNoteReach(people.find((person) => person.userId === author.userId)),
+          recipientName: noteRecipientName(authorPerson),
+          reach: describeNoteReach(authorPerson),
         };
+
+  /*
+   * `null` until the outbox read settles — and it stays `null` if that read fails,
+   * matching `person-sheet.tsx`'s four-states discipline: silence is the honest answer
+   * when the record cannot be read, and the pessimistic direction never offers a button
+   * the server would refuse.
+   */
+  const standing =
+    noteAffordance === null || outbox.data === undefined
+      ? null
+      : describeIntroStanding(outbox.data, noteAffordance.recipientId);
 
   function endDrag(): void {
     if (dragOrigin.current === null) {
@@ -252,6 +287,10 @@ export function BulletinDetailSheet({
           <PinNoteFooter
             recipientId={noteAffordance.recipientId}
             reach={noteAffordance.reach}
+            standing={standing}
+            onRequestIntro={() => {
+              setAskingIntro(true);
+            }}
           />
         )}
 
@@ -305,30 +344,52 @@ export function BulletinDetailSheet({
           )}
         </div>
       </section>
+
+      {/*
+       * ⚠ A sibling of the sheet, never a child of it. Both the intro sheet and its scrim
+       * are `position: absolute` against `.app-column`; rendered inside `.detail-sheet`
+       * — which is itself positioned — they would resolve against *it* instead, and a
+       * full-column scrim would become a rectangle inside the sheet it is meant to cover.
+       */}
+      {noteAffordance !== null && askingIntro ? (
+        <IntroSheet
+          targetUserId={noteAffordance.recipientId}
+          targetName={noteAffordance.recipientName}
+          onClose={() => {
+            setAskingIntro(false);
+          }}
+        />
+      ) : null}
     </>
   );
 }
 
 /**
- * The comp's control for reaching the author: a button when you may, one line when you
- * may not (`design/Playa Post.dc.html:285,745-746`).
+ * The comp's control for reaching the author, in each of its three distances
+ * (`design/Playa Post.dc.html:285,745-746`).
  *
- * A `Link` rather than a button with a handler, because pinning is a *navigation* — the
- * compose sheet is the `/board/new` route, exactly as the shell's FAB reaches it. That
+ * Pinning is a `Link` rather than a button with a handler, because it is a *navigation* —
+ * the compose sheet is the `/board/new` route, exactly as the shell's FAB reaches it. That
  * also means it opens in a new tab if somebody middle-clicks, which a handler would
- * silently swallow.
+ * silently swallow. Asking for an intro is the opposite: a sheet over this one, so it is
+ * a button, and closing it leaves the reader on the bulletin they were reading.
  *
- * ⚠ **Not `button--primary`.** The comp fills this one with ink and sets the label in
- * paper (`background:t.ink;color:t.bgSolid`), and it is right to: the orange fill is the
- * FAB's, which means "compose", and it belongs to one thing. `.detail-sheet__pin-note`
- * carries the whole treatment.
+ * ⚠ **Neither is `button--primary`.** The comp fills the pin control with ink and sets
+ * its label in paper (`background:t.ink;color:t.bgSolid`), and it is right to: the orange
+ * fill is the FAB's, which means "compose", and it belongs to one thing. The intro
+ * control takes the accent outline instead — a different gesture, told apart at a glance
+ * from the one that writes to somebody's board.
  */
 function PinNoteFooter({
   recipientId,
   reach,
+  standing,
+  onRequestIntro,
 }: {
   readonly recipientId: string;
   readonly reach: NoteReach;
+  readonly standing: IntroStanding | null;
+  readonly onRequestIntro: () => void;
 }): JSX.Element {
   if (reach.kind === 'can-pin') {
     return (
@@ -339,6 +400,56 @@ function PinNoteFooter({
       >
         {reach.label}
       </Link>
+    );
+  }
+
+  if (reach.kind === 'can-request-intro') {
+    /*
+     * What already happened outranks what could happen — `person-sheet.tsx`'s
+     * `IntroAffordance` order. An unsettled outbox renders the hint and no control
+     * (offering "ask" before the record is read risks a button whose only outcome is
+     * `INTRO_UNAVAILABLE`); an open or passed-on ask renders its standing line and
+     * nothing to press.
+     *
+     * ⚠ A *declined* ask keeps the control here, unlike the person sheet. A decline
+     * leaves the pair free to ask again (the partial unique index covers open requests
+     * only), and this bulletin is a fresh reason to — but the "not passed on" line
+     * stays off this surface, because a re-ask control rendered *beside* that line
+     * would turn one person's decision into a prompt to overturn it. The person sheet
+     * reports the outcome; this sheet offers the new ask.
+     */
+    const showStandingLine =
+      standing !== null && (standing.kind === 'pending' || standing.kind === 'passed-on');
+    const showAskControl =
+      standing !== null && (standing.kind === 'none' || standing.kind === 'declined');
+
+    return (
+      <div className="detail-sheet__intro">
+        <p className="detail-sheet__intro-hint" data-testid="bulletin-detail-intro-hint">
+          {reach.hint}
+        </p>
+
+        {showStandingLine ? (
+          <p
+            className="detail-sheet__intro-standing"
+            role="status"
+            data-testid="bulletin-detail-intro-standing"
+          >
+            {standing.line}
+          </p>
+        ) : null}
+
+        {showAskControl ? (
+          <button
+            className="detail-sheet__request-intro"
+            data-testid="bulletin-detail-request-intro-button"
+            type="button"
+            onClick={onRequestIntro}
+          >
+            {reach.label}
+          </button>
+        ) : null}
+      </div>
     );
   }
 

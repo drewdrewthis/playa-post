@@ -21,10 +21,12 @@ export interface GetConnectionRequest {
 /**
  * A connection as the **viewer** sees it.
  *
- * `trust` is the viewer's own directional value and reaches nobody else: the server
- * returns `null` for a connection the viewer does not hold (B6). `null` is *unset*,
- * `0` is a deliberate zero — two states, and a client that collapses them into one
- * falsy branch has lost a user's explicit choice.
+ * `trust` is the viewer's own directional value and reaches nobody else: for a
+ * connection the viewer does not hold, the server *refuses* with a `NOT_FOUND`
+ * carrying `NOT_CONNECTED` — this procedure never resolves for a stranger, so absence
+ * is an error envelope, not a null payload (B6). Within a resolved connection, `null`
+ * trust is *unset*, `0` is a deliberate zero — two states, and a client that collapses
+ * them into one falsy branch has lost a user's explicit choice.
  */
 export interface Connection {
   readonly status: string;

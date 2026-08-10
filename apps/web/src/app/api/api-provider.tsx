@@ -46,9 +46,29 @@ export function ApiProvider({ children }: { readonly children: ReactNode }): JSX
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ApiContext.Provider value={client}>{children}</ApiContext.Provider>
+      <ApiClientProvider client={client}>{children}</ApiClientProvider>
     </QueryClientProvider>
   );
+}
+
+/**
+ * Publish an already-built client to everything below.
+ *
+ * Split out of {@link ApiProvider} so *which* client the tree speaks through is a
+ * separate decision from *how one is built* — the second needs a session and a query
+ * cache, and the first needs neither. That is what lets a test mount one component over
+ * a fake {@link PlayaPostClient} (an in-memory implementation of an interface this app
+ * owns) instead of standing up an auth session to reach a real transport it would then
+ * have to intercept.
+ */
+export function ApiClientProvider({
+  client,
+  children,
+}: {
+  readonly client: PlayaPostClient;
+  readonly children: ReactNode;
+}): JSX.Element {
+  return <ApiContext.Provider value={client}>{children}</ApiContext.Provider>;
 }
 
 /** The API client, from anywhere inside {@link ApiProvider}. */

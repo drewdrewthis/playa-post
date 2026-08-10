@@ -110,6 +110,23 @@ export interface AppConsumerReceipts {
   processed_at: Timestamp;
 }
 
+export interface AppIntroRequests {
+  created_at: Timestamp;
+  decided_at: Timestamp | null;
+  id: Generated<string>;
+  /**
+   * Why the requester wants to meet. Deliberately NOT indexed and NOT part of any tsvector: no query grammar reaches an intro request, so it can never become a way to find people through the free-text channel. Never written to a log or an outbox payload (ADR-0006).
+   */
+  note: string;
+  requester_id: string;
+  /**
+   * requested -> passed_on | declined. Both decisions are terminal for #89.
+   */
+  status: string;
+  target_id: string;
+  via_id: string;
+}
+
 export interface AppInvitations {
   accepted_at: Timestamp | null;
   accepted_by_id: string | null;
@@ -249,6 +266,7 @@ export interface DB {
   "app.connection_trust": AppConnectionTrust;
   "app.connections": AppConnections;
   "app.consumer_receipts": AppConsumerReceipts;
+  "app.intro_requests": AppIntroRequests;
   "app.invitations": AppInvitations;
   "app.mutation_results": AppMutationResults;
   "app.notes": AppNotes;

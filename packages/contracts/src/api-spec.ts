@@ -9,6 +9,15 @@ import type {
   VisibilitySetting,
 } from './identity';
 import type {
+  DecideIntroRequest,
+  IntroInboxRow,
+  IntroOutboxRow,
+  IntroPerson,
+  IntroRequestReceipt,
+  IntroViaCandidatesRequest,
+  RequestIntroRequest,
+} from './intros';
+import type {
   HiddenBulletin,
   ModerationTargetRequest,
   ReportBulletinRequest,
@@ -103,6 +112,12 @@ export interface PlayaPostApi {
 
   'notes.pin': MutationSpec<PinNoteRequest, PinnedNote>;
   'notes.list': QuerySpec<void, readonly Note[]>;
+
+  'intros.viaCandidates': QuerySpec<IntroViaCandidatesRequest, readonly IntroPerson[]>;
+  'intros.request': MutationSpec<RequestIntroRequest, IntroRequestReceipt>;
+  'intros.listInbox': QuerySpec<void, readonly IntroInboxRow[]>;
+  'intros.listOutbox': QuerySpec<void, readonly IntroOutboxRow[]>;
+  'intros.decide': MutationSpec<DecideIntroRequest, IntroRequestReceipt>;
 
   'sync.submitMutations': MutationSpec<SubmitMutationsRequest, MutationBatch>;
 

@@ -2,6 +2,7 @@ import type { BulletinsRouter } from '../../modules/bulletins/transport/bulletin
 import type { ConnectionsRouter } from '../../modules/connections/transport/connections.router';
 import type { GraphRouter } from '../../modules/graph/transport/graph.router';
 import type { IdentityRouter } from '../../modules/identity/transport/identity.router';
+import type { IntrosRouter } from '../../modules/intros/transport/intros.router';
 import type { ModerationRouter } from '../../modules/moderation/transport/moderation.router';
 import type { NotesRouter } from '../../modules/notes/transport/notes.router';
 import type { NotificationsRouter } from '../../modules/notifications/transport/notifications.router';
@@ -33,6 +34,16 @@ export interface AppRouterModules {
    * would undo that separation at the one layer a client actually reads.
    */
   readonly notes: NotesRouter;
+  /**
+   * The one-hop introduction (issue #89).
+   *
+   * ⚠ Mounted **beside** `graph` and `notes`, never inside either. It is not a graph
+   * read — it writes state with a lifecycle and a second deciding actor — and it is not a
+   * note, for the reasons `modules/intros/domain/intro-request.ts` gives. A
+   * `graph.intros.*` namespace would put a mutation behind a read module's name at the
+   * one layer a client actually reads.
+   */
+  readonly intros: IntrosRouter;
   readonly moderation: ModerationRouter;
   readonly sync: SyncRouter;
   readonly views: ViewsRouter;
@@ -83,6 +94,7 @@ export function createAppRouter(modules: AppRouterModules) {
     graph: modules.graph,
     bulletins: modules.bulletins,
     notes: modules.notes,
+    intros: modules.intros,
     moderation: modules.moderation,
     sync: modules.sync,
     views: modules.views,

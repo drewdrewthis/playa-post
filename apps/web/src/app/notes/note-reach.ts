@@ -1,16 +1,20 @@
 import type { Person } from '@playa-post/contracts';
 
+import { requestIntroLabel } from '../intros/intro-copy';
+
 import { composeNoteTitle, noteRecipientName } from './note-recipient';
 
 /**
- * Whether this viewer may pin a note to a person, and what to say when they may not.
+ * How far this viewer can reach a person: pin a note, ask for an intro, or neither.
  *
- * ⚠ **This is a UX gate and never an authorization one.** The real gate is inside the
- * insert statement (`postgres-note.repository.ts`), which refuses a non-first-degree
- * recipient identically to one who does not exist. This decides whether to *offer* the
- * control, using the same graph read the screen is already holding — so a person whose
- * degree changed between the read and the write still gets the server's answer, rendered
- * (`pin-note-outcome.ts`), rather than a client that thought it knew better.
+ * ⚠ **This is a UX gate and never an authorization one.** The real gates are inside the
+ * statements — `postgres-note.repository.ts`'s insert refuses a non-first-degree
+ * recipient identically to one who does not exist, and
+ * `app.intro_via_candidates` decides eligibility for an intro the same way. This decides
+ * whether to *offer* a control, using the same graph read the screen is already holding
+ * — so a person whose degree changed between the read and the write still gets the
+ * server's answer, rendered (`pin-note-outcome.ts`, `intro-copy.ts`), rather than a
+ * client that thought it knew better.
  *
  * ⚠ **Do not build a reachability probe from the hint.** It says only what this viewer's
  * own graph already showed them: a person on their graph, at a distance they can already
@@ -19,7 +23,12 @@ import { composeNoteTitle, noteRecipientName } from './note-recipient';
 export type NoteReach =
   /** Ready to pin. `label` is the button's copy. */
   | { readonly kind: 'can-pin'; readonly label: string }
-  /** Not ready. `hint` is the one line explaining why. */
+  /**
+   * Too far to write to, close enough to be introduced. `hint` explains the distance and
+   * `label` is the copy on the control that opens the intro sheet.
+   */
+  | { readonly kind: 'can-request-intro'; readonly hint: string; readonly label: string }
+  /** Not ready, and nothing to offer. `hint` is the one line explaining why. */
   | { readonly kind: 'needs-connection'; readonly hint: string };
 
 /**
@@ -45,17 +54,30 @@ export function describeNoteReach(person: Person | undefined): NoteReach {
     return { kind: 'needs-connection', hint: 'Pinning a note needs a direct connection.' };
   }
 
-  /*
-   * The comp's hint (`design/Playa Post.dc.html:746`) — text, and deliberately no
-   * button: requesting an intro is issue #89 and has no procedure behind it yet. A
-   * control here would be an affordance for a thing that cannot happen.
-   */
   const name = noteRecipientName(person);
   const subject = name === null ? 'they are' : `${name} is`;
 
+  /*
+   * The comp's second-degree hint (`design/Playa Post.dc.html:746`), now with the button
+   * it always wanted: #89 gave requesting an intro a procedure behind it.
+   */
+  if (degree === 2) {
+    return {
+      kind: 'can-request-intro',
+      hint: `Pinning a note needs a direct connection — ${subject} ${ordinal(degree)} degree.`,
+      label: requestIntroLabel(name),
+    };
+  }
+
+  /*
+   * ⚠ **No control past the second degree**, which is a rule and not a layout choice:
+   * `app.intro_via_candidates` returns nothing at degree 3 or beyond, so a button here
+   * would open a sheet with an empty chip row and no way to send. An intro travels one
+   * hop — the copy says the same thing the eligibility SQL does.
+   */
   return {
     kind: 'needs-connection',
-    hint: `Pinning a note needs a direct connection — ${subject} ${ordinal(degree)} degree. Request an intro to reach them.`,
+    hint: `Too far for an intro — intros travel one hop, and ${subject} ${ordinal(degree)} degree.`,
   };
 }
 

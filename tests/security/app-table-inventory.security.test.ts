@@ -52,6 +52,10 @@ const INVENTORY = [
   // fixed-recipient messaging into the bulletin model, so the separation has to be
   // visible right here, in the inventory, rather than asserted in a doc comment.
   'notes',
+  // One-hop introductions (issue #89). Its own aggregate and NOT a note subtype:
+  // three parties and a via-decided lifecycle, where a note is two parties and
+  // lifecycle-free — see ADR-0017.
+  'intro_requests',
 ] as const;
 
 describe('schema app holds exactly the tables M2 declared (m2-lane-briefs.md ratified decision (a))', () => {
@@ -65,7 +69,7 @@ describe('schema app holds exactly the tables M2 declared (m2-lane-briefs.md rat
     await testDatabase?.stop();
   });
 
-  it('matches the sixteen-name inventory as a set, and in count', async () => {
+  it('matches the seventeen-name inventory as a set, and in count', async () => {
     const { rows } = await testDatabase.client.query<{ tablename: string }>(
       `select tablename from pg_tables where schemaname = 'app' order by tablename`,
     );

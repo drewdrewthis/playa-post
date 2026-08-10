@@ -37,6 +37,15 @@
   --pp-faint: #a4917a;
   --pp-accent: #b45336;
 
+  /*
+   * The accent as *text*. `--pp-accent` measures 4.33:1 against `--pp-bg`, under the
+   * 4.5:1 AA floor for the small sizes it is set at (the intro inbox title, the intro
+   * standing line) — the same failure `--pp-tint-event`/`--pp-tint-collab` had, fixed
+   * the same way: same hue, darkened to 5.06:1 against `--pp-bg` and 5.69:1 against
+   * `--pp-card`. Fills, borders, and links keep `--pp-accent`.
+   */
+  --pp-accent-ink: #a54a2f;
+
   /* Wordmark */
   --pp-wordmark: #2e2418;
   --pp-wordmark-glow: none;
@@ -173,6 +182,9 @@
   --pp-sub: #b7a6cc;
   --pp-faint: #7d6b94;
   --pp-accent: #ff8a5f;
+
+  /* Light orange on the dark surfaces already clears AA; text needs no separate hue. */
+  --pp-accent-ink: #ff8a5f;
 
   --pp-wordmark: #ffe9dc;
   --pp-wordmark-glow: 0 0 20px rgb(255 106 61 / 55%);

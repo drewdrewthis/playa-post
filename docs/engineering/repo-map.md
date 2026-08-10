@@ -91,7 +91,7 @@ apps/server/     The modular monolith.
   entrypoints/   http/ · outbox-drainer/ · notification-flush/ (ADR-0006 — two in-process pollers,
                  no separate queue or cron facility; ADR-0009 retired the Cloudflare dual-target this
                  line used to describe). The ONLY place that knows about the runtime (ADR-0009).
-  modules/       identity · connections · graph · bulletins · notes · views · notifications ·
+  modules/       identity · connections · graph · bulletins · notes · intros · views · notifications ·
                  moderation · sync · storage · audit. Each: transport/ application/ domain/ persistence/ tests/
                  plus a <name>.module.ts. (Addendum §4 — a module only grows the directories it needs:
                  modules/graph has no domain/, because ADR-0004 decision 7 makes the graph a read
@@ -109,10 +109,14 @@ apps/server/     The modular monolith.
                  owns a database function checks its source in at persistence/sql/ and carries a
                  byte-identical copy in the migration that installs it — modules/graph's
                  visible-people.sql and visible-edges.sql, modules/bulletins'
-                 visible-bulletins.sql, and modules/notes' visible-notes.sql (the private
+                 visible-bulletins.sql, modules/notes' visible-notes.sql (the private
                  person-to-person channel, #88/decision D6 — its own table and its own
-                 authorized set precisely so a note is never a bulletin type, PDF §6), each
-                 pinned by a verbatim-containment assertion
+                 authorized set precisely so a note is never a bulletin type, PDF §6), and
+                 modules/intros' intro-via-candidates.sql (the one-hop introduction, #89 —
+                 its own aggregate with three parties and a second deciding actor, and the
+                 one eligibility function, composing app.visible_people on BOTH sides so
+                 "who knows the target" is never a second walk of app.connections:
+                 ADR-0017), each pinned by a verbatim-containment assertion
                  (ADR-0004:73-74). Re-installing one is a NEW migration carrying the new text,
                  never an edit to the old one; a function whose `returns table` shape changed has
                  to be DROPped there first, because `create or replace` refuses it.

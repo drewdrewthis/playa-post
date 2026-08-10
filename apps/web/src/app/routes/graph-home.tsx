@@ -7,6 +7,7 @@ import { useApi } from '../api/api-provider';
 import { summariseGraph } from '../graph/graph-counts';
 import { GraphNetwork } from '../graph/graph-network';
 import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
+import { IntroInbox } from '../intros/intro-inbox';
 import { PersonSheet } from '../people/person-sheet';
 
 /**
@@ -94,6 +95,14 @@ export function GraphHomeRoute(): JSX.Element {
             {summary.people} PEOPLE · {summary.trusted} TRUSTED
           </p>
         )}
+
+        {/*
+         * Above the canvas, because an intro is a request to add an edge to the very
+         * thing drawn below it — and because somebody has been waiting on this viewer to
+         * answer. It renders nothing at all when there is nothing waiting, so the screen
+         * is unchanged for everybody who has no ask in front of them.
+         */}
+        <IntroInbox />
 
         {invite.data === undefined ? null : (
           <p className="invite-token">

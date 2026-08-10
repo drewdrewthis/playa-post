@@ -6,6 +6,7 @@ import { createBulletinsRouter } from '../../modules/bulletins/transport/bulleti
 import { createConnectionsRouter } from '../../modules/connections/transport/connections.router';
 import { createGraphRouter } from '../../modules/graph/transport/graph.router';
 import { createIdentityRouter } from '../../modules/identity/transport/identity.router';
+import { createIntrosRouter } from '../../modules/intros/transport/intros.router';
 import { createModerationRouter } from '../../modules/moderation/transport/moderation.router';
 import { createNotesRouter } from '../../modules/notes/transport/notes.router';
 import { createNotificationsRouter } from '../../modules/notifications/transport/notifications.router';
@@ -61,6 +62,13 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
     notes: createNotesRouter({
       pinNote: { pin: unreachable },
       listNotes: { list: unreachable },
+    }),
+    intros: createIntrosRouter({
+      listIntroViaCandidates: { list: unreachable },
+      requestIntro: { request: unreachable },
+      listIntroInbox: { list: unreachable },
+      listIntroOutbox: { list: unreachable },
+      decideIntro: { decide: unreachable },
     }),
     moderation: createModerationRouter({
       reportBulletin: { report: unreachable },

@@ -29,6 +29,7 @@ later milestone must. ADR-0009 is the only one so far.
 | [0014](ADR-0014-contracts-api-spec-and-router-parity.md) | `packages/contracts` declares the client API; a compile-time parity gate keeps it honest | proposed |
 | [0015](ADR-0015-design-tokens-theming-and-self-hosted-type.md) | Two token sets, an explicit theme toggle, and self-hosted type | proposed |
 | [0016](ADR-0016-saved-views-and-the-notify-me-designation.md) | Saved views, and the per-view bell as a designation rather than a second query (implements 0007's `app.saved_views`, executes product decision D1) | proposed |
+| [0017](ADR-0017-intro-requests-and-the-consent-inversion.md) | Intro requests: their own aggregate, eligibility composed on both sides, and the consent inversion (amends 0002, 0004) | proposed |
 
 Normative inputs, in precedence order:
 
