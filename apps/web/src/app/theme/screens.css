@@ -204,6 +204,9 @@
   font-weight: 600;
   font-size: var(--pp-text-sm);
   text-align: center;
+  /* Also worn by <Link>s dressed as buttons (not-found, route-error), which would
+     otherwise keep the anchor's underline no button ever shows. */
+  text-decoration: none;
 }
 
 /** Primary: the FAB's fill, so "the orange thing" means one thing everywhere. */

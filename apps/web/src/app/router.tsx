@@ -7,7 +7,9 @@ import { BoardRoute } from './routes/board';
 import { ComposeBulletinRoute } from './routes/compose-bulletin';
 import { GraphHomeRoute } from './routes/graph-home';
 import { InviteOpenRoute } from './routes/invite-open';
+import { NotFoundRoute } from './routes/not-found';
 import { OnboardingRoute } from './routes/onboarding';
+import { RouteErrorScreen } from './routes/route-error';
 import { SavedViewsRoute } from './routes/saved-views';
 import { SignInRoute } from './routes/sign-in';
 import { WelcomeRoute } from './routes/welcome';
@@ -59,24 +61,38 @@ function OnboardingLayout(): JSX.Element {
  *
  * `/saved` and `/you` are routed before either screen is built, because the comp's tab
  * bar has four tabs and a tab that goes nowhere is worse than one that says "soon".
+ *
+ * The whole tree sits under one pathless root route so every child shares its
+ * `errorElement`: before that existed, a render, loader, or action throw anywhere
+ * below had nowhere to land and surfaced React Router's own developer error screen in
+ * production (issue #125). The `*` catch-all lives on the same root, deliberately
+ * outside both `ProtectedLayout` and `OnboardingLayout` — an unknown address has to
+ * answer for a signed-out visitor too, not just someone already past `RequireSession`.
  */
 const router = createBrowserRouter([
-  { path: '/signin', element: <SignInRoute /> },
-  { path: '/welcome', element: <WelcomeRoute /> },
   {
-    element: <OnboardingLayout />,
-    children: [{ path: '/onboarding', element: <OnboardingRoute /> }],
-  },
-  {
-    element: <ProtectedLayout />,
+    element: <Outlet />,
+    errorElement: <RouteErrorScreen />,
     children: [
-      { path: '/', element: <GraphHomeRoute /> },
-      { path: '/graph', element: <GraphHomeRoute /> },
-      { path: '/invite/:token', element: <InviteOpenRoute /> },
-      { path: '/board', element: <BoardRoute /> },
-      { path: '/board/new', element: <ComposeBulletinRoute /> },
-      { path: '/saved', element: <SavedViewsRoute /> },
-      { path: '/you', element: <YourProfileRoute /> },
+      { path: '/signin', element: <SignInRoute /> },
+      { path: '/welcome', element: <WelcomeRoute /> },
+      {
+        element: <OnboardingLayout />,
+        children: [{ path: '/onboarding', element: <OnboardingRoute /> }],
+      },
+      {
+        element: <ProtectedLayout />,
+        children: [
+          { path: '/', element: <GraphHomeRoute /> },
+          { path: '/graph', element: <GraphHomeRoute /> },
+          { path: '/invite/:token', element: <InviteOpenRoute /> },
+          { path: '/board', element: <BoardRoute /> },
+          { path: '/board/new', element: <ComposeBulletinRoute /> },
+          { path: '/saved', element: <SavedViewsRoute /> },
+          { path: '/you', element: <YourProfileRoute /> },
+        ],
+      },
+      { path: '*', element: <NotFoundRoute /> },
     ],
   },
 ]);
