@@ -5,6 +5,11 @@ import type { Person } from '@playa-post/contracts';
 
 import { useApi } from '../api/api-provider';
 import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
+import { describeIntroStanding, type IntroStanding } from '../intros/intro-outbox-state';
+import { INTRO_OUTBOX_QUERY_KEY } from '../intros/intro-query-keys';
+import { IntroSheet } from '../intros/intro-sheet';
+import { describeNoteReach, type NoteReach } from '../notes/note-reach';
+import { noteRecipientName } from '../notes/note-recipient';
 
 import { PersonIdentity, trustLabel } from './person-identity';
 
@@ -29,6 +34,13 @@ const TRUST_MAX = 100;
  * minimum, but the label says *Not set* until the viewer saves — otherwise a user who
  * never expressed an opinion would be shown, and would eventually save, a zero they
  * never chose.
+ *
+ * **The intro affordance lives here too** (#89): at the second degree this is the screen
+ * somebody is looking at when they want to reach a person they cannot write to. What it
+ * offers is decided by two reads together — the degree, from the graph payload the sheet
+ * was opened with, and the viewer's own outbox, because while a request for this pair is
+ * open the server refuses a second one with any via. Offering the control anyway would
+ * be offering a button whose only outcome is `INTRO_UNAVAILABLE`.
  */
 export function PersonSheet({
   person,
@@ -49,6 +61,17 @@ export function PersonSheet({
     queryFn: () => api.query('connections.connection.get', { otherUserId }),
   });
 
+  /*
+   * The whole outbox, not this person's slice: there is one `intros.listOutbox` cache
+   * entry, the intro sheet invalidates it after a send, and every open person sheet reads
+   * its answer out of the same place.
+   */
+  const outbox = useQuery({
+    queryKey: INTRO_OUTBOX_QUERY_KEY,
+    queryFn: () => api.query('intros.listOutbox', undefined),
+  });
+
+  const [askingIntro, setAskingIntro] = useState(false);
   const [draftTrust, setDraftTrust] = useState<number | null>(null);
   const savedTrust = connection.data?.trust ?? null;
 
@@ -100,6 +123,17 @@ export function PersonSheet({
       }
     };
   }, []);
+
+  const targetName = noteRecipientName(person);
+  const reach = describeNoteReach(person);
+
+  /*
+   * `null` until the outbox read settles — and it stays `null` if that read fails, which
+   * is deliberate. The affordance this block chooses between is "ask" and "you already
+   * asked", and getting that wrong in the optimistic direction offers a button the server
+   * will refuse. Silence is the honest answer when the record cannot be read.
+   */
+  const standing = outbox.data === undefined ? null : describeIntroStanding(outbox.data, otherUserId);
 
   return (
     <>
@@ -211,7 +245,100 @@ export function PersonSheet({
             That did not save. Try again.
           </p>
         )}
+
+        <IntroAffordance
+          standing={standing}
+          reach={reach}
+          degree={person.degree}
+          onRequestIntro={() => {
+            setAskingIntro(true);
+          }}
+        />
       </section>
+
+      {/*
+       * ⚠ A sibling of the sheet, never a child of it — `bulletin-detail-sheet.tsx`
+       * records the reason: both the intro sheet and its scrim are `position: absolute`
+       * against `.app-column`, and nesting them inside a positioned sheet would resolve
+       * them against it instead.
+       */}
+      {askingIntro ? (
+        <IntroSheet
+          targetUserId={otherUserId}
+          targetName={targetName}
+          onClose={() => {
+            setAskingIntro(false);
+          }}
+        />
+      ) : null}
     </>
   );
+}
+
+/**
+ * What this sheet says about an introduction: an offer, a state, a hint, or nothing.
+ *
+ * The order is the point. **What already happened outranks what could happen** — a
+ * requester with an open ask is told about it rather than invited to make a second one,
+ * and a requester who was declined is told that and given *nothing to press*. A re-ask
+ * control beside "not passed on" would turn one person's decision into a prompt to
+ * overturn it, and the wire deliberately carries no reason to argue with.
+ *
+ * ⚠ **Past the second degree there is a hint and no control**, because
+ * `app.intro_via_candidates` returns nobody there: an intro travels one hop.
+ *
+ * @param standing - the settled outbox reading, or `null` while it is not settled.
+ * @param degree - this person's distance, which decides whether an intro is possible at
+ *   all. Read from the graph payload the sheet was opened with, never from the outbox.
+ */
+function IntroAffordance({
+  standing,
+  reach,
+  degree,
+  onRequestIntro,
+}: {
+  readonly standing: IntroStanding | null;
+  readonly reach: NoteReach;
+  readonly degree: number;
+  readonly onRequestIntro: () => void;
+}): JSX.Element | null {
+  if (standing === null) {
+    return null;
+  }
+
+  if (standing.kind !== 'none') {
+    return (
+      <p className="person-sheet__intro-standing" data-testid="person-sheet-intro-standing">
+        {standing.line}
+      </p>
+    );
+  }
+
+  if (reach.kind === 'can-request-intro') {
+    return (
+      <button
+        className="button button--primary"
+        data-testid="person-sheet-request-intro-button"
+        type="button"
+        onClick={onRequestIntro}
+      >
+        {reach.label}
+      </button>
+    );
+  }
+
+  /*
+   * Only from the third degree out. `describeNoteReach`'s other `needs-connection` hints
+   * are about *pinning a note*, and this sheet does not offer that — rendering one here
+   * would explain a control that is not on screen.
+   */
+  if (reach.kind === 'needs-connection' && degree >= 3) {
+    return (
+      <p className="person-sheet__intro-hint" data-testid="person-sheet-intro-hint">
+        {reach.hint}
+      </p>
+    );
+  }
+
+  return null;
 }

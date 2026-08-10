@@ -235,6 +235,35 @@
   text-decoration: none;
 }
 
+/* The hint and the control it explains, as one block in the sheet's own rhythm. */
+.detail-sheet__intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+}
+
+/*
+ * The full-width intro control (issue #89).
+ *
+ * ⚠ The accent **outline**, not the pin control's ink fill and not the FAB's orange fill.
+ * Three ways of reaching somebody would otherwise look like one gesture at three
+ * distances: compose is filled orange, pinning is filled ink, and asking for an
+ * introduction — which asks a third person for something rather than writing to anybody —
+ * is the outlined one.
+ */
+.detail-sheet__request-intro {
+  display: block;
+  padding: var(--pp-space-3);
+  border: 1px solid var(--pp-accent);
+  border-radius: var(--pp-radius-pill);
+  background: transparent;
+  color: var(--pp-accent);
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  text-align: center;
+  text-decoration: none;
+}
+
 /*
  * The second-degree hint (line 746): the comp's italic serif in the warn palette, inside
  * a dashed warn box — the same treatment `.detail-sheet__gone` gives "this is stale".

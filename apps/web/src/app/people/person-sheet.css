@@ -110,6 +110,37 @@
   color: var(--pp-faint);
 }
 
+/*
+ * Where the intro control would be, once there is nothing left to press: an ask that is
+ * open, one that was passed on, or one that was not (issue #89). The accent, because it
+ * reports the viewer's own act — the warn treatment below is for a distance they cannot
+ * cross, which is a different kind of sentence.
+ */
+.person-sheet__intro-standing {
+  margin: 0;
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-accent);
+}
+
+/*
+ * Third degree and beyond: the same dashed warn box `bulletins/detail-sheet.css` gives
+ * its own version of this line. Both say *the person you are looking at is not somebody
+ * you can act on from here*.
+ */
+.person-sheet__intro-hint {
+  margin: 0;
+  padding: var(--pp-space-2) var(--pp-space-3);
+  border: 1px dashed var(--pp-warn);
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-warn-bg);
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-size: var(--pp-text-sm);
+  line-height: 1.45;
+  color: var(--pp-warn);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .person-sheet {
     animation: none;

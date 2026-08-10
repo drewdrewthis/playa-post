@@ -1,0 +1,82 @@
+/*
+ * The intro inbox, at the top of `/graph`'s chrome (issue #89).
+ *
+ * A dashed card in the accent, the treatment this app already uses for "something is
+ * waiting on you" — the same family as `.invite-token` on the same screen, which is the
+ * other block that appears in the chrome only when there is something to say.
+ *
+ * Every colour is a token from `app/theme/tokens.css`, which declares a complete set in
+ * both palettes; a literal colour here would be a light-mode value shown on a dark screen.
+ */
+
+.intro-inbox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-3);
+  padding: var(--pp-space-3);
+  border: 1px dashed var(--pp-accent);
+  border-radius: var(--pp-radius-sm);
+}
+
+.intro-inbox__title {
+  margin: 0;
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-accent);
+}
+
+.intro-inbox__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-3);
+}
+
+.intro-inbox__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+}
+
+/* A dashed rule between asks, so two of them do not read as one long request. */
+.intro-inbox__item + .intro-inbox__item {
+  padding-top: var(--pp-space-3);
+  border-top: 1px dashed var(--pp-card-border);
+}
+
+.intro-inbox__lede {
+  margin: 0;
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  line-height: 1.5;
+  color: var(--pp-ink);
+}
+
+/*
+ * The note, whole and wrapped. It is the reason the person is being asked at all, so it
+ * gets the reading face rather than the meta treatment — and `pre-wrap`, because somebody
+ * wrote it in a textarea and their line breaks are theirs.
+ */
+.intro-inbox__note {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: var(--pp-font-display);
+  font-size: var(--pp-text-sm);
+  line-height: 1.5;
+  color: var(--pp-sub);
+}
+
+.intro-inbox__actions {
+  display: flex;
+  gap: var(--pp-space-2);
+}
+
+.intro-inbox__actions .button {
+  flex: 1;
+  padding: var(--pp-space-2) var(--pp-space-3);
+  font-size: var(--pp-text-xs);
+}

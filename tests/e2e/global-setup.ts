@@ -90,6 +90,16 @@ export default async function globalSetup(_config: FullConfig): Promise<() => Pr
 
   const userA = await onboard(container, jwtIssuer, 'e2e_user_a', 'User A');
   const userB = await onboard(container, jwtIssuer, 'e2e_user_b', 'User B');
+  const userC = await onboard(container, jwtIssuer, 'e2e_user_c', 'User C');
+
+  // The intro-request path (issue #89, AC27) needs a degree-2 pair, and a degree-2
+  // pair needs two edges: A—B and B—C, giving A→C exactly two hops through B. Seeded
+  // through the real invite procedures, like everything else here. Pre-connecting A—B
+  // does not disturb `vertical-slice-e2e.spec.ts`'s in-browser accept of a fresh
+  // token: `AcceptInviteService` resolves an already-connected pair to the existing
+  // connection idempotently, so the banner still renders.
+  await connect(container, userA, userB);
+  await connect(container, userB, userC);
 
   // Step 9's precondition: without a saved query, `EvaluateNotifyMeHandler` matches
   // nothing and the notifications panel is legitimately empty. `type:request` matches
@@ -119,8 +129,10 @@ export default async function globalSetup(_config: FullConfig): Promise<() => Pr
   process.env['E2E_API_BASE_URL'] = `http://127.0.0.1:${API_PORT}`;
   process.env['E2E_USER_A_ACCESS_TOKEN'] = userA.accessToken;
   process.env['E2E_USER_B_ACCESS_TOKEN'] = userB.accessToken;
+  process.env['E2E_USER_C_ACCESS_TOKEN'] = userC.accessToken;
   process.env['E2E_USER_A_HANDLE'] = userA.handle;
   process.env['E2E_USER_B_HANDLE'] = userB.handle;
+  process.env['E2E_USER_C_HANDLE'] = userC.handle;
 
   return async function globalTeardown(): Promise<void> {
     // Pollers first: `stop()` waits for any in-flight round, which writes through the
@@ -163,6 +175,18 @@ async function onboard(
   await callerFor(container, accessToken).identity.completeOnboarding({ handle, displayName });
 
   return { authUserId, handle, accessToken };
+}
+
+/** Connects two onboarded users through the real invite procedures: mint, then spend. */
+async function connect(
+  container: AppContainer,
+  inviter: OnboardedTestUser,
+  accepter: OnboardedTestUser,
+): Promise<void> {
+  const invite = await callerFor(container, inviter.accessToken).connections.invitations.create();
+  await callerFor(container, accepter.accessToken).connections.connection.accept({
+    token: invite.token,
+  });
 }
 
 /** A server-side tRPC caller acting as the bearer of `accessToken`. */

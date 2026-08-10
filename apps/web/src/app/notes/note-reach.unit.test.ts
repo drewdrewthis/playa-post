@@ -33,31 +33,50 @@ describe('describeNoteReach', () => {
     });
   });
 
-  describe('given somebody further away', () => {
-    it('gives the comp’s hint, naming the degree the viewer can already see', () => {
+  describe('given somebody exactly two hops away', () => {
+    it('offers the intro control, with the comp’s hint beside it', () => {
       expect(describeNoteReach(person(2, 'Kiki'))).toEqual({
-        kind: 'needs-connection',
-        hint: 'Pinning a note needs a direct connection — Kiki is 2nd degree. Request an intro to reach them.',
+        kind: 'can-request-intro',
+        hint: 'Pinning a note needs a direct connection — Kiki is 2nd degree.',
+        label: 'Request an intro to Kiki',
       });
     });
 
-    it('says "they are" rather than inventing a name for an undisclosed person', () => {
+    it('offers it without inventing a name for an undisclosed person', () => {
+      expect(describeNoteReach(person(2))).toEqual({
+        kind: 'can-request-intro',
+        hint: 'Pinning a note needs a direct connection — they are 2nd degree.',
+        label: 'Request an intro',
+      });
+    });
+  });
+
+  describe('given somebody further away than an intro travels', () => {
+    /*
+     * ⚠ The control is withheld from the third degree out, and that is the *server's*
+     * rule showing through: `app.intro_via_candidates` returns nothing past two hops, so
+     * a button here would open a sheet with nothing to send.
+     */
+    it('says intros travel one hop, and offers nothing', () => {
       expect(describeNoteReach(person(3))).toEqual({
         kind: 'needs-connection',
-        hint: 'Pinning a note needs a direct connection — they are 3rd degree. Request an intro to reach them.',
+        hint: 'Too far for an intro — intros travel one hop, and they are 3rd degree.',
       });
     });
 
     // The comp stops at "3rd" because its graph does. A person's own reach setting can
-    // carry this one out to six hops, so the ordinal has to keep working past the comp.
-    it('keeps ordinals right past the comp’s third degree', () => {
-      expect(describeNoteReach(person(4, 'Omar')).kind).toBe('needs-connection');
-      expect(describeNoteReach(person(4, 'Omar'))).toMatchObject({
-        hint: expect.stringContaining('Omar is 4th degree'),
-      });
-      expect(describeNoteReach(person(6, 'Omar'))).toMatchObject({
-        hint: expect.stringContaining('Omar is 6th degree'),
-      });
+    // carry this one out to six hops, so the ordinal has to keep working past the comp —
+    // and the intro control has to stay withheld the whole way.
+    it('keeps ordinals right past the comp’s third degree, still with no control', () => {
+      for (const degree of [4, 5, 6]) {
+        const reach = describeNoteReach(person(degree, 'Omar'));
+
+        expect(reach.kind).toBe('needs-connection');
+        expect(reach).toMatchObject({
+          hint: expect.stringContaining(`Omar is ${String(degree)}th degree`),
+        });
+        expect(reach).toMatchObject({ hint: expect.stringContaining('intros travel one hop') });
+      }
     });
   });
 

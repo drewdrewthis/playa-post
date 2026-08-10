@@ -1,0 +1,220 @@
+/*
+ * The intro sheet (issue #89), built on `moderation/report-abuse-sheet.css`'s shape: a
+ * scrim over the whole column and a rounded sheet lifted off the bottom edge, arriving
+ * with the comp's `sheetup`.
+ *
+ * Every colour is a token from `app/theme/tokens.css`, which declares a complete set
+ * under `:root` (light) and a second under `[data-theme='dark']`. That is what makes
+ * this file correct in both themes without a single `[data-theme]` selector of its own —
+ * a literal colour here would be a light-mode value shown on a dark sheet.
+ *
+ * ⚠ **Specificity, not source order.** This file is reached through the router, so it
+ * lands in the bundle *before* `app/theme/screens.css`; an equal-specificity rule here
+ * loses to one there no matter what it says. Every declaration below that overrides a
+ * shared class (`.form__input--prose`, `.button--primary`) is therefore written as a
+ * two-class selector, which wins on specificity and is order-independent.
+ *
+ * z-index 46/47: above **both** sheets this one can be opened from — the person sheet
+ * (30/31) and the bulletin detail sheet (32/33) — and above the report sheet's pair
+ * (44/45) so the ladder stays a ladder, below the compose sheet at 70. Both elements are
+ * `position: absolute` against `.app-column`, the nearest positioned ancestor, exactly
+ * as `bulletins/detail-sheet.css` explains.
+ */
+
+.intro-sheet__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 46;
+  background: var(--pp-scrim);
+}
+
+.intro-sheet {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.875rem;
+  left: 0.75rem;
+  z-index: 47;
+  max-height: 85%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-3);
+  padding: var(--pp-space-5);
+  border: 1px solid var(--pp-sheet-border);
+  border-radius: var(--pp-radius-lg);
+  background: var(--pp-sheet-bg);
+  box-shadow: var(--pp-sheet-shadow);
+  animation: pp-intro-sheetup 0.22s ease-out;
+}
+
+/*
+ * Its own keyframe, identical in effect to the other sheets'.
+ *
+ * ⚠ Eight duplicated lines, on purpose — `report-abuse-sheet.css` records the reason:
+ * referencing another feature's keyframe would make this sheet's animation silently
+ * depend on that feature being in the same bundle, which is true today and invisible the
+ * day it is not.
+ */
+@keyframes pp-intro-sheetup {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.intro-sheet__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--pp-space-2);
+}
+
+/** Italic serif — the person being reached is the heading on their own sheet. */
+.intro-sheet__title {
+  margin: 0;
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: var(--pp-text-2xl);
+  line-height: 1.2;
+  color: var(--pp-ink);
+}
+
+.intro-sheet__close {
+  flex: none;
+  padding: var(--pp-space-1) var(--pp-space-2);
+  border: none;
+  background: none;
+  color: var(--pp-faint);
+  font-weight: 700;
+  font-size: var(--pp-text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/*
+ * The consent line.
+ *
+ * ⚠ Not `.screen__aside`'s small print. It is the sentence that tells somebody their
+ * name and their words may be shown to a stranger, and the compose sheet's privacy line
+ * sets the precedent: a promise about who sees what is read at the body size, not at 11px.
+ */
+.intro-sheet__consent {
+  margin: 0;
+  font-weight: 500;
+  font-size: var(--pp-text-sm);
+  line-height: 1.55;
+  color: var(--pp-sub);
+}
+
+.intro-sheet__vias,
+.intro-sheet__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+}
+
+/** The comp's small caps label, above the chips and above the box. */
+.intro-sheet__label {
+  margin: 0;
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-faint);
+}
+
+/*
+ * Wraps rather than scrolling sideways: the candidates are a closed set that has to be
+ * read in full before one is chosen, and a chip parked off-screen is a person nobody asks.
+ */
+.intro-sheet__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pp-space-2);
+}
+
+.intro-sheet__chip {
+  padding: 0.4375rem 0.6875rem;
+  border: 1px solid var(--pp-chip-off-border);
+  border-radius: var(--pp-radius-pill);
+  background: none;
+  color: var(--pp-chip-off-fg);
+  font-weight: 600;
+  font-size: var(--pp-text-xs);
+  transition: background 0.15s ease;
+}
+
+/*
+ * Selected keys off `aria-pressed` — the same single source of truth the board's filter
+ * chips, the tab bar, and the report sheet use, so a chip cannot look chosen while
+ * announcing it is not.
+ */
+.intro-sheet__chip[aria-pressed='true'] {
+  border-color: var(--pp-chip-on-bg);
+  background: var(--pp-chip-on-bg);
+  color: var(--pp-chip-on-fg);
+}
+
+/* A chip is a name, at the chip's own size — not the 13px treatment a list row gives it. */
+.intro-sheet__chip .person-identity__name,
+.intro-sheet__chip .person-identity__handle,
+.intro-sheet__chip .person-identity__private-label {
+  font: inherit;
+  color: inherit;
+}
+
+/*
+ * Two classes, deliberately: `.form__input--prose` in `screens.css` already carries the
+ * comp's serif face, size, and line height, and this only adds what this sheet asks for
+ * on top. A single-class selector here would lose to any `.form__input--*` rule there,
+ * because this file is bundled first.
+ */
+.intro-sheet .intro-sheet__note {
+  resize: none;
+  min-height: 4.5rem;
+}
+
+/** The comp's slightly taller send control; the fill and weight come from `.button--primary`. */
+.intro-sheet .intro-sheet__send {
+  padding-block: 0.8125rem;
+}
+
+/*
+ * A real `disabled` here, unlike the report sheet — see `intro-sheet.tsx` for why.
+ * `screens.css` already styles `.button:disabled`; the two-class selector is the
+ * bundle-order rule above, restating it so this sheet cannot lose the dimming.
+ */
+.intro-sheet .intro-sheet__send:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/*
+ * Loading, failed, sent, and nobody-to-ask all land here. Italic serif in the muted ink,
+ * the same treatment `person-sheet.css` gives a sheet with nothing to act on.
+ */
+.intro-sheet__notice {
+  margin: 0;
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-size: var(--pp-text-sm);
+  line-height: 1.45;
+  color: var(--pp-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro-sheet {
+    animation: none;
+  }
+
+  .intro-sheet__chip {
+    transition: none;
+  }
+}
