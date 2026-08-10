@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { mintInviteViaYouScreen } from './support/mint-invite';
+
 /**
  * The person sheet is an overlay, not a destination.
  *
@@ -49,10 +51,7 @@ test.describe('tapping a graph node', () => {
       // A node only exists once two users are genuinely connected — the proven
       // invite-accept setup from `vertical-slice-e2e.spec.ts`, nothing more.
       await bootstrapSession(pageA, userAAccessToken);
-      await expect(pageA.getByTestId('graph-home')).toBeVisible();
-      await pageA.getByTestId('invite-create-button').click();
-      const inviteToken = (await pageA.getByTestId('invite-token-display').innerText()).trim();
-      expect(inviteToken.length).toBeGreaterThan(0);
+      const inviteToken = await mintInviteViaYouScreen(pageA);
 
       await bootstrapSession(pageB, userBAccessToken);
       await pageB.goto(`/invite/${inviteToken}`);

@@ -11,7 +11,8 @@ import { summariseGraph, VIEWER_DEGREE } from '../graph/graph-counts';
 import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
 import { useOffline } from '../offline/offline-provider';
 import { describeQueuedMutation, sortedQueue } from '../offline/sync-queue-view';
-import { inviteShareText, inviteUrl } from '../profile/invite-share';
+import { ConnectCard } from '../profile/connect-card';
+import { RetryRow } from '../profile/retry-row';
 import {
   describeVisibility,
   nextVisibility,
@@ -28,23 +29,28 @@ import '../profile/your-profile.css';
  * serves — `graph.list`, `connections.invitations.create`, and the Dexie queue the sync
  * runner drains.
  *
+ * The **CONNECT card stands ready**, exactly as the comp draws it: QR, link, consent line
+ * and share button are on screen the moment the card is, with nothing to press first. It
+ * is also the *only* place an invite is minted — the graph screen's "Create an invite"
+ * button was a remnant the comp never had
+ * ([#142](https://github.com/drewdrewthis/playa-post/issues/142)).
+ *
  * The **Who can see you** dial is the comp's privacy block, corrected: the comp labels it
  * "who sees your name", the product owner renamed it to what it actually does — beyond
  * your limit you are absent from the other person's graph entirely, not unnamed on it.
  * Its trust half ("visible to trust 50+") is a later version; the "who can pin to your
  * board" limit stays deferred with it.
  *
- * ⚠ **Two of the comp's blocks are deliberately absent rather than mocked**, because a
- * control that renders and does nothing is a lie told in the user's own settings screen:
+ * ⚠ **The comp's Blocked-people block is deliberately absent rather than mocked**, because
+ * a control that renders and does nothing is a lie told in the user's own settings screen:
+ * `moderation` reports and dismisses *bulletins*; blocking a *person* has no table, no
+ * procedure and no contract, so there is nothing for a list to read.
  *
- * - **Blocked people.** `moderation` reports and dismisses *bulletins*; blocking a
- *   *person* has no table, no procedure, and no contract, so there is nothing for a list
- *   to read.
- * - **A scannable QR.** Encoding one needs a Reed-Solomon implementation, and this repo
- *   forbids hand-rolling infrastructure (addendum §18) — so it is a new dependency, which
- *   is a decision to take deliberately rather than in passing. The invite link and the
- *   share sheet below are the working half, and they are the half that actually connects
- *   two people.
+ * The comp's **QR** stood on that list until now. Encoding one needs a Reed-Solomon
+ * implementation and this repo forbids hand-rolling infrastructure (addendum §18), so it
+ * was a dependency decision to take deliberately rather than in passing — and the product
+ * owner has now taken it in
+ * [#90](https://github.com/drewdrewthis/playa-post/issues/90): `react-qr-code`.
  */
 export function YourProfileRoute(): JSX.Element {
   const api = useApi();
@@ -58,10 +64,6 @@ export function YourProfileRoute(): JSX.Element {
   const graph = useQuery({
     queryKey: GRAPH_LIST_QUERY_KEY,
     queryFn: () => api.query('graph.list', undefined),
-  });
-
-  const invite = useMutation({
-    mutationFn: () => api.mutate('connections.invitations.create', undefined),
   });
 
   const queryClient = useQueryClient();
@@ -86,9 +88,6 @@ export function YourProfileRoute(): JSX.Element {
   const me = graph.data?.people.find((person) => person.degree === VIEWER_DEGREE);
   const summary = summariseGraph(graph.data?.people ?? []);
 
-  const shareUrl =
-    invite.data === undefined ? null : inviteUrl(window.location.origin, invite.data.token);
-
   return (
     <section className="screen" data-testid="your-profile">
       <div className="profile__identity">
@@ -111,67 +110,17 @@ export function YourProfileRoute(): JSX.Element {
 
       <div className="profile__section">
         <h2 className="profile__section-label">Connect</h2>
-
-        <div className="profile__connect">
-          <div className="profile__connect-body">
-            {shareUrl === null ? (
-              <p className="screen__aside">
-                Create an invite to get a link you can send. Nothing happens until you both
-                consent.
-              </p>
-            ) : (
-              <>
-                <span className="profile__invite-link" data-testid="invite-link">
-                  {shareUrl}
-                </span>
-                <p className="screen__aside">
-                  Send this to one person. Nothing happens until you both consent.
-                </p>
-              </>
-            )}
-
-            <button
-              className="profile__share"
-              data-testid="invite-share-button"
-              type="button"
-              disabled={invite.isPending}
-              onClick={() => {
-                if (shareUrl === null) {
-                  invite.mutate();
-                  return;
-                }
-
-                void shareInvite(shareUrl);
-              }}
-            >
-              {shareUrl === null ? 'Create invite' : 'Share invite'}
-            </button>
-          </div>
-        </div>
-
-        {invite.error === null ? null : (
-          <p className="form__error" role="alert">
-            That invite did not get created. Try again.
-          </p>
-        )}
+        <ConnectCard />
       </div>
 
       <div className="profile__section">
         <h2 className="profile__section-label">Who can see you</h2>
 
         {visibility.isError ? (
-          <div className="profile__row">
-            <p className="form__error" role="alert">
-              Your visibility setting did not load.
-            </p>
-            <button
-              className="profile__pill profile__dial"
-              type="button"
-              onClick={() => void visibility.refetch()}
-            >
-              TRY AGAIN
-            </button>
-          </div>
+          <RetryRow
+            message="Your visibility setting did not load."
+            onRetry={() => void visibility.refetch()}
+          />
         ) : visibilityValue === undefined ? (
           <p className="profile__quiet">Loading your visibility…</p>
         ) : (
@@ -248,26 +197,4 @@ export function YourProfileRoute(): JSX.Element {
       </button>
     </section>
   );
-}
-
-/**
- * Hand the invite to the platform's share sheet, or to the clipboard.
- *
- * ⚠ Both branches can reject — `navigator.share` throws `AbortError` when the user
- * dismisses the sheet, and the clipboard throws when the document is not focused. Neither
- * is a failure worth interrupting anybody over, and neither leaves the app in a bad state,
- * so both are swallowed. The link is on screen either way, which is the fallback that
- * always works.
- */
-async function shareInvite(url: string): Promise<void> {
-  try {
-    if (typeof navigator.share === 'function') {
-      await navigator.share({ text: inviteShareText(url), url });
-      return;
-    }
-
-    await navigator.clipboard.writeText(url);
-  } catch {
-    // Deliberately silent; see above.
-  }
 }

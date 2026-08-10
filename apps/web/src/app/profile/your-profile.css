@@ -116,6 +116,26 @@
   min-width: 0;
 }
 
+/**
+ * The comp's white QR tile (Playa Post.dc.html:156), sized so the code inside it stays
+ * 100px in both themes.
+ *
+ * ⚠ **The padding is the quiet zone, not spacing.** `react-qr-code` draws the matrix
+ * edge-to-edge, and a QR with no light margin around it is the classic unscannable one —
+ * this is the margin, which is why it is on the white tile and not outside it. `flex:
+ * none` for the same reason: the code may not be squeezed narrower than it was generated.
+ */
+.profile__qr {
+  flex: none;
+  display: flex;
+  padding: var(--pp-space-2);
+  border: 1px solid var(--pp-card-border);
+  border-radius: var(--pp-radius-sm);
+
+  /* Literal, not a token: see the comment beside the `<QRCode>` in `your-profile.tsx`. */
+  background: #fff;
+}
+
 /** Mono, because a link a person may have to read out or retype is read character by character. */
 .profile__invite-link {
   overflow: hidden;
@@ -243,6 +263,15 @@
   border: none;
   cursor: pointer;
   font-family: inherit;
+}
+
+/*
+ * The TRY AGAIN pills wear `--bad`, whose whole palette is a danger border — and the
+ * `border: none` button-reset above is declared later in this file, so without this
+ * compound rule the cascade strips the one thing that says "this stopped working".
+ */
+.profile__dial.profile__pill--bad {
+  border: 1px solid var(--pp-danger-border);
 }
 
 .profile__dial:disabled {

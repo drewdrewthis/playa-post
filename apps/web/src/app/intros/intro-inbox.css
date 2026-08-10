@@ -2,8 +2,9 @@
  * The intro inbox, at the top of `/graph`'s chrome (issue #89).
  *
  * A dashed card in the accent, the treatment this app already uses for "something is
- * waiting on you" — the same family as `.invite-token` on the same screen, which is the
- * other block that appears in the chrome only when there is something to say.
+ * waiting on you". Since the invite block left this screen for the You screen's standing
+ * CONNECT card (#142), it is the only thing in the chrome that appears at all only when
+ * there is something to say.
  *
  * Every colour is a token from `app/theme/tokens.css`, which declares a complete set in
  * both palettes; a literal colour here would be a light-mode value shown on a dark screen.

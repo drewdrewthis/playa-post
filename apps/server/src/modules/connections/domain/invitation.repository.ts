@@ -35,6 +35,18 @@ export interface InvitationRepository {
    */
   findByToken(token: string): Promise<Invitation | null>;
 
+  /**
+   * The caller's newest still-pending invite, or `null` when none is outstanding.
+   *
+   * This is **not** the listing endpoint the module refuses to have. It answers with
+   * at most one row, always the inviter's own, and only while that invite is unspent —
+   * exactly the information `add` already hands the same caller at mint time, so a
+   * leaked session learns nothing here it could not learn by minting. It exists so
+   * `create` can be get-or-create: the You screen's standing card asks on every
+   * arrival, and re-asking must not re-mint (PR #144 review).
+   */
+  findLatestPendingByInviter(inviterId: string): Promise<Invitation | null>;
+
   /** Write a new invite and return the stored row. */
   add(invitation: NewInvitation): Promise<Invitation>;
 }

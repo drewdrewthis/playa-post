@@ -66,11 +66,14 @@ describe('invitations (invitations.feature @integration, M2-AC17)', () => {
   async function seedInvitation(
     inviterId: string,
     status: 'pending' | 'accepted' | 'revoked',
+    // Explicit override for tests that need a specific ordering; omitted callers keep
+    // the column stamped at insert time, same as before.
+    createdAt?: Date,
   ): Promise<string> {
     const { rows } = await testDatabase.client.query<{ token: string }>(
       `insert into app.invitations (inviter_id, token, status, created_at)
-       values ($1, $2, $3, now()) returning token`,
-      [inviterId, randomUUID().replaceAll('-', ''), status],
+       values ($1, $2, $3, coalesce($4, now())) returning token`,
+      [inviterId, randomUUID().replaceAll('-', ''), status, createdAt ?? null],
     );
     const token = rows[0]?.token;
     if (token === undefined) {
@@ -96,6 +99,109 @@ describe('invitations (invitations.feature @integration, M2-AC17)', () => {
       );
       expect(rows).toHaveLength(1);
       expect(rows[0]?.token).toBe(token);
+    });
+  });
+
+  describe('Scenario: Creating again while an invite is outstanding returns it (PR #144)', () => {
+    it('answers the same token twice and writes one row', async () => {
+      const inviterId = await seedOnboardedUser('dusty_repeat_inviter');
+      const invitations = createPostgresInvitationRepository({ database });
+      const createInvite = createCreateInviteService({ invitations });
+
+      const first = await createInvite.create({ inviterId });
+      const second = await createInvite.create({ inviterId });
+
+      expect(second.token).toBe(first.token);
+      expect(second.invitationId).toBe(first.invitationId);
+
+      const { rows } = await testDatabase.client.query(
+        `select id from app.invitations where inviter_id = $1`,
+        [inviterId],
+      );
+      expect(rows).toHaveLength(1);
+    });
+
+    it('mints a fresh token once the outstanding one is spent', async () => {
+      const inviterId = await seedOnboardedUser('dusty_spent_reminter');
+      const spentToken = await seedInvitation(inviterId, 'accepted');
+      const invitations = createPostgresInvitationRepository({ database });
+      const createInvite = createCreateInviteService({ invitations });
+
+      const { token } = await createInvite.create({ inviterId });
+
+      expect(token).not.toBe(spentToken);
+    });
+
+    it('mints a fresh token once the outstanding one is revoked', async () => {
+      const inviterId = await seedOnboardedUser('dusty_revoked_reminter');
+      const revokedToken = await seedInvitation(inviterId, 'revoked');
+      const invitations = createPostgresInvitationRepository({ database });
+      const createInvite = createCreateInviteService({ invitations });
+
+      const { token } = await createInvite.create({ inviterId });
+
+      expect(token).not.toBe(revokedToken);
+    });
+
+    it('returns the newer of two outstanding pending invites, and mints no new row', async () => {
+      const inviterId = await seedOnboardedUser('dusty_two_pending_inviter');
+      // Explicit, strictly-increasing timestamps rather than two `now()`-stamped calls —
+      // this proves the `created_at desc` ordering itself, not whatever gap two
+      // sequential inserts happen to land.
+      const olderToken = await seedInvitation(
+        inviterId,
+        'pending',
+        new Date('2026-01-01T00:00:00.000Z'),
+      );
+      const newerToken = await seedInvitation(
+        inviterId,
+        'pending',
+        new Date('2026-01-01T00:00:01.000Z'),
+      );
+      const invitations = createPostgresInvitationRepository({ database });
+      const createInvite = createCreateInviteService({ invitations });
+
+      const result = await createInvite.create({ inviterId });
+
+      expect(result.token).toBe(newerToken);
+      expect(result.token).not.toBe(olderToken);
+
+      const { rows } = await testDatabase.client.query(
+        `select id from app.invitations where inviter_id = $1`,
+        [inviterId],
+      );
+      expect(rows).toHaveLength(2);
+    });
+
+    it('returns the same invite on every read when two pending invites tie on created_at', async () => {
+      const inviterId = await seedOnboardedUser('dusty_tied_pending_inviter');
+      const invitations = createPostgresInvitationRepository({ database });
+      const createInvite = createCreateInviteService({ invitations });
+
+      // Both rows share one createdAt — no gap for `created_at desc` to resolve, so
+      // this is the one case that actually exercises the `id desc` tiebreak (the test
+      // above has a timestamp gap and would pass even without it). Without a stable
+      // tiebreaker this read is nondeterministic: which row wins could flip from call
+      // to call, and no test with a timestamp gap can catch that.
+      const tiedAt = new Date('2026-01-01T00:00:00.000Z');
+      const seededTokens = [
+        await seedInvitation(inviterId, 'pending', tiedAt),
+        await seedInvitation(inviterId, 'pending', tiedAt),
+      ];
+
+      const firstRead = await createInvite.create({ inviterId });
+      const secondRead = await createInvite.create({ inviterId });
+      const thirdRead = await createInvite.create({ inviterId });
+
+      expect(seededTokens).toContain(firstRead.token);
+      expect(secondRead.token).toBe(firstRead.token);
+      expect(thirdRead.token).toBe(firstRead.token);
+
+      const { rows } = await testDatabase.client.query(
+        `select id from app.invitations where inviter_id = $1`,
+        [inviterId],
+      );
+      expect(rows).toHaveLength(2);
     });
   });
 

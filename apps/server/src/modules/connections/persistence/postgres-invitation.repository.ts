@@ -1,6 +1,7 @@
 import type { DatabaseConnection } from '@playa-post/database';
 
 import type { Invitation } from '../domain/invitation';
+import { INVITATION_STATUS } from '../domain/invitation';
 import type { InvitationRepository, NewInvitation } from '../domain/invitation.repository';
 
 import { toInvitation } from './invitation.mapper';
@@ -34,6 +35,34 @@ export function createPostgresInvitationRepository(
         .selectFrom('app.invitations')
         .selectAll()
         .where('token', '=', token)
+        .executeTakeFirst();
+
+      return row === undefined ? null : toInvitation(row);
+    },
+
+    async findLatestPendingByInviter(inviterId: string): Promise<Invitation | null> {
+      // At most one row, the inviter's own, pending only — the port's doc comment is
+      // the argument for why this stays on the right side of the no-listing rule.
+      // `created_at desc` because "the current invite" means the newest one: rows
+      // minted before get-or-create existed may leave several pending, and the newest
+      // is the one the You screen most recently displayed.
+      //
+      // `id desc` tiebreaks it — not by finding "the newest": `app.invitations.id` is
+      // `gen_random_uuid()` (migration 20260805234326), a random UUIDv4 with no time
+      // ordering to restore. What it actually buys is determinism. Two racing creates
+      // can land in the same millisecond, and without a stable tiebreaker the choice
+      // between them is nondeterministic — successive reads could flip between tokens
+      // (same bug class as the outbox `available_at` precision fix, commit 6100377).
+      // Among a true tie the winner is arbitrary but stable, which is all "the current
+      // invite" needs.
+      const row = await database
+        .selectFrom('app.invitations')
+        .selectAll()
+        .where('inviter_id', '=', inviterId)
+        .where('status', '=', INVITATION_STATUS.pending)
+        .orderBy('created_at', 'desc')
+        .orderBy('id', 'desc')
+        .limit(1)
         .executeTakeFirst();
 
       return row === undefined ? null : toInvitation(row);
