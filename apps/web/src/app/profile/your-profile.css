@@ -265,6 +265,15 @@
   font-family: inherit;
 }
 
+/*
+ * The TRY AGAIN pills wear `--bad`, whose whole palette is a danger border — and the
+ * `border: none` button-reset above is declared later in this file, so without this
+ * compound rule the cascade strips the one thing that says "this stopped working".
+ */
+.profile__dial.profile__pill--bad {
+  border: 1px solid var(--pp-danger-border);
+}
+
 .profile__dial:disabled {
   cursor: wait;
   opacity: 0.6;

@@ -51,7 +51,6 @@ test.describe('tapping a graph node', () => {
       // A node only exists once two users are genuinely connected — the proven
       // invite-accept setup from `vertical-slice-e2e.spec.ts`, nothing more.
       await bootstrapSession(pageA, userAAccessToken);
-      await expect(pageA.getByTestId('graph-home')).toBeVisible();
       const inviteToken = await mintInviteViaYouScreen(pageA);
 
       await bootstrapSession(pageB, userBAccessToken);

@@ -32,16 +32,21 @@ export interface CreateInviteDependencies {
 }
 
 /**
- * The create-invite use case (M2.5).
+ * The create-invite use case (M2.5), get-or-create since PR #144.
  *
- * Deliberately thin, and deliberately without a per-inviter cap or a reuse check. An
- * invite token is a bearer credential with no relationship to its holder, so "one live
- * invite per person" would be a constraint the product does not have: people hand out
- * different links to different people, and revocation — M5 — is what takes one back.
+ * `create` returns the caller's newest still-pending invite and mints only when none
+ * is outstanding. That is not a per-inviter cap — nothing stops a new invite once the
+ * current one is spent or (M5) revoked — it is a refusal to mint a second token while
+ * the first was never used. The You screen's standing CONNECT card made `create` fire
+ * on page arrival rather than on a click, and every arrival minting a fresh uncapped
+ * bearer credential was an amplification lever plus a stale-card bug (the client cache
+ * forgetting is what used to decide when a new row appeared). Idempotence here retires
+ * both. Two truly concurrent first calls can still race into two rows; both are valid,
+ * the newer wins on the next read, and that is the pre-#144 behavior at worst.
  *
- * There is no way to *list* somebody's invites either. The token is shown once, at
- * creation; a listing endpoint would turn a leaked session into every outstanding
- * invite that account ever minted.
+ * There is still no way to *list* somebody's invites. The token is shown at creation
+ * and re-shown only to its own pending inviter — a listing endpoint would turn a
+ * leaked session into every outstanding invite that account ever minted.
  */
 export function createCreateInviteService(
   dependencies: CreateInviteDependencies,
@@ -50,6 +55,17 @@ export function createCreateInviteService(
 
   return {
     async create(command: CreateInviteCommand): Promise<CreatedInvite> {
+      const outstanding = await dependencies.invitations.findLatestPendingByInviter(
+        command.inviterId,
+      );
+      if (outstanding !== null) {
+        return {
+          token: outstanding.token,
+          invitationId: outstanding.id,
+          createdAt: outstanding.createdAt,
+        };
+      }
+
       const invitation = await dependencies.invitations.add({
         inviterId: command.inviterId,
         // The subject is handed to the generator and ignored by it, on purpose — see

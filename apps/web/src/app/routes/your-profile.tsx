@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { JSX } from 'react';
-import QRCode from 'react-qr-code';
 import { Link } from 'react-router';
 
 import type { VisibleToDistance } from '@playa-post/contracts';
@@ -12,7 +11,7 @@ import { summariseGraph, VIEWER_DEGREE } from '../graph/graph-counts';
 import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
 import { useOffline } from '../offline/offline-provider';
 import { describeQueuedMutation, sortedQueue } from '../offline/sync-queue-view';
-import { inviteShareText, inviteUrl } from '../profile/invite-share';
+import { ConnectCard } from '../profile/connect-card';
 import {
   describeVisibility,
   nextVisibility,
@@ -66,20 +65,6 @@ export function YourProfileRoute(): JSX.Element {
     queryFn: () => api.query('graph.list', undefined),
   });
 
-  /*
-   * A write behind `useQuery`, deliberately. The comp's card *stands ready* — there is no
-   * "create invite" step to press — so the mint has to happen on arrival, and arrival is
-   * what a query models. `staleTime: Infinity` is the part that makes it safe: without it
-   * this would re-mint on every remount inside the cache window. Accepted cost: opening
-   * this screen spends a token nobody may ever send, which is cheaper than the button the
-   * comp does not have.
-   */
-  const invite = useQuery({
-    queryKey: ['invite', 'mine'],
-    queryFn: () => api.mutate('connections.invitations.create', undefined),
-    staleTime: Infinity,
-  });
-
   const queryClient = useQueryClient();
   const visibility = useQuery({
     queryKey: ['identity', 'visibility'],
@@ -101,9 +86,6 @@ export function YourProfileRoute(): JSX.Element {
 
   const me = graph.data?.people.find((person) => person.degree === VIEWER_DEGREE);
   const summary = summariseGraph(graph.data?.people ?? []);
-
-  const shareUrl =
-    invite.data === undefined ? null : inviteUrl(window.location.origin, invite.data.token);
 
   return (
     <section className="screen" data-testid="your-profile">
@@ -127,54 +109,7 @@ export function YourProfileRoute(): JSX.Element {
 
       <div className="profile__section">
         <h2 className="profile__section-label">Connect</h2>
-
-        {invite.isError ? (
-          <div className="profile__row">
-            <p className="form__error" role="alert">
-              That invite did not get created.
-            </p>
-            <button
-              className="profile__pill profile__dial"
-              type="button"
-              onClick={() => void invite.refetch()}
-            >
-              TRY AGAIN
-            </button>
-          </div>
-        ) : shareUrl === null ? (
-          <p className="profile__quiet">Minting your invite…</p>
-        ) : (
-          <div className="profile__connect">
-            {/*
-              White and black, hard-coded rather than tokenised, and the same in both
-              themes: a scanner looks for dark modules on a light field, so letting the
-              dark palette paint this would invert the contrast a camera needs and hand
-              somebody a QR that photographs fine and does not read.
-            */}
-            <div className="profile__qr" data-testid="invite-qr">
-              <QRCode value={shareUrl} size={100} bgColor="#ffffff" fgColor="#000000" />
-            </div>
-
-            <div className="profile__connect-body">
-              <span className="profile__invite-link" data-testid="invite-link">
-                {shareUrl}
-              </span>
-              <p className="screen__aside">
-                Scan or tap to connect. Nothing happens until you both consent.
-              </p>
-              <button
-                className="profile__share"
-                data-testid="invite-share-button"
-                type="button"
-                onClick={() => {
-                  void shareInvite(shareUrl);
-                }}
-              >
-                Share invite
-              </button>
-            </div>
-          </div>
-        )}
+        <ConnectCard />
       </div>
 
       <div className="profile__section">
@@ -186,7 +121,7 @@ export function YourProfileRoute(): JSX.Element {
               Your visibility setting did not load.
             </p>
             <button
-              className="profile__pill profile__dial"
+              className="profile__pill profile__pill--bad profile__dial"
               type="button"
               onClick={() => void visibility.refetch()}
             >
@@ -269,26 +204,4 @@ export function YourProfileRoute(): JSX.Element {
       </button>
     </section>
   );
-}
-
-/**
- * Hand the invite to the platform's share sheet, or to the clipboard.
- *
- * ⚠ Both branches can reject — `navigator.share` throws `AbortError` when the user
- * dismisses the sheet, and the clipboard throws when the document is not focused. Neither
- * is a failure worth interrupting anybody over, and neither leaves the app in a bad state,
- * so both are swallowed. The link is on screen either way, which is the fallback that
- * always works.
- */
-async function shareInvite(url: string): Promise<void> {
-  try {
-    if (typeof navigator.share === 'function') {
-      await navigator.share({ text: inviteShareText(url), url });
-      return;
-    }
-
-    await navigator.clipboard.writeText(url);
-  } catch {
-    // Deliberately silent; see above.
-  }
 }

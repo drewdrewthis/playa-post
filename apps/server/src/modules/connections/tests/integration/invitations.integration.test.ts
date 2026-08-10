@@ -99,6 +99,48 @@ describe('invitations (invitations.feature @integration, M2-AC17)', () => {
     });
   });
 
+  describe('Scenario: Creating again while an invite is outstanding returns it (PR #144)', () => {
+    it('answers the same token twice and writes one row', async () => {
+      const inviterId = await seedOnboardedUser('dusty_repeat_inviter');
+      const invitations = createPostgresInvitationRepository({ database });
+      const createInvite = createCreateInviteService({ invitations });
+
+      const first = await createInvite.create({ inviterId });
+      const second = await createInvite.create({ inviterId });
+
+      expect(second.token).toBe(first.token);
+      expect(second.invitationId).toBe(first.invitationId);
+
+      const { rows } = await testDatabase.client.query(
+        `select id from app.invitations where inviter_id = $1`,
+        [inviterId],
+      );
+      expect(rows).toHaveLength(1);
+    });
+
+    it('mints a fresh token once the outstanding one is spent', async () => {
+      const inviterId = await seedOnboardedUser('dusty_spent_reminter');
+      const spentToken = await seedInvitation(inviterId, 'accepted');
+      const invitations = createPostgresInvitationRepository({ database });
+      const createInvite = createCreateInviteService({ invitations });
+
+      const { token } = await createInvite.create({ inviterId });
+
+      expect(token).not.toBe(spentToken);
+    });
+
+    it('mints a fresh token once the outstanding one is revoked', async () => {
+      const inviterId = await seedOnboardedUser('dusty_revoked_reminter');
+      const revokedToken = await seedInvitation(inviterId, 'revoked');
+      const invitations = createPostgresInvitationRepository({ database });
+      const createInvite = createCreateInviteService({ invitations });
+
+      const { token } = await createInvite.create({ inviterId });
+
+      expect(token).not.toBe(revokedToken);
+    });
+  });
+
   describe('Scenario: Spent invite token cannot be opened again', () => {
     it('answers INVITATION_UNAVAILABLE when opening an already-accepted token', async () => {
       const inviterId = await seedOnboardedUser('dusty_spent_inviter');

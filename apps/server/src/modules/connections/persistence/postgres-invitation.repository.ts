@@ -1,6 +1,7 @@
 import type { DatabaseConnection } from '@playa-post/database';
 
 import type { Invitation } from '../domain/invitation';
+import { INVITATION_STATUS } from '../domain/invitation';
 import type { InvitationRepository, NewInvitation } from '../domain/invitation.repository';
 
 import { toInvitation } from './invitation.mapper';
@@ -34,6 +35,24 @@ export function createPostgresInvitationRepository(
         .selectFrom('app.invitations')
         .selectAll()
         .where('token', '=', token)
+        .executeTakeFirst();
+
+      return row === undefined ? null : toInvitation(row);
+    },
+
+    async findLatestPendingByInviter(inviterId: string): Promise<Invitation | null> {
+      // At most one row, the inviter's own, pending only — the port's doc comment is
+      // the argument for why this stays on the right side of the no-listing rule.
+      // `created_at desc` because "the current invite" means the newest one: rows
+      // minted before get-or-create existed may leave several pending, and the newest
+      // is the one the You screen most recently displayed.
+      const row = await database
+        .selectFrom('app.invitations')
+        .selectAll()
+        .where('inviter_id', '=', inviterId)
+        .where('status', '=', INVITATION_STATUS.pending)
+        .orderBy('created_at', 'desc')
+        .limit(1)
         .executeTakeFirst();
 
       return row === undefined ? null : toInvitation(row);

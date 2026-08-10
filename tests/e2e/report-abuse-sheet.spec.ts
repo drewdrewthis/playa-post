@@ -123,8 +123,6 @@ test.describe('the report-abuse sheet renders in both themes', () => {
       // authored by the other one. This is `vertical-slice-e2e.spec.ts`'s proven setup,
       // minus the steps that only assert the graph and the notification window.
       await bootstrapSession(pageA, userAAccessToken);
-      await expect(pageA.getByTestId('graph-home')).toBeVisible();
-
       const inviteToken = await mintInviteViaYouScreen(pageA);
 
       await bootstrapSession(pageB, userBAccessToken);
@@ -286,8 +284,6 @@ test.describe('a report or dismissal that did not reach the server says so', () 
       // are rendered only on a bulletin the viewer does not own
       // (`bulletin-detail-sheet.tsx` — `card.own ? archive : (dismiss, report)`).
       await bootstrapSession(pageA, userAAccessToken);
-      await expect(pageA.getByTestId('graph-home')).toBeVisible();
-
       const inviteToken = await mintInviteViaYouScreen(pageA);
 
       await bootstrapSession(pageB, userBAccessToken);
