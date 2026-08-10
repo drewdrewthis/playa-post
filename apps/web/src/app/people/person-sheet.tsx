@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState, type JSX } from 'react';
+import { Link } from 'react-router';
 
 import type { Person } from '@playa-post/contracts';
 
@@ -12,6 +13,7 @@ import { IntroSheet } from '../intros/intro-sheet';
 import { describeNoteReach, type NoteReach } from '../notes/note-reach';
 import { noteRecipientName } from '../notes/note-recipient';
 
+import { connectionsAndBulletinsLine, degreeLine, mutualConnectionCount } from './person-context';
 import { PersonIdentity, trustLabel } from './person-identity';
 
 import './person-sheet.css';
@@ -36,6 +38,11 @@ const TRUST_MAX = 100;
  * minimum, but the label says *Not set* until the viewer saves — otherwise a user who
  * never expressed an opinion would be shown, and would eventually save, a zero they
  * never chose.
+ *
+ * **The context block** (#85) — the degree line and the mutuals/bulletins counts — is
+ * derived in `person-context.ts` from reads the sibling screens already cached; the
+ * comp's role line and Block button are deliberately absent, because no profile field
+ * and no blocking backend exist to back them.
  *
  * **The intro affordance lives here too** (#89): at the second degree this is the screen
  * somebody is looking at when they want to reach a person they cannot write to. What it
@@ -76,6 +83,21 @@ export function PersonSheet({
         throw error;
       }
     },
+  });
+
+  /*
+   * The context block (#85) reads the same two caches its sibling screens already
+   * filled: the graph, for the degree line and mutual count, and the board, for this
+   * person's visible-bulletin count. Same keys as `graph-home.tsx` and `board.tsx`'s
+   * unfiltered read, so opening the sheet is normally a cache hit, not a refetch.
+   */
+  const graph = useQuery({
+    queryKey: GRAPH_LIST_QUERY_KEY,
+    queryFn: () => api.query('graph.list', undefined),
+  });
+  const board = useQuery({
+    queryKey: ['bulletins', 'board', null],
+    queryFn: () => api.query('bulletins.board', {}),
   });
 
   /*
@@ -196,6 +218,17 @@ export function PersonSheet({
         </div>
 
         {/*
+         * The comp's degree label ("2nd degree · via {name}"), derived from the graph
+         * payload this sheet was opened from — absent while that read is unsettled
+         * rather than rendered with placeholders (#85).
+         */}
+        {graph.data === undefined ? null : (
+          <p className="person-sheet__degree" data-testid="person-sheet-degree">
+            {degreeLine(person, graph.data)}
+          </p>
+        )}
+
+        {/*
          * Four states, told apart on purpose: a query still in flight or failed must
          * not read as "not connected" — that message is the queryFn's translation of
          * the server's `NOT_CONNECTED` refusal (B6) and nothing else.
@@ -213,9 +246,9 @@ export function PersonSheet({
           </p>
         ) : connection.data === null ? (
           <p className="person-sheet__notice" data-testid="person-sheet-not-connected">
-            {/* The comp's "connect first to set trust": a tappable node past the first
-                degree is somebody the viewer can see, not somebody they hold trust in. */}
-            You are not connected to this person, so there is nothing to set.
+            {/* The comp's copy, kept: a tappable node past the first degree is somebody
+                the viewer can see, not somebody they hold trust in. */}
+            You are not connected &mdash; connect first to set trust.
           </p>
         ) : (
           <>
@@ -263,10 +296,26 @@ export function PersonSheet({
           </p>
         )}
 
-        <IntroAffordance
+        {/*
+         * The comp's "{n} mutual connections · {n} active bulletins" line. Both counts
+         * wait for their read to settle: a `0` printed while the board is still loading
+         * would be indistinguishable from a real zero.
+         */}
+        {graph.data === undefined || board.data === undefined ? null : (
+          <p className="person-sheet__counts" data-testid="person-sheet-counts">
+            {connectionsAndBulletinsLine(
+              mutualConnectionCount(person, graph.data),
+              board.data.items.filter((bulletin) => bulletin.author.userId === otherUserId)
+                .length,
+            )}
+          </p>
+        )}
+
+        <PersonActions
           standing={standing}
           reach={reach}
           degree={person.degree}
+          recipientId={otherUserId}
           onRequestIntro={() => {
             setAskingIntro(true);
           }}
@@ -293,7 +342,9 @@ export function PersonSheet({
 }
 
 /**
- * What this sheet says about an introduction: an offer, a state, a hint, or nothing.
+ * The sheet's degree-dependent primary action, or the state that replaces it: pin a
+ * note at the first degree, ask for an intro at the second, a hint and nothing to
+ * press past that.
  *
  * The order is the point. **What already happened outranks what could happen** — a
  * requester with an open ask is told about it rather than invited to make a second one,
@@ -308,15 +359,17 @@ export function PersonSheet({
  * @param degree - this person's distance, which decides whether an intro is possible at
  *   all. Read from the graph payload the sheet was opened with, never from the outbox.
  */
-function IntroAffordance({
+function PersonActions({
   standing,
   reach,
   degree,
+  recipientId,
   onRequestIntro,
 }: {
   readonly standing: IntroStanding | null;
   readonly reach: NoteReach;
   readonly degree: number;
+  readonly recipientId: string;
   readonly onRequestIntro: () => void;
 }): JSX.Element | null {
   if (standing === null) {
@@ -332,6 +385,20 @@ function IntroAffordance({
       >
         {standing.line}
       </p>
+    );
+  }
+
+  // The comp's first-degree primary action; the same route `bulletin-detail-sheet.tsx`
+  // links, so the composer arrives with the recipient already chosen.
+  if (reach.kind === 'can-pin') {
+    return (
+      <Link
+        className="button button--primary"
+        data-testid="person-sheet-pin-note-link"
+        to={`/board/new?noteTo=${encodeURIComponent(recipientId)}`}
+      >
+        {reach.label}
+      </Link>
     );
   }
 

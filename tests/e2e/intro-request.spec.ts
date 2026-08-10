@@ -72,6 +72,9 @@ async function openPersonSheetOnWithheldNode(page: Page): Promise<void> {
   // Pins the real wire's NOT_CONNECTED refusal rendering as not-connected, not as the
   // error arm — the gap that let every degree-2 sheet ship "That did not load" (#80).
   await expect(page.getByTestId('person-sheet')).toContainText('not connected');
+  // And the context block (#85) against the seeded topology: C is two hops from A,
+  // through B — derived client-side from the same graph payload that drew the node.
+  await expect(page.getByTestId('person-sheet-degree')).toHaveText('2nd degree · via User B');
 }
 
 test.describe('asking for an intro through a shared connection', () => {
