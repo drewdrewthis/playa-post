@@ -5,6 +5,7 @@ import QRCode from 'react-qr-code';
 import { useApi } from '../api/api-provider';
 
 import { inviteShareText, inviteUrl } from './invite-share';
+import { RetryRow } from './retry-row';
 
 /**
  * The one spelling of the invite-card query key, the discipline
@@ -50,18 +51,7 @@ export function ConnectCard(): JSX.Element {
 
   if (invite.isError) {
     return (
-      <div className="profile__row">
-        <p className="form__error" role="alert">
-          That invite did not get created.
-        </p>
-        <button
-          className="profile__pill profile__pill--bad profile__dial"
-          type="button"
-          onClick={() => void invite.refetch()}
-        >
-          TRY AGAIN
-        </button>
-      </div>
+      <RetryRow message="That invite did not get created." onRetry={() => void invite.refetch()} />
     );
   }
 

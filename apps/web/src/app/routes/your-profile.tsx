@@ -12,6 +12,7 @@ import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
 import { useOffline } from '../offline/offline-provider';
 import { describeQueuedMutation, sortedQueue } from '../offline/sync-queue-view';
 import { ConnectCard } from '../profile/connect-card';
+import { RetryRow } from '../profile/retry-row';
 import {
   describeVisibility,
   nextVisibility,
@@ -116,18 +117,10 @@ export function YourProfileRoute(): JSX.Element {
         <h2 className="profile__section-label">Who can see you</h2>
 
         {visibility.isError ? (
-          <div className="profile__row">
-            <p className="form__error" role="alert">
-              Your visibility setting did not load.
-            </p>
-            <button
-              className="profile__pill profile__pill--bad profile__dial"
-              type="button"
-              onClick={() => void visibility.refetch()}
-            >
-              TRY AGAIN
-            </button>
-          </div>
+          <RetryRow
+            message="Your visibility setting did not load."
+            onRetry={() => void visibility.refetch()}
+          />
         ) : visibilityValue === undefined ? (
           <p className="profile__quiet">Loading your visibility…</p>
         ) : (

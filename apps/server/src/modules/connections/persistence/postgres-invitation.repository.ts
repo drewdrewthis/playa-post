@@ -46,12 +46,18 @@ export function createPostgresInvitationRepository(
       // `created_at desc` because "the current invite" means the newest one: rows
       // minted before get-or-create existed may leave several pending, and the newest
       // is the one the You screen most recently displayed.
+      //
+      // `id desc` tiebreaks it: `created_at` comes from a ms-precision clock, so two
+      // racing creates can tie, and without a stable tiebreaker "newest wins" is
+      // nondeterministic — successive reads could flip between tokens (same bug class
+      // as the outbox `available_at` precision fix, commit 6100377).
       const row = await database
         .selectFrom('app.invitations')
         .selectAll()
         .where('inviter_id', '=', inviterId)
         .where('status', '=', INVITATION_STATUS.pending)
         .orderBy('created_at', 'desc')
+        .orderBy('id', 'desc')
         .limit(1)
         .executeTakeFirst();
 

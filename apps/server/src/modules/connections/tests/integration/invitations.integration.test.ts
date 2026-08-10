@@ -66,11 +66,14 @@ describe('invitations (invitations.feature @integration, M2-AC17)', () => {
   async function seedInvitation(
     inviterId: string,
     status: 'pending' | 'accepted' | 'revoked',
+    // Explicit override for tests that need a specific ordering; omitted callers keep
+    // the column stamped at insert time, same as before.
+    createdAt?: Date,
   ): Promise<string> {
     const { rows } = await testDatabase.client.query<{ token: string }>(
       `insert into app.invitations (inviter_id, token, status, created_at)
-       values ($1, $2, $3, now()) returning token`,
-      [inviterId, randomUUID().replaceAll('-', ''), status],
+       values ($1, $2, $3, coalesce($4, now())) returning token`,
+      [inviterId, randomUUID().replaceAll('-', ''), status, createdAt ?? null],
     );
     const token = rows[0]?.token;
     if (token === undefined) {
@@ -138,6 +141,36 @@ describe('invitations (invitations.feature @integration, M2-AC17)', () => {
       const { token } = await createInvite.create({ inviterId });
 
       expect(token).not.toBe(revokedToken);
+    });
+
+    it('returns the newer of two outstanding pending invites, and mints no new row', async () => {
+      const inviterId = await seedOnboardedUser('dusty_two_pending_inviter');
+      // Explicit, strictly-increasing timestamps rather than two `now()`-stamped calls —
+      // this proves the `created_at desc` ordering itself, not whatever gap two
+      // sequential inserts happen to land.
+      const olderToken = await seedInvitation(
+        inviterId,
+        'pending',
+        new Date('2026-01-01T00:00:00.000Z'),
+      );
+      const newerToken = await seedInvitation(
+        inviterId,
+        'pending',
+        new Date('2026-01-01T00:00:01.000Z'),
+      );
+      const invitations = createPostgresInvitationRepository({ database });
+      const createInvite = createCreateInviteService({ invitations });
+
+      const result = await createInvite.create({ inviterId });
+
+      expect(result.token).toBe(newerToken);
+      expect(result.token).not.toBe(olderToken);
+
+      const { rows } = await testDatabase.client.query(
+        `select id from app.invitations where inviter_id = $1`,
+        [inviterId],
+      );
+      expect(rows).toHaveLength(2);
     });
   });
 
