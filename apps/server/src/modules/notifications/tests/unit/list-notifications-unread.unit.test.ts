@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { viewerIdFromActor, type ViewerId } from '../../../../shared/auth/viewer-id';
 import type {
+  DeliveredNoteNotification,
   DeliveredNotificationMatch,
   DeliveredNotificationRepository,
 } from '../../application/delivered-notification.repository';
@@ -39,20 +40,33 @@ describe('notifications unread + dismiss', () => {
     };
   }
 
+  /** One delivered note notification, at an offset from the window start. */
+  function note(eventId: string, noteId: string, offsetMs = 0): DeliveredNoteNotification {
+    return {
+      eventId,
+      noteId,
+      occurredAt: new Date(windowStart.getTime() + offsetMs),
+    };
+  }
+
   /**
-   * Everything delivered is visible, which isolates this suite to the dismissal rule:
-   * the authorization post-filter has its own scenarios in
-   * `notifications-list.integration.test.ts`, against the real
-   * `app.visible_bulletins`.
+   * Everything delivered is visible, which isolates this suite to the dismissal rule and
+   * to how the two kinds are shaped: the authorization post-filter has its own scenarios
+   * in `notifications-list.integration.test.ts`, against the real `app.visible_bulletins`
+   * and `app.visible_notes`.
    */
   function fakeDelivered(
     matches: readonly DeliveredNotificationMatch[],
+    notes: readonly DeliveredNoteNotification[] = [],
   ): DeliveredNotificationRepository {
     return {
       findDeliveredMatches: async () => matches,
       findVisibleBulletinIds: async (_viewer, bulletinIds) => bulletinIds,
+      findDeliveredNoteNotifications: async () => notes,
+      findVisibleNoteIds: async (_viewer, noteIds) => noteIds,
       hasDeliveredMatch: async (owner, notificationId) =>
-        owner === recipientId && matches.some((candidate) => candidate.eventId === notificationId),
+        owner === recipientId &&
+        [...matches, ...notes].some((candidate) => candidate.eventId === notificationId),
     };
   }
 
@@ -146,6 +160,75 @@ describe('notifications unread + dismiss', () => {
       expect(listed[0]?.notificationId).toBe('event-opener');
       expect(listed[0]?.unread).toBe(true);
     });
+
+    it('serves both kinds in one list, newest first, each carrying its own discriminator', async () => {
+      const query = createListNotificationsQuery({
+        deliveredNotifications: fakeDelivered(
+          [match('event-bulletin', 'bulletin-1')],
+          [note('event-note', 'note-1', 120_000)],
+        ),
+        dismissals: fakeDismissals(),
+      });
+
+      const listed = await query.list({ viewerId });
+
+      expect(listed).toHaveLength(2);
+      // The note happened later, so it sorts first — one ordering over both kinds, not
+      // two sections a client would have to interleave.
+      expect(listed[0]).toEqual({
+        kind: 'note',
+        notificationId: 'event-note',
+        occurredAt: new Date(windowStart.getTime() + 120_000),
+        noteId: 'note-1',
+        unread: true,
+      });
+      expect(listed[1]).toEqual({
+        kind: 'bulletins',
+        notificationId: 'event-bulletin',
+        occurredAt: windowStart,
+        bulletinIds: ['bulletin-1'],
+        unread: true,
+      });
+    });
+
+    it('never groups two notes, however close together they were pinned', async () => {
+      // One second apart — well inside the 60-second window that would have merged two
+      // bulletin matches. Two people writing to you is two notifications; collapsing them
+      // into "2 notes" would hide the second person.
+      const query = createListNotificationsQuery({
+        deliveredNotifications: fakeDelivered(
+          [],
+          [note('event-note-1', 'note-1'), note('event-note-2', 'note-2', 1_000)],
+        ),
+        dismissals: fakeDismissals(),
+      });
+
+      const listed = await query.list({ viewerId });
+
+      expect(listed.map((item) => item.notificationId)).toEqual([
+        'event-note-2',
+        'event-note-1',
+      ]);
+    });
+
+    it('marks a dismissed note read and leaves the unread bulletin alone', async () => {
+      const query = createListNotificationsQuery({
+        deliveredNotifications: fakeDelivered(
+          [match('event-bulletin', 'bulletin-1')],
+          [note('event-note', 'note-1')],
+        ),
+        dismissals: fakeDismissals(['event-note']),
+      });
+
+      const listed = await query.list({ viewerId });
+
+      expect(new Map(listed.map((item) => [item.notificationId, item.unread]))).toEqual(
+        new Map([
+          ['event-bulletin', true],
+          ['event-note', false],
+        ]),
+      );
+    });
   });
 
   describe('dismiss', () => {
@@ -160,6 +243,23 @@ describe('notifications unread + dismiss', () => {
       const query = createListNotificationsQuery({ deliveredNotifications, dismissals });
 
       await service.dismiss({ actorId: recipientId, notificationId: 'event-1' });
+
+      expect((await query.list({ viewerId }))[0]?.unread).toBe(false);
+    });
+
+    it('dismisses a note notification, so the next list marks it read', async () => {
+      // `hasDeliveredMatch` gates every dismissal, so a note the check did not recognise
+      // would be refused and the panel's ✕ would silently do nothing on note rows.
+      const deliveredNotifications = fakeDelivered([], [note('event-note', 'note-1')]);
+      const dismissals = fakeDismissals();
+      const service = createDismissNotificationService({
+        deliveredNotifications,
+        dismissals,
+        now: () => new Date('2026-08-02T09:00:00.000Z'),
+      });
+      const query = createListNotificationsQuery({ deliveredNotifications, dismissals });
+
+      await service.dismiss({ actorId: recipientId, notificationId: 'event-note' });
 
       expect((await query.list({ viewerId }))[0]?.unread).toBe(false);
     });

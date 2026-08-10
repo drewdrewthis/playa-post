@@ -3,6 +3,10 @@ import type { DatabaseConnection } from '@playa-post/database';
 import type { VisiblePeopleDirectory } from '../graph/graph.module';
 import { createNotifyMeQueryDirectory } from '../views/views.module';
 
+import {
+  createDeliverNotePinnedHandler,
+  type DeliverNotePinnedHandler,
+} from './application/deliver-note-pinned.handler';
 import { createDismissNotificationService } from './application/dismiss-notification.service';
 import {
   createEvaluateNotifyMeHandler,
@@ -17,6 +21,7 @@ import { createSubscribeToPushService } from './application/subscribe-to-push.se
 import { SELF_DRAINED_EVENT_TYPES } from './domain/notification.events';
 import type { PushTransport } from './domain/push-transport';
 import { createPostgresDeliveredNotificationRepository } from './persistence/postgres-delivered-notification.repository';
+import { createPostgresNoteNotificationRepository } from './persistence/postgres-note-notification.repository';
 import { createPostgresNotificationDismissalRepository } from './persistence/postgres-notification-dismissal.repository';
 import { createPostgresNotifyMeMatchRepository } from './persistence/postgres-notify-me-match.repository';
 import { createPostgresPushSubscriptionRepository } from './persistence/postgres-push-subscription.repository';
@@ -52,7 +57,7 @@ export interface NotificationsModuleDependencies {
   readonly pushTransport: PushTransport;
 }
 
-/** What the composition root gets back: a router, and the two handlers. */
+/** What the composition root gets back: a router, and the three handlers. */
 export interface NotificationsModule {
   readonly router: NotificationsRouter;
   /**
@@ -63,6 +68,15 @@ export interface NotificationsModule {
    * subscription has to be handed out here.
    */
   readonly evaluateNotifyMe: EvaluateNotifyMeHandler;
+  /**
+   * The `NotePinned` consumer, for the outbox drainer to route to (issue #149).
+   *
+   * Leaves the module for the same reason {@link evaluateNotifyMe} does. ⚠ **Registering
+   * it is not optional decoration**: its receipt is what makes a pinned note appear in
+   * its recipient's bell at all, so an unregistered consumer is a silently empty feature
+   * rather than a delivery that is merely late.
+   */
+  readonly deliverNotePinned: DeliverNotePinnedHandler;
   /**
    * The grouping-window flush, for the scheduler to call (ADR-0006's scheduled work).
    *
@@ -111,6 +125,7 @@ export function createNotificationsModule(
   const matches = createPostgresNotifyMeMatchRepository({ database });
   const pushSubscriptions = createPostgresPushSubscriptionRepository({ database });
   const deliveredNotifications = createPostgresDeliveredNotificationRepository({ database });
+  const noteNotifications = createPostgresNoteNotificationRepository({ database });
   const dismissals = createPostgresNotificationDismissalRepository({ database });
 
   return {
@@ -126,6 +141,10 @@ export function createNotificationsModule(
       notifyMeQueries: createNotifyMeQueryDirectory({ database }),
       matches,
     }),
+    // No push transport and no `visiblePeople`: a note notification is delivered to the
+    // bell by existing, and whether the viewer may still read it is decided by
+    // `app.visible_notes` on the read path rather than by anything this handler holds.
+    deliverNotePinned: createDeliverNotePinnedHandler({ noteNotifications }),
     sendGroupedPush: createSendGroupedPushHandler({
       matches,
       pushSubscriptions,

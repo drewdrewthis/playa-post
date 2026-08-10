@@ -406,6 +406,11 @@ export function buildAppContainer(
       // ports are stated separately and reconciled here. `outbox-consumer.adapter.ts`
       // is the whole of that reconciliation.
       toDrainerConsumer(notifications.evaluateNotifyMe),
+      // ⚠ The whole of "a pinned note reaches the bell" (issue #149). This consumer's
+      // receipt is what `notifications.list` joins a `NotePinned` row to, so leaving it
+      // out does not delay a notification — it means the notification never exists, and
+      // nothing errors. `container-notification-wiring.unit.test.ts` holds the line.
+      toDrainerConsumer(notifications.deliverNotePinned),
     ],
     // ⚠ The other half of the notifications wiring, and the half whose absence is
     // silent: these rows are read by the grouping-window flush started in `main.ts`,

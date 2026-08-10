@@ -40,11 +40,21 @@ export function unreadNotificationCount(
 /**
  * A notification's title line — the comp's serif row heading.
  *
- * The contract serves bulletin *ids* and no bulletin text (M2-AC5: resolving one is a
- * separate, visibility-checked read), so the title says what the notification is rather
- * than quoting what caused it. The count is the one real fact grouping produces.
+ * The contract serves *ids* and no text (M2-AC5: resolving one is a separate,
+ * visibility-checked read), so the title says what the notification is rather than
+ * quoting what caused it. For a Notify Me group the count is the one real fact grouping
+ * produces; for a note there is nothing to count.
+ *
+ * ⚠ **"Someone", not a name.** A note notification carries no author — deliberately, and
+ * the copy has to survive that: naming the writer here would mean the contract carrying
+ * an identity the graph may since have withdrawn (§6a), for a line nobody needs it in.
+ * Who pinned it is answered on the board, where the author card is projected.
  */
 export function notificationTitle(notification: GroupedNotification): string {
+  if (notification.kind === 'note') {
+    return 'Someone pinned a note to your board';
+  }
+
   return notification.bulletinIds.length === 1
     ? 'A new bulletin matches your Notify Me query'
     : `${notification.bulletinIds.length} new bulletins match your Notify Me query`;

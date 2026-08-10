@@ -77,9 +77,7 @@ export function GraphHomeRoute(): JSX.Element {
          * this header used to carry was a remnant of the pre-design wave
          * ([#142](https://github.com/drewdrewthis/playa-post/issues/142)).
          */}
-        <header className="screen__header">
-          <h1 className="screen__title">Your graph</h1>
-        </header>
+        <h1 className="sr-only">Your graph</h1>
 
         {network === undefined ? null : (
           <p className="graph-counts" data-testid="graph-counts">

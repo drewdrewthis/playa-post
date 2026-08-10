@@ -6,6 +6,7 @@ import { SessionProvider } from './app/auth/session-provider';
 import { AppRouter } from './app/router';
 import { ThemeProvider } from './app/theme/theme-provider';
 
+import './app/pwa/register-service-worker';
 import './app/theme/typefaces';
 import './app/theme/tokens.css';
 import './app/theme/screens.css';
@@ -23,6 +24,12 @@ import './app/theme/screens.css';
  * need them first: `screens.css` styles screens on both sides of the shell (sign-in and
  * onboarding render outside it), and a stylesheet reached only through the shell's own
  * import would leave those two silently unstyled if the shell ever stopped importing it.
+ *
+ * `register-service-worker` is imported for the same reason — a side effect that must
+ * run regardless of which screen mounts first. The import itself is the fix: it is what
+ * turns `injectRegister: 'auto'` (`vite.config.ts`) away from the plugin's dumb
+ * registration script and onto the client that actually reaches an already-open tab.
+ * See that module for why.
  */
 const rootElement = document.getElementById('root');
 

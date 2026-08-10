@@ -20,7 +20,8 @@ B12 and B14 flipped live, no B-row left `pending` with `pendingUntil: "M2"`, and
 - **No service worker behaviour.** `vite-plugin-pwa` already ships one from M1; L5 neither
   extends it nor builds offline caching on it. Offline state is Dexie only. (See R-4: the
   existing `registerType: 'autoUpdate'` SW *will* interfere with the e2e run — handled in S9.)
-- No dark theme. Light only.
+- No dark theme. Light only. — superseded: ADR-0015 shipped a full dark palette, and
+  issue #151 made dark the default (with a light/dark/system toggle in the chrome).
 - No storage/uploads, no saved views, no erasure, no operator surface (M5).
 - **No edit to any module's `domain/` or `application/`.** If a behaviour is wrong there it
   is a defect in the owning lane and goes back to that lane. This plan touches

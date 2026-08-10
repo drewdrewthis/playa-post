@@ -3,7 +3,7 @@
 - **Status:** proposed
 - **Date:** 2026-08-07
 - **Drivers:** addendum §14 (offline), §18 (proven libraries), §24 (simplest proven
-  implementation); `design/Playa Post.dc.html`; issues #43, #51, #52
+  implementation); `design/Playa Post.dc.html`; issues #43, #51, #52, #151
 
 ## Context
 
@@ -41,12 +41,27 @@ native controls follow the choice.
 `--pp-fab-bg` (a linear gradient). They must be applied with the `background` shorthand;
 `background-color:` silently renders nothing.
 
-**2. An explicit persisted toggle, not `prefers-color-scheme`.**
+**2. An explicit persisted preference — light, dark, or system.**
 
-The choice lives in `localStorage['playapost-theme']`, defaults to light, and is flipped
-by a button in the chrome. This mirrors the prototype's own mechanism, and it is right on
-its own terms: an OS preference set at a desk months earlier is a poor guess about a
-person standing in a dust storm at 3am.
+The choice lives in `localStorage['playapost-theme']` as one of `'light' | 'dark' |
+'system'`, cycled by a button in the chrome. This mirrors the prototype's own toggle
+mechanism, and defaulting to something fixed rather than a bare OS reading is still right
+on its own terms: an OS preference set at a desk months earlier is a poor guess about a
+person standing in a dust storm at 3am — which is why `'system'` is a preference someone
+opts into here, not the fallback.
+
+The default is **dark** (issue #151, amending this decision — superseding issue #43's
+original light default). Nothing stored, or a stored value that is not one of the three,
+resolves to dark outright; it is not `'system'`-resolved, because a first-run default is
+itself a product choice and this one is dark regardless of the device it lands on.
+`'system'` itself resolves live via `matchMedia('(prefers-color-scheme: dark)')`;
+`'light'` and `'dark'` stay pinned regardless of what the OS reports. The provider
+subscribes to that query through `useSyncExternalStore` and derives the resolved theme
+from React state, so a single layout effect is the **only** writer of `data-theme` and
+pinning is enforced by the derivation rather than by unsubscribing. Painting straight
+from the media-query listener is what the earlier shape did, and it desynchronised the
+document from React's committed theme: the following tap resolved to the stale value,
+changed no effect dependency, and repainted nothing.
 
 **First paint is handled by an inline, render-blocking script in `index.html`** that
 stamps `data-theme` before the body renders. `ThemeProvider` owns every change after
@@ -94,8 +109,10 @@ installation. Nine files, ~140 KB of `woff2`, are what the design actually uses.
   transcribed: `--pp-tint-request` exists because `request` is the only member of
   `BULLETIN_TYPE`. Each new type brings its two values with it.
 - `playwright.config.ts` stays pinned to `colorScheme: 'light'`. That setting controls the
-  *OS* preference, which this decision deliberately ignores, so the e2e exercises the
-  default theme only — dark is verified by browser QA, not by the suite.
+  *OS* preference, which only the `'system'` preference reads — and the default is dark
+  (issue #151), so a plain e2e run now exercises dark by default. The pinned light OS
+  value is reached only by cycling the toggle to `'system'`, which suites do explicitly
+  where a screen needs both palettes proven (e.g. `you-screen.spec.ts`).
 
 ## Verification
 

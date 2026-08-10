@@ -106,11 +106,17 @@ test.describe('Bulletin post types (#87)', () => {
 
     const directory = process.env['E2E_TYPES_SCREENSHOT_DIR'];
     if (directory !== undefined && directory !== '') {
-      await page.screenshot({ path: `${directory}/m5-board-post-types.png`, fullPage: true });
-      // Both palettes: the dark `tintsD` ramp is a separate set of tokens, and a
-      // light-only capture would leave the dark half of the change unevidenced.
-      await page.getByTestId('theme-toggle-button').click();
+      // Dark is the default now (issue #151); no toggle needed for the dark capture.
       await page.screenshot({ path: `${directory}/m5-board-post-types-dark.png`, fullPage: true });
+      // Both palettes: the dark `tintsD` ramp is a separate set of tokens, and a
+      // dark-only capture would leave the light half of the change unevidenced. One tap
+      // moves the preference to 'system', which this harness's pinned
+      // `colorScheme: 'light'` resolves to light.
+      await page.getByTestId('theme-toggle-button').click();
+      await page.screenshot({ path: `${directory}/m5-board-post-types.png`, fullPage: true });
+      // Two more taps complete the three-stop cycle (system → light → dark), leaving the
+      // toggle where this test found it.
+      await page.getByTestId('theme-toggle-button').click();
       await page.getByTestId('theme-toggle-button').click();
     }
 
