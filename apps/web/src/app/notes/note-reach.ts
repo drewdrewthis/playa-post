@@ -84,9 +84,10 @@ export function describeNoteReach(person: Person | undefined): NoteReach {
 /**
  * `1st`, `2nd`, `3rd`, `4th` — the comp stops at `3rd` because its graph does; ours does
  * not, since a person's own reach setting can carry the graph out to six hops
- * (`20260810090000_visibility_ceiling_sixth.sql`).
+ * (`20260810090000_visibility_ceiling_sixth.sql`). Exported for the person sheet's
+ * degree line (`person-context.ts`), which spells distance the same way.
  */
-function ordinal(value: number): string {
+export function ordinal(value: number): string {
   const teens = value % 100;
 
   if (teens >= 11 && teens <= 13) {

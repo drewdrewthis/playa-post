@@ -74,7 +74,11 @@ async function openPersonSheetOnWithheldNode(page: Page): Promise<void> {
   await expect(page.getByTestId('person-sheet')).toContainText('not connected');
   // And the context block (#85) against the seeded topology: C is two hops from A,
   // through B — derived client-side from the same graph payload that drew the node.
-  await expect(page.getByTestId('person-sheet-degree')).toHaveText('2nd degree · via User B');
+  // `toContainText`, matching line 74's looser style: this helper runs under every
+  // walk, and pinning the exact separator or seed name here would redden them all
+  // over a copy tweak.
+  await expect(page.getByTestId('person-sheet-degree')).toContainText('2nd degree');
+  await expect(page.getByTestId('person-sheet-degree')).toContainText('via User B');
 }
 
 test.describe('asking for an intro through a shared connection', () => {

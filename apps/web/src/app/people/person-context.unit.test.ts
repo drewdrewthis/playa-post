@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Graph, Person } from '@playa-post/contracts';
 
-import { connectionsAndBulletinsLine, degreeLine, mutualConnectionCount } from './person-context';
+import { connectionsAndBulletinsLine, describePersonContext } from './person-context';
 
 /**
  * The derived context block (issue #85): what the degree line says, and what counts as
@@ -46,11 +46,15 @@ const GRAPH: Graph = {
 
 describe('the degree line', () => {
   it('reads "connected to you" at the first degree', () => {
-    expect(degreeLine(person('moss', 1, 'Moss'), GRAPH)).toBe('1st degree · connected to you');
+    expect(describePersonContext(person('moss', 1, 'Moss'), GRAPH).degreeLine).toBe(
+      '1st degree · connected to you',
+    );
   });
 
   it('names every via at the second degree', () => {
-    expect(degreeLine(person('kiki', 2), GRAPH)).toBe('2nd degree · via Moss + Birdie');
+    expect(describePersonContext(person('kiki', 2), GRAPH).degreeLine).toBe(
+      '2nd degree · via Moss + Birdie',
+    );
   });
 
   /*
@@ -64,44 +68,46 @@ describe('the degree line', () => {
       edges: [edge('moss', 'viewer'), edge('kiki', 'moss')],
     };
 
-    expect(degreeLine(person('kiki', 2), withheldVia)).toBe('2nd degree');
+    expect(describePersonContext(person('kiki', 2), withheldVia).degreeLine).toBe('2nd degree');
   });
 
   // The comp writes a via chain here, but past the second degree every intermediary is
   // `topology_only`: the ordinal stands alone.
   it('is the bare ordinal from the third degree out', () => {
-    expect(degreeLine(person('theo', 3), GRAPH)).toBe('3rd degree');
-    expect(degreeLine(person('far', 6), GRAPH)).toBe('6th degree');
+    expect(describePersonContext(person('theo', 3), GRAPH).degreeLine).toBe('3rd degree');
+    expect(describePersonContext(person('far', 6), GRAPH).degreeLine).toBe('6th degree');
   });
 
   it('spells the teens right', () => {
-    expect(degreeLine(person('far', 11), GRAPH)).toBe('11th degree');
-    expect(degreeLine(person('far', 12), GRAPH)).toBe('12th degree');
-    expect(degreeLine(person('far', 13), GRAPH)).toBe('13th degree');
-    expect(degreeLine(person('far', 21), GRAPH)).toBe('21st degree');
+    expect(describePersonContext(person('far', 11), GRAPH).degreeLine).toBe('11th degree');
+    expect(describePersonContext(person('far', 12), GRAPH).degreeLine).toBe('12th degree');
+    expect(describePersonContext(person('far', 13), GRAPH).degreeLine).toBe('13th degree');
+    expect(describePersonContext(person('far', 21), GRAPH).degreeLine).toBe('21st degree');
   });
 });
 
 describe('the mutual-connection count', () => {
   it('counts the people on an edge with both the viewer and the person', () => {
-    expect(mutualConnectionCount(person('kiki', 2), GRAPH)).toBe(2);
+    expect(describePersonContext(person('kiki', 2), GRAPH).mutualConnectionCount).toBe(2);
   });
 
   it('is zero for a person reached through nobody the viewer touches', () => {
-    expect(mutualConnectionCount(person('theo', 3), GRAPH)).toBe(0);
+    expect(describePersonContext(person('theo', 3), GRAPH).mutualConnectionCount).toBe(0);
   });
 
   it('is zero when the payload holds no viewer row at all', () => {
     const viewerless: Graph = { people: [person('kiki', 2)], edges: [] };
 
-    expect(mutualConnectionCount(person('kiki', 2), viewerless)).toBe(0);
+    expect(describePersonContext(person('kiki', 2), viewerless).mutualConnectionCount).toBe(0);
   });
 });
 
 describe('the counts line', () => {
+  // "on your board", not "active": the board read is one page, and the copy claims only
+  // what was counted.
   it('pluralises both halves independently', () => {
-    expect(connectionsAndBulletinsLine(1, 2)).toBe('1 mutual connection · 2 active bulletins');
-    expect(connectionsAndBulletinsLine(2, 1)).toBe('2 mutual connections · 1 active bulletin');
-    expect(connectionsAndBulletinsLine(0, 0)).toBe('0 mutual connections · 0 active bulletins');
+    expect(connectionsAndBulletinsLine(1, 2)).toBe('1 mutual connection · 2 bulletins on your board');
+    expect(connectionsAndBulletinsLine(2, 1)).toBe('2 mutual connections · 1 bulletin on your board');
+    expect(connectionsAndBulletinsLine(0, 0)).toBe('0 mutual connections · 0 bulletins on your board');
   });
 });

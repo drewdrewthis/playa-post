@@ -11,9 +11,9 @@ import { describeIntroStanding, type IntroStanding } from '../intros/intro-outbo
 import { INTRO_OUTBOX_QUERY_KEY } from '../intros/intro-query-keys';
 import { IntroSheet } from '../intros/intro-sheet';
 import { describeNoteReach, type NoteReach } from '../notes/note-reach';
-import { noteRecipientName } from '../notes/note-recipient';
+import { noteRecipientName, pinNoteHref } from '../notes/note-recipient';
 
-import { connectionsAndBulletinsLine, degreeLine, mutualConnectionCount } from './person-context';
+import { connectionsAndBulletinsLine, describePersonContext } from './person-context';
 import { PersonIdentity, trustLabel } from './person-identity';
 
 import './person-sheet.css';
@@ -86,10 +86,10 @@ export function PersonSheet({
   });
 
   /*
-   * The context block (#85) reads the same two caches its sibling screens already
-   * filled: the graph, for the degree line and mutual count, and the board, for this
-   * person's visible-bulletin count. Same keys as `graph-home.tsx` and `board.tsx`'s
-   * unfiltered read, so opening the sheet is normally a cache hit, not a refetch.
+   * The context block (#85) reads two caches: the graph, for the degree line and
+   * mutual count, and the board, for this person's bulletin count. The keys must match
+   * `graph-home.tsx` and `board.tsx`'s unfiltered read — a cache hit when the viewer
+   * has visited those screens, a fresh read when they have not.
    */
   const graph = useQuery({
     queryKey: GRAPH_LIST_QUERY_KEY,
@@ -165,6 +165,9 @@ export function PersonSheet({
 
   const targetName = noteRecipientName(person);
   const reach = describeNoteReach(person);
+  // One edge traversal feeds both the degree line and the counts line (#85);
+  // `undefined` while the graph read is unsettled, and both lines stay off screen.
+  const context = graph.data === undefined ? undefined : describePersonContext(person, graph.data);
 
   /*
    * `null` until the outbox read settles — and it stays `null` if that read fails, which
@@ -222,9 +225,9 @@ export function PersonSheet({
          * payload this sheet was opened from — absent while that read is unsettled
          * rather than rendered with placeholders (#85).
          */}
-        {graph.data === undefined ? null : (
+        {context === undefined ? null : (
           <p className="person-sheet__degree" data-testid="person-sheet-degree">
-            {degreeLine(person, graph.data)}
+            {context.degreeLine}
           </p>
         )}
 
@@ -297,14 +300,16 @@ export function PersonSheet({
         )}
 
         {/*
-         * The comp's "{n} mutual connections · {n} active bulletins" line. Both counts
-         * wait for their read to settle: a `0` printed while the board is still loading
-         * would be indistinguishable from a real zero.
+         * The counts line. Both counts wait for their read to settle: a `0` printed
+         * while the board is still loading would be indistinguishable from a real zero.
+         * The bulletin half counts this person's rows on the viewer's board *page* —
+         * the copy says "on your board" because that is all it counted
+         * (`person-context.ts`).
          */}
-        {graph.data === undefined || board.data === undefined ? null : (
+        {context === undefined || board.data === undefined ? null : (
           <p className="person-sheet__counts" data-testid="person-sheet-counts">
             {connectionsAndBulletinsLine(
-              mutualConnectionCount(person, graph.data),
+              context.mutualConnectionCount,
               board.data.items.filter((bulletin) => bulletin.author.userId === otherUserId)
                 .length,
             )}
@@ -346,11 +351,17 @@ export function PersonSheet({
  * note at the first degree, ask for an intro at the second, a hint and nothing to
  * press past that.
  *
- * The order is the point. **What already happened outranks what could happen** — a
- * requester with an open ask is told about it rather than invited to make a second one,
- * and a requester who was declined is told that and given *nothing to press*. A re-ask
- * control beside "not passed on" would turn one person's decision into a prompt to
- * overturn it, and the wire deliberately carries no reason to argue with.
+ * Pinning stands outside the intro precedence chain: it depends only on the degree,
+ * so it renders before the outbox is read and regardless of what that read says — a
+ * person you were once introduced to and have since connected with is exactly the
+ * person you can now write to.
+ *
+ * For everything below it the order is the point. **What already happened outranks
+ * what could happen** — a requester with an open ask is told about it rather than
+ * invited to make a second one, and a requester who was declined is told that and
+ * given *nothing to press*. A re-ask control beside "not passed on" would turn one
+ * person's decision into a prompt to overturn it, and the wire deliberately carries no
+ * reason to argue with.
  *
  * ⚠ **Past the second degree there is a hint and no control**, because
  * `app.intro_via_candidates` returns nobody there: an intro travels one hop.
@@ -372,6 +383,20 @@ function PersonActions({
   readonly recipientId: string;
   readonly onRequestIntro: () => void;
 }): JSX.Element | null {
+  // The comp's first-degree primary action; the same route `bulletin-detail-sheet.tsx`
+  // links, so the composer arrives with the recipient already chosen.
+  if (reach.kind === 'can-pin') {
+    return (
+      <Link
+        className="button button--primary"
+        data-testid="person-sheet-pin-note-link"
+        to={pinNoteHref(recipientId)}
+      >
+        {reach.label}
+      </Link>
+    );
+  }
+
   if (standing === null) {
     return null;
   }
@@ -385,20 +410,6 @@ function PersonActions({
       >
         {standing.line}
       </p>
-    );
-  }
-
-  // The comp's first-degree primary action; the same route `bulletin-detail-sheet.tsx`
-  // links, so the composer arrives with the recipient already chosen.
-  if (reach.kind === 'can-pin') {
-    return (
-      <Link
-        className="button button--primary"
-        data-testid="person-sheet-pin-note-link"
-        to={`/board/new?noteTo=${encodeURIComponent(recipientId)}`}
-      >
-        {reach.label}
-      </Link>
     );
   }
 

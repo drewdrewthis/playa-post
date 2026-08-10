@@ -45,6 +45,14 @@ export function noteRecipientName(person: Person | undefined): string | null {
   return (person === undefined ? undefined : nodeLabel(person)) ?? null;
 }
 
+/**
+ * The composer route with the recipient already chosen — the write side of
+ * {@link noteRecipientParam}, so the two spellings of `?noteTo=` cannot drift.
+ */
+export function pinNoteHref(recipientId: string): string {
+  return `/board/new?noteTo=${encodeURIComponent(recipientId)}`;
+}
+
 /** Whose board this is, as a possessive — "Lena’s" or "their". */
 function whose(name: string | null): string {
   return name === null ? 'their' : `${name}’s`;
