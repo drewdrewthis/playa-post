@@ -79,10 +79,6 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
-        // `icon-source.png` is the archival 1024x1024 re-encode kept for regenerating
-        // the icon set later (see apps/web/public); nothing in the app ever fetches it,
-        // so precaching it would spend ~1.5MB of install bandwidth for zero runtime use.
-        globIgnores: ['icon-source.png'],
       },
     }),
   ],
