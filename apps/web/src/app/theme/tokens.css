@@ -8,9 +8,11 @@
  * per render, here it is two custom-property sets the browser resolves.
  *
  * Light is `:root` and dark is `[data-theme='dark']` rather than a
- * `prefers-color-scheme` block, because the theme is an explicit, persisted user choice
- * (`app/theme/theme-preference.ts`) and not an OS reading — the prototype's toggle
- * writes `localStorage['playapost-theme']` and this app does the same. `color-scheme` is
+ * `prefers-color-scheme` block — CSS never reads the OS preference directly. JS resolves
+ * the active preference (`app/theme/theme-preference.ts`: explicit light, explicit dark,
+ * or 'system' tracking `prefers-color-scheme` live) down to one of these two values and
+ * stamps it as `data-theme`. The prototype's toggle writes
+ * `localStorage['playapost-theme']` and this app does the same. `color-scheme` is
  * declared per theme so the caret, scrollbars, and native form controls follow the
  * choice instead of being pinned to one of them.
  *

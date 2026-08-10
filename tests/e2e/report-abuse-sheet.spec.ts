@@ -330,7 +330,7 @@ test.describe('a report or dismissal that did not reach the server says so', () 
        * the sheet twice). A notice whose words came out transparent in dark would pass
        * every other check in this file.
        */
-      const firstTheme = (await pageB.locator('html').getAttribute('data-theme')) ?? 'light';
+      const firstTheme = (await pageB.locator('html').getAttribute('data-theme')) ?? 'dark';
       const otherTheme = firstTheme === 'dark' ? 'light' : 'dark';
       const firstColours = await noticeColours(pageB);
 
@@ -364,6 +364,9 @@ test.describe('a report or dismissal that did not reach the server says so', () 
       expect(firstColours.text).not.toBe(firstColours.inherited);
       expect(otherColours.text).not.toBe(otherColours.inherited);
 
+      // The cycle is three stops now (light → dark → system → light, issue #151), so two
+      // more taps — not one — walk system → light → dark and land back on `firstTheme`.
+      await pageB.getByTestId('theme-toggle-button').click();
       await pageB.getByTestId('theme-toggle-button').click();
       await expect(pageB.locator('html')).toHaveAttribute('data-theme', firstTheme);
 
