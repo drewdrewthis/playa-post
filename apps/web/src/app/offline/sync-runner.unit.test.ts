@@ -66,6 +66,15 @@ function fakeDatabase(seed: readonly PendingMutationRow[] = []) {
             toArray(): Promise<readonly PendingMutationRow[]> {
               return Promise.resolve([...pending.values()].filter((row) => row[index] === value));
             },
+            delete(): Promise<number> {
+              const matches = [...pending.values()].filter((row) => row[index] === value);
+
+              for (const match of matches) {
+                pending.delete(match.mutationId);
+              }
+
+              return Promise.resolve(matches.length);
+            },
           };
         },
       };
@@ -374,6 +383,70 @@ describe('the sync runner', () => {
 
       expect(api.submitted).toEqual([['first'], ['second']]);
       expect(peakInFlight).toBe(1);
+    });
+  });
+
+  describe('pruning synced rows', () => {
+    /*
+     * ⚠ The whole fix for issue #174: nothing ever deleted a `synced` row, so the You
+     * screen's Sync section grew forever. Pruning runs at the top of every pass, not
+     * inside `markMutation`, so a row synced by *this* pass is still on screen when the
+     * pass that synced it resolves — the 'caching what came back' tests above already
+     * prove that by asserting `state === 'synced'` immediately after `drain()`. This
+     * block proves the other half: a row synced by an *earlier* pass is gone by the time
+     * the next one starts. `pending-mutations.unit.test.ts` covers the query in isolation.
+     */
+    it('prunes a row synced on an earlier pass before claiming new work', async () => {
+      const store = fakeDatabase([pendingRow({ mutationId: 'old', state: 'synced' })]);
+      const api = fakeApi(() => Promise.resolve([]));
+
+      await createSyncRunner({ database: store.database, api: api.client }).drain();
+
+      expect(store.row('old')).toBeUndefined();
+      expect(api.submitted).toEqual([]);
+    });
+
+    it('keeps a row visible through the pass that synced it, then prunes it on the next', async () => {
+      const store = fakeDatabase([pendingRow({ mutationId: 'n1' })]);
+      const api = fakeApi((mutations) =>
+        Promise.resolve(mutations.map((mutation) => applied(mutation.mutationId))),
+      );
+      const runner = createSyncRunner({ database: store.database, api: api.client });
+
+      await runner.drain();
+
+      expect(store.row('n1')?.state).toBe('synced');
+
+      await runner.drain();
+
+      expect(store.row('n1')).toBeUndefined();
+    });
+
+    it.each(['failed', 'conflicted'] as const)(
+      'leaves a %s row alone even when nothing is pending to claim',
+      async (state) => {
+        const store = fakeDatabase([pendingRow({ mutationId: 'n1', state })]);
+        const api = fakeApi(() => Promise.resolve([]));
+
+        await createSyncRunner({ database: store.database, api: api.client }).drain();
+
+        expect(store.row('n1')?.state).toBe(state);
+      },
+    );
+
+    /**
+     * A pure local IndexedDB sweep — gating it on connectivity would defeat the storage
+     * bound exactly when a device stays offline longest.
+     */
+    it('prunes synced rows even while offline', async () => {
+      const store = fakeDatabase([pendingRow({ mutationId: 'old', state: 'synced' })]);
+      const api = fakeApi(() => Promise.reject(new Error('the drainer must not call out')));
+
+      vi.stubGlobal('navigator', { onLine: false });
+
+      await createSyncRunner({ database: store.database, api: api.client }).drain();
+
+      expect(store.row('old')).toBeUndefined();
     });
   });
 });

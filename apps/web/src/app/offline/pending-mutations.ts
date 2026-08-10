@@ -75,6 +75,21 @@ export async function requeueMutation(
   });
 }
 
+/**
+ * Delete every row already `synced` — the only place `pendingMutations` loses a row.
+ *
+ * ⚠ Called at the top of a drain pass, never from `markMutation`. Pruning the instant a
+ * row is marked `synced` would mean the SYNCED pill (`sync-queue-view.ts`) is never
+ * actually seen; pruning it one pass later gives it exactly one drain's worth of
+ * visibility — enough to confirm the write landed, never enough to become a history
+ * (issue #174: nothing ever deleted a row, so the Sync section grew forever). `failed`,
+ * `conflicted`, and `inflight` rows are untouched — they wait for a retry, an explicit
+ * clear, or reload recovery (issue #159), never a timer.
+ */
+export async function pruneSyncedMutations(database: OfflineDatabase): Promise<void> {
+  await database.pendingMutations.where('state').equals('synced').delete();
+}
+
 /** The queue, oldest first — the order the server must see them in. */
 export async function claimPendingMutations(
   database: OfflineDatabase,

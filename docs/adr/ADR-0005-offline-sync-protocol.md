@@ -109,7 +109,10 @@ New mutation types must add a row here as part of their DoD (§25).
 Dexie stores: `pendingMutations` (envelope + `state`: `pending | inflight | failed | conflicted | synced`
 + `attempts` + `lastError`), `cachedGraph`, `cachedBoard`, `syncMeta`. Optimistic application is local
 and reversible. Conflicts surface as a per-item UI state, never a silent revert. On sync, blocked and
-erased subjects are purged from all caches before rendering (PDF §5).
+erased subjects are purged from all caches before rendering (PDF §5). A `synced` row is retained for
+exactly one more drain pass — visible as feedback through the pass that set it, then deleted at the
+top of the next — so `pendingMutations` stays bounded without an unbounded history; `failed` and
+`conflicted` rows are never pruned on a timer, only by retry or explicit clear.
 
 ## Alternatives considered
 

@@ -3,7 +3,13 @@ import type { Bulletin, MutationEnvelope, MutationOutcome } from '@playa-post/co
 import { applicationErrorCode, procedureErrorCode, type PlayaPostClient } from '../api/client';
 
 import type { OfflineDatabase, PendingMutationRow } from './database';
-import { cacheBoardCard, claimPendingMutations, markMutation, requeueMutation } from './pending-mutations';
+import {
+  cacheBoardCard,
+  claimPendingMutations,
+  markMutation,
+  pruneSyncedMutations,
+  requeueMutation,
+} from './pending-mutations';
 import { SYNC_REPLAYED_MUTATION_TYPES } from './replay-routes';
 
 /**
@@ -43,6 +49,12 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
   let followUp: Promise<void> | null = null;
 
   async function drainOnce(): Promise<void> {
+    // Sweeps rows this function synced on a previous pass (issue #174). Ahead of the
+    // online check and unconditional: a local IndexedDB delete needs no network, and an
+    // offline-first app must not let the one moment it stays offline longest be the one
+    // moment its storage bound stops working.
+    await pruneSyncedMutations(database);
+
     if (!navigator.onLine) {
       return;
     }
