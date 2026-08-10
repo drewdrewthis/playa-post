@@ -39,6 +39,11 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  bulletins,views,notifications,moderation,sync}/{api,components,hooks,model,routes,
                  state,tests}. Shell/router/providers/auth/api client/offline queue in
                  src/app/{routes,auth,api,offline,shell} (the M2 frontend). Shared UI in src/shared/.
+                 src/app/router.tsx exports its route array (appRoutes) and hangs the whole tree off
+                 one pathless root carrying the app-styled error boundary and the * catch-all —
+                 routes/route-error.tsx and routes/not-found.tsx, sharing routes/route-message-screen.tsx
+                 and routes/route-error-copy.ts, so neither a throw nor an unknown address reaches
+                 React Router's developer screen (issue #125).
                  A screen whose pieces outgrow one route file gets a sibling feature directory —
                  src/app/{people,notifications,bulletins,graph,moderation,notes,profile}/ — holding
                  its components, its own <feature>.css, and any pure logic worth unit-testing on its
@@ -70,7 +75,10 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  ⚠ The unit project runs in environment: 'node' and there is no component-test
                  harness, so logic left inside a component is logic no test can reach — extract it
                  to a sibling module, as compose-bulletin-draft.ts, report-abuse-draft.ts and
-                 auth/sign-in-failure.ts all do.
+                 auth/sign-in-failure.ts all do. The one exception is router.unit.test.tsx, which
+                 opts into jsdom with a per-file // @vitest-environment jsdom pragma because the
+                 thing under test is the route tree's own wiring; it is not a licence to leave
+                 decisions inside components.
                  src/app/theme/ is the design system: tokens.css (two token sets, light on :root and
                  dark on [data-theme='dark']), screens.css (the column and every shared screen
                  element), typefaces.ts (the self-hosted font imports, which double as the service

@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { createBrowserRouter, Outlet, RouterProvider } from 'react-router';
+import { createBrowserRouter, Outlet, type RouteObject, RouterProvider } from 'react-router';
 
 import { RequireSession } from './auth/require-session';
 import { OfflineProvider } from './offline/offline-provider';
@@ -63,15 +63,20 @@ function OnboardingLayout(): JSX.Element {
  * bar has four tabs and a tab that goes nowhere is worse than one that says "soon".
  *
  * The whole tree sits under one pathless root route so every child shares its
- * `errorElement`: before that existed, a render, loader, or action throw anywhere
- * below had nowhere to land and surfaced React Router's own developer error screen in
- * production (issue #125). The `*` catch-all lives on the same root, deliberately
+ * `errorElement`: before that existed, a throw anywhere below had nowhere to land and
+ * surfaced React Router's own developer error screen in production (issue #125) — and
+ * it will cover the first loader or action this tree grows, which today it has none of.
+ * The `*` catch-all lives on the same root, deliberately
  * outside both `ProtectedLayout` and `OnboardingLayout` — an unknown address has to
  * answer for a signed-out visitor too, not just someone already past `RequireSession`.
+ * That root needs no `element`: a route without one renders its `<Outlet />` anyway.
+ *
+ * Exported as data so `router.unit.test.tsx` can mount *this* tree under a memory
+ * router. A test that rebuilt an equivalent shape would stay green after someone
+ * deleted the `errorElement` from the shape that actually ships.
  */
-const router = createBrowserRouter([
+export const appRoutes: RouteObject[] = [
   {
-    element: <Outlet />,
     errorElement: <RouteErrorScreen />,
     children: [
       { path: '/signin', element: <SignInRoute /> },
@@ -92,10 +97,19 @@ const router = createBrowserRouter([
           { path: '/you', element: <YourProfileRoute /> },
         ],
       },
+      // ⚠ This catch-all and the service worker together mean **every** same-origin
+      // navigation reaches the SPA: vite-plugin-pwa's workbox default is
+      // `navigateFallback: 'index.html'`, so an unknown path 200s into this screen
+      // rather than 404ing. A magic-link or OAuth callback served from this origin, or
+      // a `/.well-known/…` path, would therefore render "Nothing pinned here" instead
+      // of failing loudly — whichever lands first must be added to
+      // `navigateFallbackAllowlist` in `apps/web/vite.config.ts` in the same change.
       { path: '*', element: <NotFoundRoute /> },
     ],
   },
-]);
+];
+
+const router = createBrowserRouter(appRoutes);
 
 /** Mounts the route tree. Everything above it is providers; everything below is screens. */
 export function AppRouter(): JSX.Element {

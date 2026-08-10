@@ -1,7 +1,8 @@
-import type { JSX } from 'react';
-import { Link } from 'react-router';
+import { useEffect, type JSX } from 'react';
+import { Link, useLocation } from 'react-router';
 
 import { NOT_FOUND_BODY, NOT_FOUND_TITLE } from './route-error-copy';
+import { RouteMessageScreen } from './route-message-screen';
 
 /**
  * The `*` catch-all (issue #125): before this route existed, a URL nothing else
@@ -14,17 +15,23 @@ import { NOT_FOUND_BODY, NOT_FOUND_TITLE } from './route-error-copy';
  * sign-in before it will say so.
  */
 export function NotFoundRoute(): JSX.Element {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    // A catch-all is an excellent place to lose a bug: a `<Link to="/boad">` typo now
+    // renders a polished screen instead of a stack trace, and nobody hears about it.
+    // Development says so out loud; `import.meta.env.DEV` is the literal `false` in
+    // `vite build`, so the branch is not in the shipped bundle.
+    if (import.meta.env.DEV) {
+      console.warn(`No route matched ${pathname} — rendering the not-found screen.`);
+    }
+  }, [pathname]);
+
   return (
-    <div className="app-frame">
-      <main className="app-column" data-testid="not-found">
-        <div className="screen screen--fill screen--centred">
-          <h1 className="screen__title">{NOT_FOUND_TITLE}</h1>
-          <p className="screen__lede">{NOT_FOUND_BODY}</p>
-          <Link className="button button--primary" data-testid="not-found-home" to="/">
-            Back to the graph
-          </Link>
-        </div>
-      </main>
-    </div>
+    <RouteMessageScreen testId="not-found" title={NOT_FOUND_TITLE} body={NOT_FOUND_BODY}>
+      <Link className="button button--primary" data-testid="not-found-home" to="/">
+        Back to the graph
+      </Link>
+    </RouteMessageScreen>
   );
 }

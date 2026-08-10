@@ -18,13 +18,18 @@ test.describe('an unknown address', () => {
     await page.goto('/no-such-place');
 
     await expect(page.getByTestId('not-found')).toBeVisible();
+    // An address nothing matches is the product's 404, not a fault: the crash screen
+    // must not be what answers it.
+    await expect(page.getByTestId('route-error')).toHaveCount(0);
     await expect(page.locator('body')).not.toContainText('Hey developer');
     await expect(page.locator('body')).not.toContainText('Unexpected Application Error');
 
-    // The way back is a real navigation, not decoration. An anonymous visitor who
-    // follows it lands where `/` sends them (welcome or sign-in), not on a blank frame.
+    // The way back is a real navigation, not decoration, and it has to land on a real
+    // screen. This context is anonymous and has never seen the welcome flow, so `/`
+    // sends it through `RequireSession` to `/welcome` — naming that destination is what
+    // makes the assertion able to fail; "some other URL" would pass on a blank frame.
     await page.getByTestId('not-found-home').click();
     await expect(page).not.toHaveURL(/no-such-place/);
-    await expect(page.getByTestId('not-found')).not.toBeVisible();
+    await expect(page.getByTestId('welcome')).toBeVisible();
   });
 });
