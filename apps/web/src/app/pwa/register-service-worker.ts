@@ -29,8 +29,24 @@ import { registerSW } from 'virtual:pwa-register';
 registerSW({
   immediate: true,
   onRegisteredSW(_swScriptUrl, registration) {
+    // No registration handed back — nothing to poll, so don't arm a forever-spinning
+    // no-op interval.
+    if (!registration) {
+      return;
+    }
+
     // An idle tab never navigates, so the browser never checks for a new worker on its
     // own — this is the only thing that does, for as long as the tab stays open.
-    setInterval(() => void registration?.update(), 60 * 60 * 1000);
+    setInterval(() => {
+      // Offline: `update()` would reject on the fetch it can't make, and there is
+      // nothing new to find until connectivity returns anyway.
+      if (!navigator.onLine) {
+        return;
+      }
+
+      registration.update().catch(() => {
+        // A transient network failure — the next tick tries again.
+      });
+    }, 60 * 60 * 1000);
   },
 });

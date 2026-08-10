@@ -33,10 +33,14 @@ function registeredOnRegisteredSW(): NonNullable<RegisterSWOptions['onRegistered
 
 beforeEach(() => {
   vi.useFakeTimers();
+  // The `unit` project runs in plain Node, where `navigator` has no `.onLine` — see
+  // `../offline/sync-runner.unit.test.ts`. Default online; the offline test overrides it.
+  vi.stubGlobal('navigator', { onLine: true });
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
   vi.resetModules();
   registerSW.mockClear();
 });
@@ -55,7 +59,7 @@ describe('register-service-worker', () => {
   it('polls a registration for updates once an hour, for as long as the tab stays open', async () => {
     await import('./register-service-worker');
 
-    const update = vi.fn();
+    const update = vi.fn().mockResolvedValue(undefined);
     const registration = { update } as unknown as ServiceWorkerRegistration;
 
     registeredOnRegisteredSW()('/sw.js', registration);
@@ -69,20 +73,43 @@ describe('register-service-worker', () => {
     expect(update).toHaveBeenCalledTimes(2);
   });
 
-  it('tolerates a registration the browser did not hand back', async () => {
+  it('does not arm the poll when the browser hands back no registration', async () => {
     await import('./register-service-worker');
+
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
 
     expect(() => registeredOnRegisteredSW()('/sw.js', undefined)).not.toThrow();
 
-    // `advanceTimersByTimeAsync` resolves to its own chainable `vi`, not `undefined` — assert
-    // only that flushing the interval settled rather than rejected, which is what
-    // `registration?.update()` guards against when `registration` is undefined.
-    let settled = false;
+    expect(setIntervalSpy).not.toHaveBeenCalled();
+  });
 
-    await vi.advanceTimersByTimeAsync(HOUR_MS).then(() => {
-      settled = true;
-    });
+  it('skips a tick while offline, never calling update()', async () => {
+    await import('./register-service-worker');
 
-    expect(settled).toBe(true);
+    const update = vi.fn().mockResolvedValue(undefined);
+    const registration = { update } as unknown as ServiceWorkerRegistration;
+
+    registeredOnRegisteredSW()('/sw.js', registration);
+
+    vi.stubGlobal('navigator', { onLine: false });
+
+    await vi.advanceTimersByTimeAsync(HOUR_MS);
+
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('swallows a rejecting update(), so a transient failure never becomes an unhandled rejection', async () => {
+    await import('./register-service-worker');
+
+    const update = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    const registration = { update } as unknown as ServiceWorkerRegistration;
+
+    registeredOnRegisteredSW()('/sw.js', registration);
+
+    // `advanceTimersByTimeAsync` resolves to its own chainable `vi`, not `undefined` —
+    // asserting `resolves` is what proves the rejection never escaped the tick.
+    await expect(vi.advanceTimersByTimeAsync(HOUR_MS)).resolves.toBeDefined();
+
+    expect(update).toHaveBeenCalledTimes(1);
   });
 });
