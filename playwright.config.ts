@@ -20,6 +20,9 @@ import { API_PORT, WEB_PORT } from './tests/e2e/support/e2e-ports';
  */
 export default defineConfig({
   testDir: './tests/e2e',
+  // Hand-run evidence-capture scratch (gitignored) lives under the testDir; keep the
+  // suite from sweeping it in.
+  testIgnore: '**/__scratch/**',
   // The eleven-step test legitimately spends ~60-75s inside step 9 waiting out the
   // 60-second notification grouping window (M2-AC7 — a domain constant the harness
   // must not shorten), so Playwright's 30s default would fail a correct run. 180s

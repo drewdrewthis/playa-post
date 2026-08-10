@@ -34,3 +34,6 @@ supabase/.temp/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Hand-run evidence-capture specs, never part of the suite
+tests/e2e/__scratch/

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState, type JSX } from 'react';
+import { Link } from 'react-router';
 
 import type { Person } from '@playa-post/contracts';
 
@@ -10,8 +11,9 @@ import { describeIntroStanding, type IntroStanding } from '../intros/intro-outbo
 import { INTRO_OUTBOX_QUERY_KEY } from '../intros/intro-query-keys';
 import { IntroSheet } from '../intros/intro-sheet';
 import { describeNoteReach, type NoteReach } from '../notes/note-reach';
-import { noteRecipientName } from '../notes/note-recipient';
+import { noteRecipientName, pinNoteHref } from '../notes/note-recipient';
 
+import { connectionsAndBulletinsLine, describePersonContext } from './person-context';
 import { PersonIdentity, trustLabel } from './person-identity';
 
 import './person-sheet.css';
@@ -36,6 +38,11 @@ const TRUST_MAX = 100;
  * minimum, but the label says *Not set* until the viewer saves — otherwise a user who
  * never expressed an opinion would be shown, and would eventually save, a zero they
  * never chose.
+ *
+ * **The context block** (#85) — the degree line and the mutuals/bulletins counts — is
+ * derived in `person-context.ts` from reads the sibling screens already cached; the
+ * comp's role line and Block button are deliberately absent, because no profile field
+ * and no blocking backend exist to back them.
  *
  * **The intro affordance lives here too** (#89): at the second degree this is the screen
  * somebody is looking at when they want to reach a person they cannot write to. What it
@@ -76,6 +83,21 @@ export function PersonSheet({
         throw error;
       }
     },
+  });
+
+  /*
+   * The context block (#85) reads two caches: the graph, for the degree line and
+   * mutual count, and the board, for this person's bulletin count. The keys must match
+   * `graph-home.tsx` and `board.tsx`'s unfiltered read — a cache hit when the viewer
+   * has visited those screens, a fresh read when they have not.
+   */
+  const graph = useQuery({
+    queryKey: GRAPH_LIST_QUERY_KEY,
+    queryFn: () => api.query('graph.list', undefined),
+  });
+  const board = useQuery({
+    queryKey: ['bulletins', 'board', null],
+    queryFn: () => api.query('bulletins.board', {}),
   });
 
   /*
@@ -143,6 +165,9 @@ export function PersonSheet({
 
   const targetName = noteRecipientName(person);
   const reach = describeNoteReach(person);
+  // One edge traversal feeds both the degree line and the counts line (#85);
+  // `undefined` while the graph read is unsettled, and both lines stay off screen.
+  const context = graph.data === undefined ? undefined : describePersonContext(person, graph.data);
 
   /*
    * `null` until the outbox read settles — and it stays `null` if that read fails, which
@@ -196,6 +221,17 @@ export function PersonSheet({
         </div>
 
         {/*
+         * The comp's degree label ("2nd degree · via {name}"), derived from the graph
+         * payload this sheet was opened from — absent while that read is unsettled
+         * rather than rendered with placeholders (#85).
+         */}
+        {context === undefined ? null : (
+          <p className="person-sheet__degree" data-testid="person-sheet-degree">
+            {context.degreeLine}
+          </p>
+        )}
+
+        {/*
          * Four states, told apart on purpose: a query still in flight or failed must
          * not read as "not connected" — that message is the queryFn's translation of
          * the server's `NOT_CONNECTED` refusal (B6) and nothing else.
@@ -213,9 +249,9 @@ export function PersonSheet({
           </p>
         ) : connection.data === null ? (
           <p className="person-sheet__notice" data-testid="person-sheet-not-connected">
-            {/* The comp's "connect first to set trust": a tappable node past the first
-                degree is somebody the viewer can see, not somebody they hold trust in. */}
-            You are not connected to this person, so there is nothing to set.
+            {/* The comp's copy, kept: a tappable node past the first degree is somebody
+                the viewer can see, not somebody they hold trust in. */}
+            You are not connected &mdash; connect first to set trust.
           </p>
         ) : (
           <>
@@ -263,10 +299,28 @@ export function PersonSheet({
           </p>
         )}
 
-        <IntroAffordance
+        {/*
+         * The counts line. Both counts wait for their read to settle: a `0` printed
+         * while the board is still loading would be indistinguishable from a real zero.
+         * The bulletin half counts this person's rows on the viewer's board *page* —
+         * the copy says "on your board" because that is all it counted
+         * (`person-context.ts`).
+         */}
+        {context === undefined || board.data === undefined ? null : (
+          <p className="person-sheet__counts" data-testid="person-sheet-counts">
+            {connectionsAndBulletinsLine(
+              context.mutualConnectionCount,
+              board.data.items.filter((bulletin) => bulletin.author.userId === otherUserId)
+                .length,
+            )}
+          </p>
+        )}
+
+        <PersonActions
           standing={standing}
           reach={reach}
           degree={person.degree}
+          recipientId={otherUserId}
           onRequestIntro={() => {
             setAskingIntro(true);
           }}
@@ -293,13 +347,21 @@ export function PersonSheet({
 }
 
 /**
- * What this sheet says about an introduction: an offer, a state, a hint, or nothing.
+ * The sheet's degree-dependent primary action, or the state that replaces it: pin a
+ * note at the first degree, ask for an intro at the second, a hint and nothing to
+ * press past that.
  *
- * The order is the point. **What already happened outranks what could happen** — a
- * requester with an open ask is told about it rather than invited to make a second one,
- * and a requester who was declined is told that and given *nothing to press*. A re-ask
- * control beside "not passed on" would turn one person's decision into a prompt to
- * overturn it, and the wire deliberately carries no reason to argue with.
+ * Pinning stands outside the intro precedence chain: it depends only on the degree,
+ * so it renders before the outbox is read and regardless of what that read says — a
+ * person you were once introduced to and have since connected with is exactly the
+ * person you can now write to.
+ *
+ * For everything below it the order is the point. **What already happened outranks
+ * what could happen** — a requester with an open ask is told about it rather than
+ * invited to make a second one, and a requester who was declined is told that and
+ * given *nothing to press*. A re-ask control beside "not passed on" would turn one
+ * person's decision into a prompt to overturn it, and the wire deliberately carries no
+ * reason to argue with.
  *
  * ⚠ **Past the second degree there is a hint and no control**, because
  * `app.intro_via_candidates` returns nobody there: an intro travels one hop.
@@ -308,17 +370,33 @@ export function PersonSheet({
  * @param degree - this person's distance, which decides whether an intro is possible at
  *   all. Read from the graph payload the sheet was opened with, never from the outbox.
  */
-function IntroAffordance({
+function PersonActions({
   standing,
   reach,
   degree,
+  recipientId,
   onRequestIntro,
 }: {
   readonly standing: IntroStanding | null;
   readonly reach: NoteReach;
   readonly degree: number;
+  readonly recipientId: string;
   readonly onRequestIntro: () => void;
 }): JSX.Element | null {
+  // The comp's first-degree primary action; the same route `bulletin-detail-sheet.tsx`
+  // links, so the composer arrives with the recipient already chosen.
+  if (reach.kind === 'can-pin') {
+    return (
+      <Link
+        className="button button--primary"
+        data-testid="person-sheet-pin-note-link"
+        to={pinNoteHref(recipientId)}
+      >
+        {reach.label}
+      </Link>
+    );
+  }
+
   if (standing === null) {
     return null;
   }

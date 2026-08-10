@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
+import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { IntroOutboxRow, IntroPerson, Person } from '@playa-post/contracts';
+import type { Graph, IntroOutboxRow, IntroPerson, Person, VisibleBulletin } from '@playa-post/contracts';
 
 import {
   createFakeApi,
@@ -34,6 +35,49 @@ function person(degree: number): Person {
   };
 }
 
+/**
+ * viewer — Lena — Kiki: the sheet's subject at the second degree, one via. The graph
+ * and board reads feed the context block (#85); every mount gets the same fixtures so
+ * each test asserts one thing against a known shape.
+ */
+const VIEWER_ON_GRAPH: Person = {
+  userId: 'viewer-id',
+  degree: 0,
+  disclosure: 'full',
+  displayName: 'Rae',
+  trust: null,
+};
+
+const LENA_ON_GRAPH: Person = {
+  userId: 'lena-id',
+  degree: 1,
+  disclosure: 'full',
+  displayName: 'Lena',
+  trust: null,
+};
+
+const GRAPH: Graph = {
+  people: [VIEWER_ON_GRAPH, LENA_ON_GRAPH, person(2)],
+  edges: [
+    { personAId: 'lena-id', personBId: 'viewer-id' },
+    { personAId: 'kiki-id', personBId: 'lena-id' },
+  ],
+};
+
+function kikiBulletin(): VisibleBulletin {
+  return {
+    id: 'bulletin-1',
+    type: 'offer',
+    title: 'Sourdough at noon',
+    body: 'Come by the kitchen.',
+    createdAt: '2026-08-10T09:00:00.000Z',
+    loc: null,
+    expiresAt: null,
+    version: 1,
+    author: { userId: 'kiki-id', disclosure: 'full', displayName: 'Kiki' },
+  };
+}
+
 function outboxRow(status: IntroOutboxRow['status']): IntroOutboxRow {
   return {
     id: `request-${status}`,
@@ -60,20 +104,27 @@ async function openSheet(
   degree: number,
   outbox: readonly IntroOutboxRow[],
   connection: (input: unknown) => unknown = () => null,
+  overrides: Record<string, (input: unknown) => unknown> = {},
 ): Promise<void> {
   const api = createFakeApi({
     'connections.connection.get': connection,
     'intros.listOutbox': () => outbox,
     'intros.viaCandidates': () => [LENA],
+    'graph.list': () => GRAPH,
+    'bulletins.board': () => ({ items: [kikiBulletin()] }),
+    ...overrides,
   });
 
   tree = await mountWithApi(
-    <PersonSheet
-      person={person(degree)}
-      onClose={() => {
-        /* the sheet's own exits are proven in `intro-sheet.unit.test.tsx` */
-      }}
-    />,
+    // A router, because the first-degree primary action is a `Link`.
+    <MemoryRouter>
+      <PersonSheet
+        person={person(degree)}
+        onClose={() => {
+          /* the sheet's own exits are proven in `intro-sheet.unit.test.tsx` */
+        }}
+      />
+    </MemoryRouter>,
     api,
   );
 }
@@ -85,6 +136,84 @@ function container(): HTMLElement {
 
   return tree.container;
 }
+
+describe('the context block (#85)', () => {
+  it('reads the degree and the via off the graph payload', async () => {
+    await openSheet(2, []);
+
+    expect(
+      requireElement(container(), '[data-testid="person-sheet-degree"]').textContent,
+    ).toBe('2nd degree · via Lena');
+  });
+
+  it('counts mutuals from the edges and bulletins from the board read', async () => {
+    await openSheet(2, []);
+
+    expect(
+      requireElement(container(), '[data-testid="person-sheet-counts"]').textContent,
+    ).toBe('1 mutual connection · 1 bulletin on your board');
+  });
+
+  /*
+   * ⚠ The sheet mount, not just `describePersonContext`: the wiring must drop the via
+   * clause when the payload withheld the name, with no id-derived fallback.
+   */
+  it('drops the via clause when the graph withheld the via name', async () => {
+    const withheldVia: Graph = {
+      people: [
+        VIEWER_ON_GRAPH,
+        { userId: 'lena-id', degree: 1, disclosure: 'topology_only', trust: null },
+        person(2),
+      ],
+      edges: GRAPH.edges,
+    };
+
+    await openSheet(2, [], () => null, { 'graph.list': () => withheldVia });
+
+    expect(
+      requireElement(container(), '[data-testid="person-sheet-degree"]').textContent,
+    ).toBe('2nd degree');
+  });
+
+  /*
+   * ⚠ Failed and pending both render as absence, deliberately: a `0` (or a stale line)
+   * printed while the read is unsettled would be indistinguishable from a real answer.
+   * The counts line has no error arm — a board failure keeps it off screen for good.
+   */
+  it('keeps the counts line off screen when the board read fails, and the degree line up', async () => {
+    await openSheet(2, [], () => null, {
+      'bulletins.board': () => {
+        throw new Error('the board went away');
+      },
+    });
+
+    expect(container().querySelector('[data-testid="person-sheet-counts"]')).toBeNull();
+    expect(
+      requireElement(container(), '[data-testid="person-sheet-degree"]').textContent,
+    ).toBe('2nd degree · via Lena');
+  });
+
+  it('keeps the counts line off screen while the board read is still pending', async () => {
+    await openSheet(2, [], () => null, {
+      'bulletins.board': () => new Promise(() => {
+        /* never settles */
+      }),
+    });
+
+    expect(container().querySelector('[data-testid="person-sheet-counts"]')).toBeNull();
+  });
+
+  it('renders neither line when the graph read fails', async () => {
+    await openSheet(2, [], () => null, {
+      'graph.list': () => {
+        throw new Error('the graph went away');
+      },
+    });
+
+    expect(container().querySelector('[data-testid="person-sheet-degree"]')).toBeNull();
+    expect(container().querySelector('[data-testid="person-sheet-counts"]')).toBeNull();
+  });
+});
 
 describe('the person sheet, on somebody two hops away', () => {
   it('offers the introduction as its primary action', async () => {
@@ -201,7 +330,7 @@ describe('the connection read behind the trust half', () => {
 
     expect(
       requireElement(container(), '[data-testid="person-sheet-not-connected"]').textContent,
-    ).toContain('not connected');
+    ).toContain('connect first to set trust');
     expect(container().textContent).not.toContain('That did not load');
     expect(
       container().querySelector('[data-testid="person-sheet-request-intro-button"]'),
@@ -230,5 +359,44 @@ describe('the person sheet, on a direct connection', () => {
     ).toBeNull();
     expect(container().querySelector('[data-testid="person-sheet-intro-hint"]')).toBeNull();
     expect(container().querySelector('[data-testid="person-sheet-intro-standing"]')).toBeNull();
+  });
+
+  // The comp's first-degree primary action (#85): pinning, on the same composer route
+  // `bulletin-detail-sheet.tsx` links, with the recipient already chosen.
+  it('offers pinning a note as its primary action', async () => {
+    await openSheet(1, [], () => ({ status: 'accepted', trust: 20 }));
+
+    const link = requireElement(container(), '[data-testid="person-sheet-pin-note-link"]');
+
+    expect(link.getAttribute('href')).toBe('/board/new?noteTo=kiki-id');
+    expect(link.textContent).toContain('Kiki');
+  });
+
+  /*
+   * ⚠ Pinning stands outside the intro precedence chain. Somebody introduced and since
+   * connected is exactly the person the viewer can now write to — old intro standing
+   * must not displace the button, and an unreadable outbox must not hide it.
+   */
+  it('keeps the pin button up over stale intro standing', async () => {
+    await openSheet(1, [outboxRow('declined')], () => ({ status: 'accepted', trust: 20 }));
+
+    expect(
+      container().querySelector('[data-testid="person-sheet-pin-note-link"]'),
+    ).not.toBeNull();
+    expect(
+      container().querySelector('[data-testid="person-sheet-intro-standing"]'),
+    ).toBeNull();
+  });
+
+  it('keeps the pin button up when the outbox read fails', async () => {
+    await openSheet(1, [], () => ({ status: 'accepted', trust: 20 }), {
+      'intros.listOutbox': () => {
+        throw new Error('the outbox went away');
+      },
+    });
+
+    expect(
+      container().querySelector('[data-testid="person-sheet-pin-note-link"]'),
+    ).not.toBeNull();
   });
 });

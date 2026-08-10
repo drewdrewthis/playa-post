@@ -9,7 +9,7 @@ import { describeIntroStanding, type IntroStanding } from '../intros/intro-outbo
 import { INTRO_OUTBOX_QUERY_KEY } from '../intros/intro-query-keys';
 import { IntroSheet } from '../intros/intro-sheet';
 import { describeNoteReach, type NoteReach } from '../notes/note-reach';
-import { noteRecipientName } from '../notes/note-recipient';
+import { noteRecipientName, pinNoteHref } from '../notes/note-recipient';
 import { PersonIdentity } from '../people/person-identity';
 
 import type { BoardCardView } from './board-card-view';
@@ -396,7 +396,7 @@ function PinNoteFooter({
       <Link
         className="detail-sheet__pin-note"
         data-testid="bulletin-detail-pin-note-link"
-        to={`/board/new?noteTo=${encodeURIComponent(recipientId)}`}
+        to={pinNoteHref(recipientId)}
       >
         {reach.label}
       </Link>
@@ -406,7 +406,7 @@ function PinNoteFooter({
   if (reach.kind === 'can-request-intro') {
     /*
      * What already happened outranks what could happen — `person-sheet.tsx`'s
-     * `IntroAffordance` order. An unsettled outbox renders the hint and no control
+     * `PersonActions` order. An unsettled outbox renders the hint and no control
      * (offering "ask" before the record is read risks a button whose only outcome is
      * `INTRO_UNAVAILABLE`); an open or passed-on ask renders its standing line and
      * nothing to press.
