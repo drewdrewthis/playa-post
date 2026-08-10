@@ -27,7 +27,7 @@ later milestone must. ADR-0009 is the only one so far.
 | [0012](ADR-0012-connection-trust-and-person-projection.md) | Connection trust storage, the §6a person projection's export, and lane L2's amendments (amends 0002, 0004, 0006) | proposed — **trust-row model pending owner confirmation** |
 | [0013](ADR-0013-bulletin-visibility-and-the-board-grammar-split.md) | Bulletin visibility, `BULLETIN_GONE`, and the board grammar's parse/compile split (amends 0002, 0005, 0007) | proposed |
 | [0014](ADR-0014-contracts-api-spec-and-router-parity.md) | `packages/contracts` declares the client API; a compile-time parity gate keeps it honest | proposed |
-| [0015](ADR-0015-design-tokens-theming-and-self-hosted-type.md) | Two token sets, an explicit theme toggle, and self-hosted type | proposed |
+| [0015](ADR-0015-design-tokens-theming-and-self-hosted-type.md) | Two token sets, an explicit theme toggle, and self-hosted type | proposed (amended — three-way preference incl. system mode, dark default per issue #151, superseding #43's light default) |
 | [0016](ADR-0016-saved-views-and-the-notify-me-designation.md) | Saved views, and the per-view bell as a designation rather than a second query (implements 0007's `app.saved_views`, executes product decision D1) | proposed |
 | [0017](ADR-0017-intro-requests-and-the-consent-inversion.md) | Intro requests: their own aggregate, eligibility composed on both sides, and the consent inversion (amends 0002, 0004) | proposed |
 

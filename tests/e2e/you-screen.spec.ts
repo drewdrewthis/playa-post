@@ -4,12 +4,14 @@ import { expect, test, type Page } from '@playwright/test';
  * The You screen (issue #49), rendered in **both themes**.
  *
  * ⚠ **This suite exists because "it matches the comp" is otherwise an unfalsifiable
- * claim.** `playwright.config.ts` pins `colorScheme: 'light'` for the vertical slice —
- * L5's stated scope — so nothing in this repo has ever rendered a screen dark. Every
- * colour on this screen comes from a `--pp-*` token and both token sets are declared, but
- * a token that is declared and a token that is *used* are different facts, and only one of
- * them is visible in a stylesheet. This walks the screen in light, toggles, and walks it
- * again.
+ * claim.** `playwright.config.ts` pins `colorScheme: 'light'` for OS-level emulation —
+ * L5's stated scope — but the app's own default is unconditionally dark regardless of
+ * the OS (issue #151, superseding #43's light default), so a plain page load renders
+ * dark on its own. Every colour on this screen comes from a `--pp-*` token and both
+ * token sets are declared, but a token that is declared and a token that is *used* are
+ * different facts, and only one of them is visible in a stylesheet. This walks the
+ * screen dark first (the default), steps the toggle to 'system' — which the pinned OS
+ * colour scheme resolves to light — and walks it again.
  *
  * It writes `docs/engineering/screenshots/m2-you-{light,dark}.png` when
  * `E2E_YOU_SCREENSHOT_DIR` is set — the same opt-in shape
@@ -76,18 +78,8 @@ test.describe('the You screen renders in both themes', () => {
     await expect(page.getByTestId('invite-qr')).toBeVisible();
     await expect(page.getByTestId('invite-share-button')).toBeVisible();
 
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-    await capture(page, 'light');
-
-    await page.getByTestId('theme-toggle-button').click();
+    // Dark is the default now (issue #151) — no toggle needed to reach it.
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-
-    // Everything still on screen after the toggle. A token that resolved to nothing in
-    // dark would leave an element painted on its own background — which this cannot see,
-    // and the screenshot can, which is why both exist.
-    await expect(page.getByTestId('profile-counts')).toBeVisible();
-    await expect(page.getByTestId('invite-qr')).toBeVisible();
-    await expect(page.getByTestId('invite-share-button')).toBeVisible();
 
     // The one element on this screen that must *not* follow the theme: a scanner looks for
     // dark modules on a light field, so a dark-palette QR tile photographs fine and does
@@ -96,6 +88,20 @@ test.describe('the You screen renders in both themes', () => {
     await expect(page.getByTestId('invite-qr')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
 
     await capture(page, 'dark');
+
+    // One tap moves the preference to 'system', which the harness's pinned
+    // `colorScheme: 'light'` resolves to light — the second palette this test needs.
+    await page.getByTestId('theme-toggle-button').click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+
+    // Everything still on screen after the toggle. A token that resolved to nothing in
+    // light would leave an element painted on its own background — which this cannot see,
+    // and the screenshot can, which is why both exist.
+    await expect(page.getByTestId('profile-counts')).toBeVisible();
+    await expect(page.getByTestId('invite-qr')).toBeVisible();
+    await expect(page.getByTestId('invite-share-button')).toBeVisible();
+
+    await capture(page, 'light');
   });
 
   /**

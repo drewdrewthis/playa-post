@@ -1,29 +1,39 @@
 import type { JSX } from 'react';
 
+import { nextThemePreference, type ThemePreference } from './theme-preference';
 import { useTheme } from './theme-provider';
 
+/** The glyph for each preference — light/dark keep the comp's sun/moon; system gets a
+ *  half-shaded circle, the common "follows the OS" mark. Glyphs only, no new colour. */
+const GLYPH: Readonly<Record<ThemePreference, string>> = {
+  light: '☀',
+  dark: '☾',
+  system: '◐',
+};
+
 /**
- * The moon/sun button in the app chrome.
+ * The theme button in the app chrome.
  *
- * The glyph shows the theme you would *switch to*, which is the comp's behaviour
- * (`themeIcon: dark ? '☀' : '☾'`) and the convention every OS toggle uses. It is
- * `aria-hidden` because a screen reader announcing "sun" says nothing useful — the
- * accessible name on the button says what pressing it does instead.
+ * Cycles light → dark → system → light (issue #151, which also flips the *default*
+ * preference to dark — see `theme-preference.ts`). The glyph shows the current
+ * preference rather than the old two-state "shows what you'd switch to," because with
+ * three stops that convention stops being enough information on its own. `aria-pressed`
+ * has no true/false shape for a three-state control, so the accessible name carries the
+ * whole state instead — current preference and the stop one tap away.
  */
 export function ThemeToggle(): JSX.Element {
-  const { theme, toggleTheme } = useTheme();
-  const goingDark = theme === 'light';
+  const { preference, toggleTheme } = useTheme();
+  const next = nextThemePreference(preference);
 
   return (
     <button
       className="icon-button"
       data-testid="theme-toggle-button"
       type="button"
-      aria-pressed={theme === 'dark'}
-      aria-label={goingDark ? 'Switch to dark theme' : 'Switch to light theme'}
+      aria-label={`Theme: ${preference} — tap for ${next}`}
       onClick={toggleTheme}
     >
-      <span aria-hidden="true">{goingDark ? '☾' : '☀'}</span>
+      <span aria-hidden="true">{GLYPH[preference]}</span>
     </button>
   );
 }
