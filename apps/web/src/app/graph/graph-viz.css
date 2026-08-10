@@ -228,7 +228,12 @@
  * shown. There is no glyph and no name inside it, which is the whole point.
  */
 .graph-viz__node[data-private='true'] .graph-viz__dot {
-  fill: none;
+  /* `transparent`, never `none`: with `fill: none` the circle's interior is not
+     painted, so SVG hit-testing (pointer-events: visiblePainted) only registers the
+     1.5px dashed stroke — a fingertip tapping the middle of the dot hits the canvas
+     behind it and the person sheet never opens. A transparent fill is painted for
+     hit-testing while drawing nothing. */
+  fill: transparent;
   stroke: var(--pp-graph-node);
   stroke-width: 1.5;
   stroke-dasharray: 3 4;
