@@ -355,7 +355,7 @@ describe('notifications.list (issue #31, vertical-slice step 9)', () => {
    *
    * The delivery goes through `notifications.deliverNotePinned.handle(event)`, the same
    * seam the bulletin helper uses for `evaluateNotifyMe`: what the *drainer* is wired
-   * with is `note-pinned-notification.integration.test.ts`'s subject, and asserting it
+   * with is `container-notification-wiring.integration.test.ts`'s subject, and asserting it
    * twice would make one of the two the copy that rots.
    */
   async function seedDeliveredNote(options: {
