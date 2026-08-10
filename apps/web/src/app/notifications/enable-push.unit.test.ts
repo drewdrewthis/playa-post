@@ -23,11 +23,21 @@ import {
  */
 const PUBLIC_KEY = 'QUJDREVGRw';
 
+/** The key a device subscribed under before a rotation. 'HELLO', and not `PUBLIC_KEY`. */
+const ROTATED_AWAY_KEY = 'SEVMTE8';
+
 /** What `PushManager.subscribe()` hands back, as the browser would shape it. */
 const SUBSCRIPTION_JSON = {
   endpoint: 'https://push.example.invalid/subscription-id',
   expirationTime: null,
   keys: { p256dh: 'a-p256dh-value', auth: 'an-auth-value' },
+};
+
+/** What this browser is already holding from an earlier enable, when it holds one. */
+const HELD_SUBSCRIPTION_JSON = {
+  endpoint: 'https://push.example.invalid/an-earlier-subscription',
+  expirationTime: null,
+  keys: { p256dh: 'p256dh-old', auth: 'auth-old' },
 };
 
 interface FakeBrowserOptions {
@@ -38,19 +48,76 @@ interface FakeBrowserOptions {
   readonly answers?: NotificationPermission;
   /** `false` for a build with no service worker — every `pnpm dev` run. */
   readonly registered?: boolean;
+  /**
+   * The application server key a subscription this browser *already holds* is bound to,
+   * or `undefined` for a browser holding none.
+   */
+  readonly heldSubscriptionKey?: string;
 }
 
-/** A `PushBrowser` that records what it was asked, and answers from a table. */
+/** Whether two application server keys are the same bytes, as the browser compares them. */
+function sameKeyBytes(one: ArrayBuffer | null, other: BufferSource | string | null): boolean {
+  if (one === null || other === null || typeof other === 'string') {
+    return false;
+  }
+
+  const left = new Uint8Array(one);
+  const right = ArrayBuffer.isView(other)
+    ? new Uint8Array(other.buffer, other.byteOffset, other.byteLength)
+    : new Uint8Array(other);
+
+  return left.length === right.length && left.every((byte, index) => byte === right[index]);
+}
+
+/**
+ * A `PushBrowser` that records what it was asked, and answers from a table.
+ *
+ * `pushManager` models the two Push API rules this flow now depends on, rather than
+ * always resolving: **`subscribe()` rejects with `InvalidStateError` when a subscription
+ * bound to a different application server key is still held** (it does not replace one),
+ * and it returns the held subscription unchanged when the keys match. A fake that
+ * resolved regardless would let the rotation bug pass as green.
+ */
 function fakeBrowser(options: FakeBrowserOptions = {}) {
   const asked: NotificationPermission[] = [];
   const subscribeOptions: PushSubscriptionOptionsInit[] = [];
+  const unsubscribed: string[] = [];
   const permission = options.permission ?? 'default';
   const answer = options.answers ?? permission;
 
+  let held: PushSubscription | null =
+    options.heldSubscriptionKey === undefined
+      ? null
+      : ({
+          options: {
+            applicationServerKey: applicationServerKeyBytes(options.heldSubscriptionKey).buffer,
+          },
+          toJSON: () => HELD_SUBSCRIPTION_JSON,
+          unsubscribe: () => {
+            unsubscribed.push(HELD_SUBSCRIPTION_JSON.endpoint);
+            held = null;
+            return Promise.resolve(true);
+          },
+        } as unknown as PushSubscription);
+
   const registration = {
     pushManager: {
+      getSubscription: () => Promise.resolve(held),
       subscribe(subscribeInit: PushSubscriptionOptionsInit) {
         subscribeOptions.push(subscribeInit);
+
+        if (held !== null) {
+          if (!sameKeyBytes(held.options.applicationServerKey, subscribeInit.applicationServerKey ?? null)) {
+            return Promise.reject(
+              Object.assign(
+                new Error('Registration failed - A subscription with a different key already exists'),
+                { name: 'InvalidStateError' },
+              ),
+            );
+          }
+          return Promise.resolve(held);
+        }
+
         return Promise.resolve({ toJSON: () => SUBSCRIPTION_JSON });
       },
     },
@@ -68,7 +135,7 @@ function fakeBrowser(options: FakeBrowserOptions = {}) {
     registration: () => Promise.resolve((options.registered ?? true) ? registration : null),
   };
 
-  return { browser, asked, subscribeOptions };
+  return { browser, asked, subscribeOptions, unsubscribed };
 }
 
 /** Records what was forwarded to `notifications.push.subscribe`, and answers as told. */
@@ -165,17 +232,11 @@ describe('enablePush', () => {
       ]);
     });
 
-    it('treats the server CONFLICT as success — this device is already reachable', async () => {
-      // `PUSH_SUBSCRIPTION_EXISTS` maps to CONFLICT (M2 stores one subscription per
-      // user). Showing an error to the one person for whom everything already works
-      // would be the wrong end of the trade.
-      const fake = fakeBrowser({ answers: 'granted' });
-      const api = recordingSubscribe(() => Promise.reject(serverRefusal('CONFLICT')));
-
-      await expect(enablePush(api.subscribe, fake.browser)).resolves.toBe('subscribed');
-    });
-
-    it('propagates any other server refusal rather than claiming success', async () => {
+    it('propagates a server refusal rather than claiming success', async () => {
+      // Every refusal, with no exception for CONFLICT: `notifications.push.subscribe`
+      // stores by replacement now, so a second enrollment is a plain success and there
+      // is no status left that means "already yours" — a branch swallowing one would be
+      // claiming a device is reachable on the strength of a code the server never sends.
       const fake = fakeBrowser({ answers: 'granted' });
       const api = recordingSubscribe(() => Promise.reject(serverRefusal('UNAUTHORIZED')));
 
@@ -183,14 +244,51 @@ describe('enablePush', () => {
     });
   });
 
+  describe('given this browser already holds a subscription', () => {
+    /*
+     * The VAPID pair rotates (`docs/engineering/secrets.md` §4), and every device that
+     * subscribed under the old public key is still holding a subscription bound to it.
+     * `subscribe()` does not replace that one — it rejects with `InvalidStateError` —
+     * so without dropping the stale subscription first, "Enable push" fails on those
+     * devices forever, and the only enrollment path in the app cannot carry out the
+     * rotation procedure that same document prescribes.
+     */
+    it('drops a subscription bound to a superseded key, then enrolls the fresh one', async () => {
+      const fake = fakeBrowser({ answers: 'granted', heldSubscriptionKey: ROTATED_AWAY_KEY });
+      const api = recordingSubscribe();
+
+      await expect(enablePush(api.subscribe, fake.browser)).resolves.toBe('subscribed');
+      expect(fake.unsubscribed).toEqual([HELD_SUBSCRIPTION_JSON.endpoint]);
+      expect(api.forwarded).toEqual([SUBSCRIPTION_JSON]);
+    });
+
+    it('keeps one already bound to the configured key, and re-registers it', async () => {
+      // No churn: unsubscribing a working subscription would mint a new endpoint on
+      // every press and leave a window with no subscription at all if the re-subscribe
+      // then failed. Forwarding it again is what makes the press a repair — the server
+      // stores by replacement, so this is how a device's current credential wins back
+      // an account whose stored one belongs to a browser that no longer exists.
+      const fake = fakeBrowser({ answers: 'granted', heldSubscriptionKey: PUBLIC_KEY });
+      const api = recordingSubscribe();
+
+      await expect(enablePush(api.subscribe, fake.browser)).resolves.toBe('subscribed');
+      expect(fake.unsubscribed).toEqual([]);
+      expect(api.forwarded).toEqual([HELD_SUBSCRIPTION_JSON]);
+    });
+  });
+
   describe('given permission is refused', () => {
-    it('reports denied and subscribes nothing', async () => {
-      const fake = fakeBrowser({ answers: 'denied' });
+    it('reports denied, subscribes nothing, and drops nothing already held', async () => {
+      // The held subscription is stale here, and it still survives a refusal: dropping
+      // one on the way to an answer that turns out to be "no" would spend a device's
+      // working enrollment on a press that enrolled nothing.
+      const fake = fakeBrowser({ answers: 'denied', heldSubscriptionKey: ROTATED_AWAY_KEY });
       const api = recordingSubscribe();
 
       await expect(enablePush(api.subscribe, fake.browser)).resolves.toBe('denied');
       expect(api.forwarded).toEqual([]);
       expect(fake.subscribeOptions).toEqual([]);
+      expect(fake.unsubscribed).toEqual([]);
     });
 
     it('reports default when the prompt was dismissed, so a second press asks again', async () => {

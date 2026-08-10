@@ -145,9 +145,12 @@ imported as `@playa-post/database`'s re-export rather than as `kysely`.
 - **Secret names, paths, and retrieval steps** live in `docs/engineering/secrets.md`
   (never values).
 - **`.env.example` lists every key `@playa-post/configuration` reads** — the
-  defaulted ones (`NODE_ENV`, `HOST`, `PORT`, `LOG_LEVEL`) and the two with no
-  default (`DATABASE_URL`, `SUPABASE_URL`), **names and placeholders only,
-  never a value**; see `packages/configuration/src/environment-schema.ts` and
+  defaulted ones (`NODE_ENV`, `HOST`, `PORT`, `LOG_LEVEL`), the two required with
+  no default (`DATABASE_URL`, `SUPABASE_URL`), and the optional **all-or-none**
+  `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_CONTACT` trio (set all three or
+  none; a partial set is refused at boot, and none means the server runs on the
+  unconfigured push transport) — **names and placeholders only, never a value**;
+  see `packages/configuration/src/environment-schema.ts` and
   `docs/engineering/secrets.md`. The two files must stay in sync, and
   `tests/fitness/render-blueprint.fitness.test.ts` asserts that every
   undefaulted key is declared in `render.yaml` too.

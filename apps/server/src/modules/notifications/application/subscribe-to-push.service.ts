@@ -31,13 +31,20 @@ export interface SubscribeToPushDependencies {
 /**
  * The subscribe-to-push use case (M2.11).
  *
- * **Thin, and the thinness is the M2-AC18 design.** There is no "does this person
- * already have one" read before the write: `app.push_subscriptions` is keyed on
- * `owner_id`, so the second subscribe is a primary-key violation the repository maps
- * onto {@link import('../domain/push-subscription.errors').PushSubscriptionAlreadyExistsError}.
- * A read-then-write would answer the same question with a race in the middle, and would
- * make "one subscription per user" a rule a future edit could drop without the database
- * noticing.
+ * **Idempotent by replacement, and that is the whole design.** There is no "does this
+ * person already have one" read before the write and no refusal: `app.push_subscriptions`
+ * is keyed on `owner_id`, and the repository's upsert makes the submitted subscription
+ * the one this account's pushes go to. Enrolling is therefore always safe to repeat,
+ * which is what a client needs it to be — pressing "Enable push" is the only lever a
+ * person has, and it has to work the second time as well as the first.
+ *
+ * ⚠ **Last-writer-wins, and the loser is not told.** With one row per owner (multi-device
+ * is M5), a device enrolling displaces whatever was stored — including another browser
+ * that keeps its permission grant and quietly stops receiving. That is the accepted cost,
+ * because the alternative this replaces was first-writer-*forever*: the transport
+ * tolerates a dead endpoint by design (`web-push.transport.ts`) and nothing deletes one,
+ * so a refusal on the second subscribe made an account permanently unreachable with no
+ * way back. Displacement at least follows an explicit press on the device that wins.
  *
  * Returns nothing. Echoing the stored subscription back would put an endpoint — a
  * routable, long-lived credential for pushing to somebody's device — into a response
@@ -50,7 +57,7 @@ export function createSubscribeToPushService(
 
   return {
     async subscribe(command: SubscribeToPushCommand): Promise<void> {
-      await dependencies.pushSubscriptions.add({
+      await dependencies.pushSubscriptions.save({
         ownerId: command.actorId,
         endpoint: command.endpoint,
         keys: { p256dh: command.keys.p256dh, auth: command.keys.auth },

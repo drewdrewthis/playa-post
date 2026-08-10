@@ -72,6 +72,11 @@ function installPushCapableBrowser(
 
   const registration = {
     pushManager: {
+      // A browser holding nothing yet, which is the state every case below starts in.
+      // What happens when it *is* holding one — a key rotation to recover from, or a
+      // matching subscription to keep — is asserted in `enable-push.unit.test.ts`,
+      // where the Push API's own rules can be modelled without a DOM.
+      getSubscription: () => Promise.resolve(null),
       subscribe: () => Promise.resolve({ toJSON: () => SUBSCRIPTION_JSON }),
     },
   };

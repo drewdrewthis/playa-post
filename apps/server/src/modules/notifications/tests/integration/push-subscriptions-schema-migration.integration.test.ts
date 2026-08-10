@@ -14,11 +14,12 @@ import { startPostgresTestDatabase, type PostgresTestDatabase } from '@playa-pos
  * `app.notify_me_queries` uses for D1. Neither ADR-0007 nor the plan pins this table's
  * shape — the lane brief names only "app.push_subscriptions" with no column list —
  * but M2's scope comment in `notify-me.feature` ("Web Push subscribe" singular;
- * "cross-device dedup" cut to M5) and M2-AC18's "subscribing to push twice is
- * rejected" both read as one subscription per user in this milestone, and a primary
- * key is what makes that a database constraint rather than an application check a
- * future edit could forget — the same argument ADR-0007:79 makes for
- * `notify_me_queries`. The coder/reviewer owns ratifying this in the same PR that
+ * "cross-device dedup" cut to M5) reads as one subscription per user in this
+ * milestone, and a primary key is what makes that a database constraint rather than an
+ * application check a future edit could forget — the same argument ADR-0007:79 makes
+ * for `notify_me_queries`. It is also the conflict target
+ * `postgres-push-subscription.repository.ts` upserts against: the key decides which row
+ * an owner has, so a second subscribe replaces that row instead of adding one. The coder/reviewer owns ratifying this in the same PR that
  * adds the persistence layer, or replacing it with a surrogate id + unique index if a
  * multi-subscription path turns out to be needed sooner than M5.
  */
@@ -82,8 +83,9 @@ describe('L3b-notify migration — app.push_subscriptions', () => {
     const isKeyed = await hasPrimaryKeyConstraint(database, 'app.push_subscriptions', ['owner_id']);
     expect(
       isKeyed,
-      'the primary key must be owner_id — a second insert for the same owner is what makes ' +
-        'M2-AC18 ("subscribing twice is rejected") a constraint rather than a service-level check',
+      'the primary key must be owner_id — it is what makes "one subscription per user" a ' +
+        'constraint rather than a service-level check, and it is the conflict target the ' +
+        'repository upserts against, so a re-subscribe replaces rather than accumulating',
     ).toBe(true);
   });
 
