@@ -66,9 +66,23 @@ export default defineConfig({
         // guessing.
         theme_color: '#120a1a',
         background_color: '#171021',
+        icons: [
+          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          {
+            src: 'maskable-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
+        ],
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // `icon-source.png` is the archival 1024x1024 re-encode kept for regenerating
+        // the icon set later (see apps/web/public); nothing in the app ever fetches it,
+        // so precaching it would spend ~1.5MB of install bandwidth for zero runtime use.
+        globIgnores: ['icon-source.png'],
       },
     }),
   ],
