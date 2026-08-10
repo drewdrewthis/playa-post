@@ -7,6 +7,8 @@ import {
   REPORT_REASON_CHOICES,
 } from '../../apps/web/src/app/moderation/report-abuse-draft';
 
+import { mintInviteViaYouScreen } from './support/mint-invite';
+
 /**
  * The report-abuse sheet and the rate-limited sign-in notice, rendered in **both themes**.
  *
@@ -123,9 +125,7 @@ test.describe('the report-abuse sheet renders in both themes', () => {
       await bootstrapSession(pageA, userAAccessToken);
       await expect(pageA.getByTestId('graph-home')).toBeVisible();
 
-      await pageA.getByTestId('invite-create-button').click();
-      const inviteToken = (await pageA.getByTestId('invite-token-display').innerText()).trim();
-      expect(inviteToken.length).toBeGreaterThan(0);
+      const inviteToken = await mintInviteViaYouScreen(pageA);
 
       await bootstrapSession(pageB, userBAccessToken);
       await pageB.goto(`/invite/${inviteToken}`);
@@ -288,8 +288,7 @@ test.describe('a report or dismissal that did not reach the server says so', () 
       await bootstrapSession(pageA, userAAccessToken);
       await expect(pageA.getByTestId('graph-home')).toBeVisible();
 
-      await pageA.getByTestId('invite-create-button').click();
-      const inviteToken = (await pageA.getByTestId('invite-token-display').innerText()).trim();
+      const inviteToken = await mintInviteViaYouScreen(pageA);
 
       await bootstrapSession(pageB, userBAccessToken);
       await pageB.goto(`/invite/${inviteToken}`);

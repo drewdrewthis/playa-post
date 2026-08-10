@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, type JSX } from 'react';
 
 import type { Person } from '@playa-post/contracts';
@@ -29,10 +29,6 @@ export function GraphHomeRoute(): JSX.Element {
   const graph = useQuery({
     queryKey: GRAPH_LIST_QUERY_KEY,
     queryFn: () => api.query('graph.list', undefined),
-  });
-
-  const invite = useMutation({
-    mutationFn: () => api.mutate('connections.invitations.create', undefined),
   });
 
   /*
@@ -74,20 +70,15 @@ export function GraphHomeRoute(): JSX.Element {
   return (
     <section className="screen screen--canvas" data-testid="graph-home">
       <div className="screen__chrome">
+        {/*
+         * No actions beside the title, and both absences are deliberate: composing is the
+         * shell's FAB on every screen (`tab-bar.tsx`), and inviting is the You screen's
+         * standing CONNECT card. The comp has no invite control here at all — the button
+         * this header used to carry was a remnant of the pre-design wave
+         * ([#142](https://github.com/drewdrewthis/playa-post/issues/142)).
+         */}
         <header className="screen__header">
           <h1 className="screen__title">Your graph</h1>
-          {/* Composing is the shell's FAB now, on every screen — see `tab-bar.tsx`. */}
-          <div className="screen__actions">
-            <button
-              className="button button--primary"
-              data-testid="invite-create-button"
-              type="button"
-              onClick={() => invite.mutate()}
-              disabled={invite.isPending}
-            >
-              Create an invite
-            </button>
-          </div>
         </header>
 
         {network === undefined ? null : (
@@ -103,16 +94,6 @@ export function GraphHomeRoute(): JSX.Element {
          * is unchanged for everybody who has no ask in front of them.
          */}
         <IntroInbox />
-
-        {invite.data === undefined ? null : (
-          <p className="invite-token">
-            <span className="invite-token__label">Share this invite</span>
-            <code className="invite-token__value" data-testid="invite-token-display">
-              {invite.data.token}
-            </code>
-          </p>
-        )}
-
       </div>
 
       {/* One slot, two occupants: the canvas when there is a network, the empty-state
@@ -121,7 +102,7 @@ export function GraphHomeRoute(): JSX.Element {
         <GraphNetwork graph={network} onOpenPerson={setSelectedPerson} />
       ) : (
         <p className="screen__empty">
-          Nobody yet. Create an invite and send it to someone you know.
+          Nobody yet. Share your invite from the You screen.
         </p>
       )}
 

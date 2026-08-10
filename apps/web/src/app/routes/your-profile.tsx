@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { JSX } from 'react';
+import QRCode from 'react-qr-code';
 import { Link } from 'react-router';
 
 import type { VisibleToDistance } from '@playa-post/contracts';
@@ -28,23 +29,28 @@ import '../profile/your-profile.css';
  * serves — `graph.list`, `connections.invitations.create`, and the Dexie queue the sync
  * runner drains.
  *
+ * The **CONNECT card stands ready**, exactly as the comp draws it: QR, link, consent line
+ * and share button are on screen the moment the card is, with nothing to press first. It
+ * is also the *only* place an invite is minted — the graph screen's "Create an invite"
+ * button was a remnant the comp never had
+ * ([#142](https://github.com/drewdrewthis/playa-post/issues/142)).
+ *
  * The **Who can see you** dial is the comp's privacy block, corrected: the comp labels it
  * "who sees your name", the product owner renamed it to what it actually does — beyond
  * your limit you are absent from the other person's graph entirely, not unnamed on it.
  * Its trust half ("visible to trust 50+") is a later version; the "who can pin to your
  * board" limit stays deferred with it.
  *
- * ⚠ **Two of the comp's blocks are deliberately absent rather than mocked**, because a
- * control that renders and does nothing is a lie told in the user's own settings screen:
+ * ⚠ **The comp's Blocked-people block is deliberately absent rather than mocked**, because
+ * a control that renders and does nothing is a lie told in the user's own settings screen:
+ * `moderation` reports and dismisses *bulletins*; blocking a *person* has no table, no
+ * procedure and no contract, so there is nothing for a list to read.
  *
- * - **Blocked people.** `moderation` reports and dismisses *bulletins*; blocking a
- *   *person* has no table, no procedure, and no contract, so there is nothing for a list
- *   to read.
- * - **A scannable QR.** Encoding one needs a Reed-Solomon implementation, and this repo
- *   forbids hand-rolling infrastructure (addendum §18) — so it is a new dependency, which
- *   is a decision to take deliberately rather than in passing. The invite link and the
- *   share sheet below are the working half, and they are the half that actually connects
- *   two people.
+ * The comp's **QR** stood on that list until now. Encoding one needs a Reed-Solomon
+ * implementation and this repo forbids hand-rolling infrastructure (addendum §18), so it
+ * was a dependency decision to take deliberately rather than in passing — and the product
+ * owner has now taken it in
+ * [#90](https://github.com/drewdrewthis/playa-post/issues/90): `react-qr-code`.
  */
 export function YourProfileRoute(): JSX.Element {
   const api = useApi();
@@ -60,8 +66,18 @@ export function YourProfileRoute(): JSX.Element {
     queryFn: () => api.query('graph.list', undefined),
   });
 
-  const invite = useMutation({
-    mutationFn: () => api.mutate('connections.invitations.create', undefined),
+  /*
+   * A write behind `useQuery`, deliberately. The comp's card *stands ready* — there is no
+   * "create invite" step to press — so the mint has to happen on arrival, and arrival is
+   * what a query models. `staleTime: Infinity` is the part that makes it safe: without it
+   * this would re-mint on every remount inside the cache window. Accepted cost: opening
+   * this screen spends a token nobody may ever send, which is cheaper than the button the
+   * comp does not have.
+   */
+  const invite = useQuery({
+    queryKey: ['invite', 'mine'],
+    queryFn: () => api.mutate('connections.invitations.create', undefined),
+    staleTime: Infinity,
   });
 
   const queryClient = useQueryClient();
@@ -112,47 +128,52 @@ export function YourProfileRoute(): JSX.Element {
       <div className="profile__section">
         <h2 className="profile__section-label">Connect</h2>
 
-        <div className="profile__connect">
-          <div className="profile__connect-body">
-            {shareUrl === null ? (
-              <p className="screen__aside">
-                Create an invite to get a link you can send. Nothing happens until you both
-                consent.
-              </p>
-            ) : (
-              <>
-                <span className="profile__invite-link" data-testid="invite-link">
-                  {shareUrl}
-                </span>
-                <p className="screen__aside">
-                  Send this to one person. Nothing happens until you both consent.
-                </p>
-              </>
-            )}
-
+        {invite.isError ? (
+          <div className="profile__row">
+            <p className="form__error" role="alert">
+              That invite did not get created.
+            </p>
             <button
-              className="profile__share"
-              data-testid="invite-share-button"
+              className="profile__pill profile__dial"
               type="button"
-              disabled={invite.isPending}
-              onClick={() => {
-                if (shareUrl === null) {
-                  invite.mutate();
-                  return;
-                }
-
-                void shareInvite(shareUrl);
-              }}
+              onClick={() => void invite.refetch()}
             >
-              {shareUrl === null ? 'Create invite' : 'Share invite'}
+              TRY AGAIN
             </button>
           </div>
-        </div>
+        ) : shareUrl === null ? (
+          <p className="profile__quiet">Minting your invite…</p>
+        ) : (
+          <div className="profile__connect">
+            {/*
+              White and black, hard-coded rather than tokenised, and the same in both
+              themes: a scanner looks for dark modules on a light field, so letting the
+              dark palette paint this would invert the contrast a camera needs and hand
+              somebody a QR that photographs fine and does not read.
+            */}
+            <div className="profile__qr" data-testid="invite-qr">
+              <QRCode value={shareUrl} size={100} bgColor="#ffffff" fgColor="#000000" />
+            </div>
 
-        {invite.error === null ? null : (
-          <p className="form__error" role="alert">
-            That invite did not get created. Try again.
-          </p>
+            <div className="profile__connect-body">
+              <span className="profile__invite-link" data-testid="invite-link">
+                {shareUrl}
+              </span>
+              <p className="screen__aside">
+                Scan or tap to connect. Nothing happens until you both consent.
+              </p>
+              <button
+                className="profile__share"
+                data-testid="invite-share-button"
+                type="button"
+                onClick={() => {
+                  void shareInvite(shareUrl);
+                }}
+              >
+                Share invite
+              </button>
+            </div>
+          </div>
         )}
       </div>
 

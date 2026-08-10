@@ -73,6 +73,7 @@ test.describe('the You screen renders in both themes', () => {
     await expect(screen).toBeVisible();
 
     await expect(page.getByTestId('profile-counts')).toBeVisible();
+    await expect(page.getByTestId('invite-qr')).toBeVisible();
     await expect(page.getByTestId('invite-share-button')).toBeVisible();
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
@@ -85,7 +86,15 @@ test.describe('the You screen renders in both themes', () => {
     // dark would leave an element painted on its own background — which this cannot see,
     // and the screenshot can, which is why both exist.
     await expect(page.getByTestId('profile-counts')).toBeVisible();
+    await expect(page.getByTestId('invite-qr')).toBeVisible();
     await expect(page.getByTestId('invite-share-button')).toBeVisible();
+
+    // The one element on this screen that must *not* follow the theme: a scanner looks for
+    // dark modules on a light field, so a dark-palette QR tile photographs fine and does
+    // not read. Asserted rather than screenshotted, because "still white" is the whole
+    // claim and a human comparing two images is exactly who would miss it.
+    await expect(page.getByTestId('invite-qr')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+
     await capture(page, 'dark');
   });
 
@@ -126,22 +135,34 @@ test.describe('the You screen renders in both themes', () => {
   });
 
   /**
-   * ⚠ The button is clicked **once**. The second press hands the link to
-   * `navigator.share` or the clipboard, neither of which a headless browser grants — and
-   * the route swallows both rejections on purpose, so a second click would assert
-   * nothing while looking like it did.
+   * The card **stands ready** (#142/#90): QR, link, consent line and share button are all
+   * on screen the moment the card is, so this test presses nothing — arriving is the whole
+   * interaction, and anything it has to click first would be the step the comp does away
+   * with.
+   *
+   * ⚠ **The share button is never clicked, here or anywhere.** It hands the link to
+   * `navigator.share` or the clipboard, neither of which a headless browser grants, and
+   * the route swallows both rejections on purpose — so a click would assert nothing while
+   * looking like it did. Its label is asserted instead, which is the part a user reads.
    */
-  test('mints a real invite link from the CONNECT card', async ({ page }) => {
+  test('stands ready with a real invite link on the CONNECT card', async ({ page }) => {
     await bootstrapSession(page, requireEnv('E2E_USER_A_ACCESS_TOKEN'));
     await page.goto('/you');
 
-    await page.getByTestId('invite-share-button').click();
+    // The QR is the comp's scannable half, and it is the half that cannot be proved by
+    // reading text: `react-qr-code` renders nothing at all if the value never arrives.
+    await expect(page.getByTestId('invite-qr')).toBeVisible();
 
     // The link is the whole point of the card: it has to be the route that opens an
     // invite, carrying a token the server actually minted, or it is decoration.
     const link = page.getByTestId('invite-link');
     await expect(link).toBeVisible();
     await expect(link).toContainText('/invite/');
+
+    // Load-bearing copy, not decoration — it is the card's consent promise.
+    await expect(page.getByTestId('your-profile')).toContainText(
+      'Nothing happens until you both consent.',
+    );
 
     await expect(page.getByTestId('invite-share-button')).toHaveText('Share invite');
   });

@@ -537,32 +537,3 @@
   gap: var(--pp-space-2);
   margin-top: var(--pp-space-1);
 }
-
-/* Codes ------------------------------------------------------------------- */
-
-/** An invite token is retyped by hand, so it is monospaced and boxed to be selectable. */
-.invite-token {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--pp-space-2);
-}
-
-.invite-token__label {
-  font-weight: 700;
-  font-size: var(--pp-text-2xs);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--pp-faint);
-}
-
-.invite-token__value {
-  padding: var(--pp-space-2) var(--pp-space-3);
-  border: 1px dashed var(--pp-accent);
-  border-radius: var(--pp-radius-sm);
-  font-family: var(--pp-font-mono);
-  font-weight: 500;
-  font-size: var(--pp-text-sm);
-  color: var(--pp-accent);
-  word-break: break-all;
-}
