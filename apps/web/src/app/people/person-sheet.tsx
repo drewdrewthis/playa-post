@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type JSX } from 'react';
 import type { Person } from '@playa-post/contracts';
 
 import { useApi } from '../api/api-provider';
+import { applicationErrorCode } from '../api/client';
 import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
 import { describeIntroStanding, type IntroStanding } from '../intros/intro-outbox-state';
 import { INTRO_OUTBOX_QUERY_KEY } from '../intros/intro-query-keys';
@@ -25,10 +26,11 @@ const TRUST_MAX = 100;
  * and every way out of the sheet — CLOSE, Escape, the scrim — puts the viewer exactly
  * where they already were.
  *
- * ⚠ **Trust is the viewer's own value and belongs to nobody else.** The server returns
- * `null` for a connection the viewer does not hold (B6), so this sheet never has
- * another party's number to render even by accident. The slider is shown only when
- * there is a connection to hold an opinion about.
+ * ⚠ **Trust is the viewer's own value and belongs to nobody else.** The server
+ * *refuses* with `NOT_CONNECTED` for a connection the viewer does not hold (B6) — the
+ * `queryFn` below translates that refusal to `null` — so this sheet never has another
+ * party's number to render even by accident. The slider is shown only when there is a
+ * connection to hold an opinion about.
  *
  * `null` and `0` are two states. The slider's position for an unset value is the
  * minimum, but the label says *Not set* until the viewer saves — otherwise a user who
@@ -58,7 +60,22 @@ export function PersonSheet({
   const connectionKey = ['connection', otherUserId] as const;
   const connection = useQuery({
     queryKey: connectionKey,
-    queryFn: () => api.query('connections.connection.get', { otherUserId }),
+    /*
+     * ⚠ The wire never resolves `null`: "no connection" arrives as a `NOT_FOUND`
+     * refusal carrying `NOT_CONNECTED`, indistinguishable from a stranger's (B6).
+     * Translating it here is what keeps the not-connected arm below reachable and the
+     * alert arm reserved for genuine failures.
+     */
+    queryFn: async () => {
+      try {
+        return await api.query('connections.connection.get', { otherUserId });
+      } catch (error) {
+        if (applicationErrorCode(error) === 'NOT_CONNECTED') {
+          return null;
+        }
+        throw error;
+      }
+    },
   });
 
   /*
@@ -180,8 +197,8 @@ export function PersonSheet({
 
         {/*
          * Four states, told apart on purpose: a query still in flight or failed must
-         * not read as "not connected" — that message is the server's resolved `null`
-         * (B6) and nothing else.
+         * not read as "not connected" — that message is the queryFn's translation of
+         * the server's `NOT_CONNECTED` refusal (B6) and nothing else.
          */}
         {connection.isPending ? (
           // `role="status"`: the sheet has already taken focus, so without a live
@@ -195,7 +212,7 @@ export function PersonSheet({
             That did not load. Close the sheet and try again.
           </p>
         ) : connection.data === null ? (
-          <p className="person-sheet__notice">
+          <p className="person-sheet__notice" data-testid="person-sheet-not-connected">
             {/* The comp's "connect first to set trust": a tappable node past the first
                 degree is somebody the viewer can see, not somebody they hold trust in. */}
             You are not connected to this person, so there is nothing to set.

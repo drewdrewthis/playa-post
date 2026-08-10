@@ -69,6 +69,9 @@ async function openPersonSheetOnWithheldNode(page: Page): Promise<void> {
   await expect(page.getByTestId('graph-home')).toBeVisible({ timeout: 20_000 });
   await page.getByRole('button', { name: 'Private connection' }).click();
   await expect(page.getByTestId('person-sheet')).toBeVisible();
+  // Pins the real wire's NOT_CONNECTED refusal rendering as not-connected, not as the
+  // error arm — the gap that let every degree-2 sheet ship "That did not load" (#80).
+  await expect(page.getByTestId('person-sheet')).toContainText('not connected');
 }
 
 test.describe('asking for an intro through a shared connection', () => {

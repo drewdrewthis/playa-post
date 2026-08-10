@@ -59,10 +59,10 @@ afterEach(async () => {
 async function openSheet(
   degree: number,
   outbox: readonly IntroOutboxRow[],
-  connection: unknown = null,
+  connection: (input: unknown) => unknown = () => null,
 ): Promise<void> {
   const api = createFakeApi({
-    'connections.connection.get': () => connection,
+    'connections.connection.get': connection,
     'intros.listOutbox': () => outbox,
     'intros.viaCandidates': () => [LENA],
   });
@@ -185,11 +185,45 @@ describe('the person sheet, on somebody further away', () => {
   });
 });
 
+describe('the connection read behind the trust half', () => {
+  /*
+   * ⚠ The wire never resolves `null`: "no connection" is a `NOT_FOUND` refusal carrying
+   * `NOT_CONNECTED`, indistinguishable from a stranger's (B6). Read as a failure, every
+   * sheet past the first degree opens on "That did not load" — which is what shipped
+   * between #80 and this test.
+   */
+  it("reads the server's NOT_CONNECTED refusal as not-connected, not as a failure", async () => {
+    await openSheet(2, [], () => {
+      throw Object.assign(new Error('refused'), {
+        data: { code: 'NOT_FOUND', applicationCode: 'NOT_CONNECTED' },
+      });
+    });
+
+    expect(
+      requireElement(container(), '[data-testid="person-sheet-not-connected"]').textContent,
+    ).toContain('not connected');
+    expect(container().textContent).not.toContain('That did not load');
+    expect(
+      container().querySelector('[data-testid="person-sheet-request-intro-button"]'),
+    ).not.toBeNull();
+  });
+
+  it('still reports a genuine failure as one', async () => {
+    await openSheet(2, [], () => {
+      throw new Error('the network went away');
+    });
+
+    expect(requireElement(container(), '[role="alert"]').textContent).toContain(
+      'That did not load',
+    );
+  });
+});
+
 describe('the person sheet, on a direct connection', () => {
   // Nobody needs an introduction to somebody they already know, and the hint about
   // pinning belongs to the screens that offer pinning.
   it('says nothing about intros at all', async () => {
-    await openSheet(1, [], { trust: 20 });
+    await openSheet(1, [], () => ({ status: 'accepted', trust: 20 }));
 
     expect(
       container().querySelector('[data-testid="person-sheet-request-intro-button"]'),
