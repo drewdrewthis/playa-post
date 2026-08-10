@@ -345,9 +345,7 @@ export function BoardRoute(): JSX.Element {
   return (
     <section className="screen" data-testid="board">
       {/* Composing is the shell's FAB now, on every screen — see `tab-bar.tsx`. */}
-      <header className="screen__header">
-        <h1 className="screen__title">The board</h1>
-      </header>
+      <h1 className="sr-only">The board</h1>
 
       <BoardSearch
         search={search}

@@ -122,9 +122,7 @@ export function SavedViewsRoute(): JSX.Element {
 
   return (
     <section className="screen" data-testid="saved-views">
-      <header className="screen__header">
-        <h1 className="screen__title">Saved</h1>
-      </header>
+      <h1 className="sr-only">Saved</h1>
 
       <p className="saved-views__lede">
         Saved views run over what you can already see — never more.

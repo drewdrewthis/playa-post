@@ -120,19 +120,6 @@
   place-content: center;
 }
 
-.screen__header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--pp-space-3);
-}
-
-.screen__actions {
-  margin-left: auto;
-  display: flex;
-  gap: var(--pp-space-2);
-}
-
 .screen__title {
   margin: 0;
   font-family: var(--pp-font-display);
@@ -146,6 +133,18 @@
 .screen__title--hero {
   font-size: 2rem;
   font-style: italic;
+}
+
+/** Screen-reader-only page name — announced to assistive tech, no visual footprint. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .screen__lede {
