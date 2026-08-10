@@ -19,6 +19,7 @@ import {
 import { createConnectionsModule } from '../modules/connections/connections.module';
 import { createGraphModule } from '../modules/graph/graph.module';
 import { createIdentityModule } from '../modules/identity/identity.module';
+import { createIntrosModule } from '../modules/intros/intros.module';
 import {
   createHiddenBulletins,
   createModerationModule,
@@ -339,6 +340,12 @@ export function buildAppContainer(
   // point — PDF §6 keeps fixed-recipient messaging out of the bulletin model, and
   // decision D6 makes that separation structural (issue #88).
   const notes = createNotesModule({ database });
+  // Intros is built beside notes and depends on neither it nor graph: eligibility is
+  // `app.intro_via_candidates` composing `app.visible_people` in SQL, and both write
+  // statements compose that function in turn — so there is no TypeScript edge here and
+  // none may be added. Injecting a graph repository would put a second definition of
+  // reachability one convenience method away (issue #89, ADR-0002 §6).
+  const intros = createIntrosModule({ database });
   const moderation = createModerationModule({
     database,
     findVisibleBulletin: bulletins.findVisibleBulletin,
@@ -429,6 +436,7 @@ export function buildAppContainer(
       graph: graph.router,
       bulletins: bulletins.router,
       notes: notes.router,
+      intros: intros.router,
       moderation: moderation.router,
       sync: sync.router,
       views: views.router,

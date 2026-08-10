@@ -64,6 +64,16 @@ const notesSqlDirectory = join(
   'persistence',
   'sql',
 );
+const introsSqlDirectory = join(
+  repositoryRoot,
+  'apps',
+  'server',
+  'src',
+  'modules',
+  'intros',
+  'persistence',
+  'sql',
+);
 
 interface AllowlistFile {
   readonly [moduleName: string]: readonly string[];
@@ -237,6 +247,54 @@ describe('sql-table-ownership (m2-lane-briefs.md:311, blocking finding B-3)', ()
         const violations = findSqlTableOwnershipViolations([notesSqlDirectory], {
           allowlist: loadAllowlist(),
           ownTables: notesOwnTables,
+        });
+
+        expect(violations).toEqual([]);
+      });
+    });
+  });
+
+  /**
+   * Issue #89. `modules/intros` is in exactly `modules/notes`' position: it owns
+   * `app.intro_requests` outright (passed via `ownTables`, not the allowlist) and
+   * everything else it needs — `app.visible_people(...)` — is already exempt as a
+   * sanctioned function call, so it needs no allowlist entry either.
+   *
+   * The failure this guards is the *most* tempting one in the repository so far.
+   * Eligibility is "is this via connected to the requester **and** to the target", and
+   * the target half reads exactly like a question about `app.connections` — one join, two
+   * lines, obviously correct. It would also be a second definition of reachability living
+   * in the one module whose whole job is putting two strangers in touch: R2, the plan's
+   * only Critical-severity risk. `intro-via-candidates.sql` composes
+   * `app.visible_people(target_id)` at degree 1 instead, which is the same set for an
+   * active person and inherits the person lifecycle for free (ADR-0002 B11).
+   *
+   * ⚠ This cannot see the two gated write statements, which are Kysely `sql` literals
+   * rather than `.sql` files — no rule in this build can. What it does is keep the
+   * checked-in escape hatch shut.
+   */
+  describe('intros module ownership scope (issue #89)', () => {
+    // ⚠ Two names, and the second is not a table. The walker exempts an `app.<name>(`
+    // call only when the name starts `visible_`, so this module's own function — declared
+    // in the very file being scanned — reads as an unowned reference under any other
+    // name. It is passed through `ownTables` rather than the allowlist deliberately:
+    // `sql-table-ownership-allowlist.json` records *cross-module* grants a reviewer has
+    // to approve, and `app.intro_via_candidates` is this module's own object, no more a
+    // grant than `app.intro_requests` is.
+    const introsOwnTables = { intros: ['intro_requests', 'intro_via_candidates'] };
+
+    it('does not allowlist modules/intros to reach app.connections or app.users directly', () => {
+      const allowlist = loadAllowlist();
+      const introsAllowance = allowlist['intros'] ?? [];
+      expect(introsAllowance).not.toContain('connections');
+      expect(introsAllowance).not.toContain('users');
+    });
+
+    describe('against modules/intros/persistence/sql/ in the real tree', () => {
+      it('holds intro-via-candidates.sql to app.intro_requests + app.visible_*, and no other table', () => {
+        const violations = findSqlTableOwnershipViolations([introsSqlDirectory], {
+          allowlist: loadAllowlist(),
+          ownTables: introsOwnTables,
         });
 
         expect(violations).toEqual([]);

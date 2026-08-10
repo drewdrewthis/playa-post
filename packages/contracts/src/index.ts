@@ -21,6 +21,7 @@ export * from './connections';
 export * from './graph';
 export * from './health';
 export * from './identity';
+export * from './intros';
 export * from './moderation';
 export * from './notes';
 export * from './notifications';
