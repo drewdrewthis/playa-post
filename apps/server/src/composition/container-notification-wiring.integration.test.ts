@@ -43,6 +43,12 @@ describe('buildAppContainer outbox consumer registration', () => {
       // Never fetched: nothing here authenticates a request, and building the verifier
       // opens no socket.
       supabaseUrl: 'http://127.0.0.1:1/unused-by-this-suite',
+      // Unconfigured on purpose. This suite's subject is *which consumers are
+      // registered*, and `null` composes the no-op push transport, so draining a real
+      // row cannot reach for a network this suite has not got. Which transport the
+      // switch picks — `null` against the VAPID trio — is proven next door in
+      // `container-notification-wiring.unit.test.ts`, where it costs no container.
+      webPush: null,
     };
     container = buildAppContainer(configuration);
   }, 300_000);
