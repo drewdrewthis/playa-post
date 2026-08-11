@@ -298,9 +298,9 @@ describe('app.intro_requests and app.intro_via_candidates — issue #89', () => 
 
         // ⚠ **An implication, not the equality `intro_requests_decided_at` uses.** Rows
         // passed on before this column existed carry no note and must stay valid forever
-        // — migrations are forward-only, so a biconditional here would have refused to
-        // apply against any database with history in it. "Every *new* pass-on has one" is
-        // the domain's claim (`intro-note.policy.ts`), asserted in the feature suite.
+        // — migrations are forward-only, so the schema states only what holds for every
+        // row for all time. "Every *new* pass-on has one" is the domain's claim
+        // (`intro-note.policy.ts`), asserted in the feature suite.
         await expect(
           insertWithViaNote(requester, via, other, 'passed_on', null),
         ).resolves.toBeUndefined();
@@ -309,15 +309,24 @@ describe('app.intro_requests and app.intro_via_candidates — issue #89', () => 
       it('is not part of any index — a vouch is no more searchable than the ask', async () => {
         // The structural half of the same rule `note` is held to. There is no query
         // grammar over intro requests and there must be no index that could grow one.
+        // Expression and partial indexes record no `indkey` entry for the columns they
+        // touch, so the definition text is checked too — a `to_tsvector(via_note)`
+        // index would otherwise slip past a key-only count.
         const { rows } = await database.client.query<{ count: string }>(
           `select count(*)::text as count
              from pg_catalog.pg_index i
              join pg_catalog.pg_class c on c.oid = i.indrelid
              join pg_catalog.pg_namespace n on n.oid = c.relnamespace
-             join pg_catalog.pg_attribute a
-               on a.attrelid = c.oid and a.attnum = any (i.indkey)
             where n.nspname = 'app' and c.relname = 'intro_requests'
-              and a.attname = 'via_note'`,
+              and (
+                exists (
+                  select 1 from pg_catalog.pg_attribute a
+                   where a.attrelid = c.oid and a.attnum = any (i.indkey)
+                     and a.attname = 'via_note'
+                )
+                or coalesce(pg_get_expr(i.indexprs, i.indrelid), '') like '%via_note%'
+                or coalesce(pg_get_expr(i.indpred, i.indrelid), '') like '%via_note%'
+              )`,
         );
         expect(rows[0]?.count).toBe('0');
       });
