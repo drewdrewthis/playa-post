@@ -12,6 +12,13 @@ import { buildBoardQuery, parseBoardQueryState, type BoardTypeFilter } from '../
 import { BoardSearch } from '../bulletins/board-search';
 import { BulletinCard } from '../bulletins/bulletin-card';
 import { BulletinDetailSheet } from '../bulletins/bulletin-detail-sheet';
+import {
+  BOARD_VIEW,
+  buildDismissedCards,
+  describeDismissedList,
+  describeUndismissFailure,
+  parseBoardView,
+} from '../bulletins/dismissed-view';
 import { describeHideFailure } from '../moderation/hide-failure';
 import { ReportAbuseSheet } from '../moderation/report-abuse-sheet';
 import { buildBoardItems, channelState, describeBoardList } from '../notes/note-board-items';
@@ -20,6 +27,7 @@ import { useOffline } from '../offline/offline-provider';
 import { forgetBoardCard, queueMutation } from '../offline/pending-mutations';
 import { saveViewFailureMessage, seedSavedViewName } from '../views/saved-view-list';
 
+import '../bulletins/board-views.css';
 import '../moderation/hide-failure-notice.css';
 
 /**
@@ -88,9 +96,17 @@ export function BoardRoute(): JSX.Element {
   const api = useApi();
   const queryClient = useQueryClient();
   const { database, syncRunner } = useOffline();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [hidden, setHidden] = useState<readonly string[]>([]);
   const urlQuery = searchParams.get('q') ?? '';
+  /*
+   * Which of the two lists is on screen (#170). In the URL rather than in state, so the
+   * Dismissed category is a place a person can be — back goes back to the board, and a
+   * reload lands where they were — and so the tab bar's Board button returns them to the
+   * board by navigating rather than by needing to reach into this component's state.
+   */
+  const view = parseBoardView(searchParams.get('view'));
+  const showingDismissed = view === BOARD_VIEW.dismissed;
   // Seeded from `?q=` on mount and re-synced whenever it changes (the effect below) —
   // that is how the Saved screen's "OPEN ON BOARD" arrives (#173). `search` and `filter`
   // both come from one `parseBoardQueryState` call — deriving them separately re-creates
@@ -149,6 +165,23 @@ export function BoardRoute(): JSX.Element {
   const notes = useQuery({
     queryKey: ['notes', 'list'],
     queryFn: () => api.query('notes.list', undefined),
+  });
+
+  /*
+   * The Dismissed category (#170): what this viewer took off their own board and can put
+   * back. Its own procedure rather than a term on `bulletins.board`, because a dismissal
+   * is a fact about the viewer rather than about the bulletin — see `dismissed-view.ts`.
+   *
+   * ⚠ `enabled` only while the category is on screen. It is a second board-sized read and
+   * nobody who is not looking at it needs it; fetching it beside every board load would
+   * double the cost of the app's most-visited screen to keep a list nobody asked for warm.
+   * It carries no `placeholderData`: there is no query being typed here, so there is no
+   * flicker to smooth over.
+   */
+  const dismissed = useQuery({
+    queryKey: ['bulletins', 'dismissed'],
+    queryFn: () => api.query('bulletins.dismissed', undefined),
+    enabled: showingDismissed,
   });
 
   // The offline cache is unioned in so a card written while offline — or one whose
@@ -215,6 +248,42 @@ export function BoardRoute(): JSX.Element {
    */
   const failedHide = hide.isError && hide.variables !== undefined ? hide.variables : null;
   const hideFailure = failedHide === null ? null : describeHideFailure(failedHide, hide.error);
+
+  /*
+   * Putting a dismissed bulletin back (#170).
+   *
+   * ⚠ **Nothing optimistic here, unlike `hide`.** Dismissing hides a card the instant it
+   * is asked for, because the card is in the way; un-dismissing has nothing in the way, so
+   * the honest thing is to leave the row where it is and move it when the server agrees.
+   * That is also why `describeUndismissFailure` has no `restoresCard` to match
+   * `describeHideFailure`'s: there is nothing to restore.
+   *
+   * ⚠ Same `retry: false` app-wide default as `hide`, and the same consequence: one
+   * attempt. `moderation.undismiss` is a recognised offline mutation type server-side
+   * (ADR-0005) but has no replay handler, exactly as `bulletin.dismiss` has none — so
+   * queueing it here would be a promise this stack cannot keep. The two directions stay
+   * symmetric, which is the point: a control that worked offline one way and not the
+   * other is worse than one that works neither way and says so.
+   */
+  const undismiss = useMutation({
+    mutationFn: (input: ModerationTargetRequest) => api.mutate('moderation.undismiss', input),
+    onSuccess: async (_result, input) => {
+      // ⚠ The optimistic hide `hideBulletin` set is withdrawn here, and nothing else
+      // withdraws it. It is harmless while the dismissal stands — the server stops
+      // returning the bulletin anyway — but a bulletin dismissed and then put back within
+      // one visit would come off the server's board and be filtered straight back off this
+      // one, staying invisible until a reload nobody would know to do.
+      setHidden((previous) => previous.filter((id) => id !== input.bulletinId));
+      // Both lists move: the bulletin leaves this one and rejoins the board. Blanket
+      // invalidation for the reason `hide` uses one — the effect crosses read models.
+      await queryClient.invalidateQueries();
+    },
+  });
+
+  const failedUndismiss =
+    undismiss.isError && undismiss.variables !== undefined ? undismiss.variables : null;
+  const undismissFailure =
+    failedUndismiss === null ? null : describeUndismissFailure(undismiss.error);
 
   async function archive(card: BoardCardView): Promise<void> {
     await queueMutation(database, {
@@ -345,146 +414,302 @@ export function BoardRoute(): JSX.Element {
     notes: channelState(notes),
   });
 
+  /*
+   * The Dismissed category's rows.
+   *
+   * ⚠ **`bulletins.dismissed` decides which rows are here; `listMine` only says which of
+   * them are the viewer's own.** No row is ever *added* from `listMine` or from the
+   * offline cache — both of those answer "what has this person written", neither knows
+   * anything about dismissals, and folding them in would put bulletins into a list of
+   * decisions that were never made. The own-marking half is the board's union rule
+   * narrowed to correction only, and it matters here because a viewer may dismiss their
+   * own post — see `buildDismissedCards`.
+   */
+  const dismissedCards: readonly BoardCardView[] = buildDismissedCards({
+    dismissed: dismissed.data?.items ?? [],
+    mine: mine.data ?? [],
+  });
+
+  const dismissedRegion = describeDismissedList({
+    itemCount: dismissedCards.length,
+    dismissed: channelState(dismissed),
+  });
+
   // One clock reading per render, shared by every card and the sheet, so no two ages on
   // screen are measured against different moments. Nothing re-reads it on a timer: the
   // board refetches often enough that a minute's drift on an idle screen is invisible
   // at this granularity.
   const now = new Date();
-  const openCard = visible.find((card) => card.id === openBulletinId) ?? null;
+  // Looked up in whichever list is on screen. A card opened from the Dismissed category is
+  // not on the board by definition, so searching `visible` there would close the sheet the
+  // moment it opened.
+  const openCard =
+    (showingDismissed ? dismissedCards : visible).find((card) => card.id === openBulletinId) ??
+    null;
 
   return (
     <section className="screen" data-testid="board">
       {/* Composing is the shell's FAB now, on every screen — see `tab-bar.tsx`. */}
-      <h1 className="sr-only">The board</h1>
-
-      <BoardSearch
-        search={search}
-        onSearchChange={setSearch}
-        filter={filter}
-        onFilterChange={setFilter}
-        // ⚠ Bulletins matched, not rows on screen: a search never reaches a note, so
-        // counting them would report matches against a query they were never tested by.
-        matchCount={board.isSuccess ? visible.length : null}
-        saving={saveView.isPending}
-        // ⚠ The *settled* query, not the raw field. `BoardSearch` knows a query is being
-        // typed; only this route knows whether one has composed yet, because only it holds
-        // the debounce. Without this the control is live for ~250ms doing nothing.
-        settledQueryActive={queryActive}
-        onSave={() => {
-          if (query === undefined) {
-            return;
-          }
-          setSavedNotice(null);
-          saveView.mutate({ name: seedSavedViewName(query), sourceText: query });
-        }}
-      />
+      <h1 className="sr-only">{showingDismissed ? 'Dismissed posts' : 'The board'}</h1>
 
       {/*
-       * ⚠ **Persistent, not a toast.** Every other confirmation on this app borrows the
-       * comp's `say()` pill, which fades after 2400ms — right for "Posted", wrong here.
-       * The comp has no failure state at all (`sendReport` cannot fail against a mock),
-       * so nothing is being contradicted; but a notice that leaves on its own is one a
-       * person can miss, and missing it returns them to believing a report was filed.
-       * It goes when they say so, or when the retry succeeds.
+       * The two lists, as one control (#170).
+       *
+       * ⚠ **Not a filter chip.** `BOARD_FILTER_CHIPS` is a closed set over `BulletinType`
+       * and every one of its members compiles into a `type:` term the server's grammar
+       * parses; "Dismissed" is not a kind of bulletin and has no term. Putting it in that
+       * row would also let it be saved into a view (#173), which would turn a person's
+       * private dismissals into a named, re-openable query.
+       *
+       * `aria-pressed` and `board-search__chip` are borrowed from that row anyway, because
+       * this reads as the same kind of control and a second pill style would be a second
+       * thing to keep in sync.
        */}
-      {hideFailure === null ? null : (
-        <div className="hide-failure" role="alert" data-testid="hide-failure">
-          <p className="hide-failure__message">{hideFailure.message}</p>
+      <div className="board-views" role="group" aria-label="Which posts to show">
+        <button
+          className="board-search__chip"
+          data-testid="board-view-board"
+          type="button"
+          aria-pressed={!showingDismissed}
+          onClick={() => {
+            setOpenBulletinId(null);
+            undismiss.reset();
+            setSearchParams(
+              (previous) => {
+                const next = new URLSearchParams(previous);
+                next.delete('view');
 
-          {/*
-           * The retry is `screens.css`'s own `button--quiet` — the app's pill for a
-           * row-level action, borrowed rather than restyled. It re-sends `failedHide`,
-           * the exact request react-query held onto, so the reporter's account of what
-           * happened goes again without being retyped.
-           */}
-          <div className="hide-failure__actions">
-            {/* Absent, not dimmed, when a retry cannot work — see `hide-failure.ts`. */}
-            {hideFailure.retryable && failedHide !== null ? (
-              <button
-                className="button button--quiet"
-                data-testid="hide-failure-retry-button"
-                type="button"
-                onClick={() => {
-                  hide.mutate(failedHide);
-                }}
-              >
-                Try again
-              </button>
-            ) : null}
+                return next;
+              },
+              { replace: true },
+            );
+          }}
+        >
+          Board
+        </button>
 
-            <button
-              className="hide-failure__dismiss"
-              data-testid="hide-failure-dismiss-button"
-              type="button"
-              onClick={() => {
-                hide.reset();
-              }}
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      )}
+        <button
+          className="board-search__chip"
+          data-testid="board-view-dismissed"
+          type="button"
+          aria-pressed={showingDismissed}
+          onClick={() => {
+            setOpenBulletinId(null);
+            hide.reset();
+            setSearchParams(
+              (previous) => {
+                const next = new URLSearchParams(previous);
+                next.set('view', BOARD_VIEW.dismissed);
 
-      {/*
-       * `screen__notice` rather than a new class: this is the shared "small line of prose
-       * under the controls" treatment, and a second one would be a second thing to keep
-       * in sync.
-       */}
-      {savedNotice === null ? null : (
-        <p className="screen__notice" data-testid="board-save-view-notice" role="status">
-          {savedNotice}
-        </p>
-      )}
+                return next;
+              },
+              { replace: true },
+            );
+          }}
+        >
+          Dismissed
+        </button>
+      </div>
 
-      {region.boardError ? (
-        <p className="form__error" data-testid="board-error">
-          {boardErrorMessage(board.error)}
-        </p>
-      ) : (
+      {showingDismissed ? (
         <>
           {/*
-           * `.form__error`, sitting beside the refused-query line above and reading the
-           * same way, because it is the same kind of thing: a read that did not answer.
-           * `role="status"` rather than `alert` — the bulletins under it are still worth
-           * reading, and this is not an interruption.
+           * ⚠ **A failed read is never reported as an empty list** — `dismissed-view.ts`
+           * decides that, not this JSX. Telling somebody nothing is dismissed when the
+           * read simply did not answer is telling them their dismissals are gone.
            */}
-          {region.notesFailure === null ? null : (
-            <p className="form__error" data-testid="board-notes-error" role="status">
-              {region.notesFailure}
+          {dismissedRegion.error === null ? null : (
+            <p className="form__error" data-testid="dismissed-error">
+              {dismissedRegion.error}
             </p>
           )}
 
-          {region.empty === null ? null : <p className="screen__empty">{region.empty}</p>}
+          {undismissFailure === null ? null : (
+            <div className="hide-failure" role="alert" data-testid="undismiss-failure">
+              <p className="hide-failure__message">{undismissFailure.message}</p>
 
-          {region.items ? (
-            <ul className="board-list">
-              {items.map((item) => (
-                <li key={item.key}>
-                  {item.kind === 'note' ? (
-                    /* No `onOpen`: a note carries its whole text on the card and there is
-                       no `notes.getById` to open — see `notes/note-card.tsx`. */
-                    <NoteCard note={item.note} now={now} />
-                  ) : (
-                    <BulletinCard
-                      card={item.card}
-                      now={now}
-                      onOpen={(opened) => {
-                        setOpenBulletinId(opened.id);
-                      }}
-                    />
-                  )}
+              <div className="hide-failure__actions">
+                {/* Absent, not dimmed, when a retry cannot work — the rule `hide-failure.ts` sets. */}
+                {undismissFailure.retryable && failedUndismiss !== null ? (
+                  <button
+                    className="button button--quiet"
+                    data-testid="undismiss-failure-retry-button"
+                    type="button"
+                    onClick={() => {
+                      undismiss.mutate(failedUndismiss);
+                    }}
+                  >
+                    Try again
+                  </button>
+                ) : null}
+
+                <button
+                  className="hide-failure__dismiss"
+                  data-testid="undismiss-failure-dismiss-button"
+                  type="button"
+                  onClick={() => {
+                    undismiss.reset();
+                  }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
+          {dismissedRegion.empty === null ? null : (
+            <p className="screen__empty">{dismissedRegion.empty}</p>
+          )}
+
+          {dismissedRegion.items ? (
+            <ul className="board-list" data-testid="dismissed-list">
+              {dismissedCards.map((card) => (
+                <li key={card.id}>
+                  <BulletinCard
+                    card={card}
+                    now={now}
+                    onOpen={(opened) => {
+                      setOpenBulletinId(opened.id);
+                    }}
+                  />
                 </li>
               ))}
             </ul>
           ) : null}
         </>
+      ) : (
+        <>
+          <BoardSearch
+            search={search}
+            onSearchChange={setSearch}
+            filter={filter}
+            onFilterChange={setFilter}
+            // ⚠ Bulletins matched, not rows on screen: a search never reaches a note, so
+            // counting them would report matches against a query they were never tested by.
+            matchCount={board.isSuccess ? visible.length : null}
+            saving={saveView.isPending}
+            // ⚠ The *settled* query, not the raw field. `BoardSearch` knows a query is being
+            // typed; only this route knows whether one has composed yet, because only it holds
+            // the debounce. Without this the control is live for ~250ms doing nothing.
+            settledQueryActive={queryActive}
+            onSave={() => {
+              if (query === undefined) {
+                return;
+              }
+              setSavedNotice(null);
+              saveView.mutate({ name: seedSavedViewName(query), sourceText: query });
+            }}
+          />
+
+          {/*
+           * ⚠ **Persistent, not a toast.** Every other confirmation on this app borrows the
+           * comp's `say()` pill, which fades after 2400ms — right for "Posted", wrong here.
+           * The comp has no failure state at all (`sendReport` cannot fail against a mock),
+           * so nothing is being contradicted; but a notice that leaves on its own is one a
+           * person can miss, and missing it returns them to believing a report was filed.
+           * It goes when they say so, or when the retry succeeds.
+           */}
+          {hideFailure === null ? null : (
+            <div className="hide-failure" role="alert" data-testid="hide-failure">
+              <p className="hide-failure__message">{hideFailure.message}</p>
+
+              {/*
+               * The retry is `screens.css`'s own `button--quiet` — the app's pill for a
+               * row-level action, borrowed rather than restyled. It re-sends `failedHide`,
+               * the exact request react-query held onto, so the reporter's account of what
+               * happened goes again without being retyped.
+               */}
+              <div className="hide-failure__actions">
+                {/* Absent, not dimmed, when a retry cannot work — see `hide-failure.ts`. */}
+                {hideFailure.retryable && failedHide !== null ? (
+                  <button
+                    className="button button--quiet"
+                    data-testid="hide-failure-retry-button"
+                    type="button"
+                    onClick={() => {
+                      hide.mutate(failedHide);
+                    }}
+                  >
+                    Try again
+                  </button>
+                ) : null}
+
+                <button
+                  className="hide-failure__dismiss"
+                  data-testid="hide-failure-dismiss-button"
+                  type="button"
+                  onClick={() => {
+                    hide.reset();
+                  }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/*
+           * `screen__notice` rather than a new class: this is the shared "small line of prose
+           * under the controls" treatment, and a second one would be a second thing to keep
+           * in sync.
+           */}
+          {savedNotice === null ? null : (
+            <p className="screen__notice" data-testid="board-save-view-notice" role="status">
+              {savedNotice}
+            </p>
+          )}
+
+          {region.boardError ? (
+            <p className="form__error" data-testid="board-error">
+              {boardErrorMessage(board.error)}
+            </p>
+          ) : (
+            <>
+              {/*
+               * `.form__error`, sitting beside the refused-query line above and reading the
+               * same way, because it is the same kind of thing: a read that did not answer.
+               * `role="status"` rather than `alert` — the bulletins under it are still worth
+               * reading, and this is not an interruption.
+               */}
+              {region.notesFailure === null ? null : (
+                <p className="form__error" data-testid="board-notes-error" role="status">
+                  {region.notesFailure}
+                </p>
+              )}
+
+              {region.empty === null ? null : <p className="screen__empty">{region.empty}</p>}
+
+              {region.items ? (
+                <ul className="board-list">
+                  {items.map((item) => (
+                    <li key={item.key}>
+                      {item.kind === 'note' ? (
+                        /* No `onOpen`: a note carries its whole text on the card and there is
+                           no `notes.getById` to open — see `notes/note-card.tsx`. */
+                        <NoteCard note={item.note} now={now} />
+                      ) : (
+                        <BulletinCard
+                          card={item.card}
+                          now={now}
+                          onOpen={(opened) => {
+                            setOpenBulletinId(opened.id);
+                          }}
+                        />
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
+          )}
+        </>
       )}
 
       {/*
-       * Keyed off the card still being on screen rather than off the id alone: a
-       * bulletin dismissed from inside the sheet leaves `visible`, `openCard` becomes
-       * null, and the sheet closes itself instead of describing something that is gone.
+       * Keyed off the card still being in whichever list is on screen rather than off the
+       * id alone: a bulletin dismissed from inside the sheet leaves `visible`, and one put
+       * back leaves `dismissedCards` — either way `openCard` becomes null and the sheet
+       * closes itself instead of describing something that is no longer there.
        */}
       {openCard === null ? null : (
         <BulletinDetailSheet
@@ -495,18 +720,28 @@ export function BoardRoute(): JSX.Element {
             closeSheet();
             void archive(card);
           }}
-          onDismiss={(card) => {
-            hideBulletin(card.id, { bulletinId: card.id });
-          }}
           /*
-           * Reporting no longer fires on the button. It opens the sheet that asks what
-           * kind and what happened, because a report with no reason is a row the
-           * stewards cannot act on (`design/Playa Post.dc.html:337-356`).
+           * One control, two directions (#170). In the Dismissed category the sheet offers
+           * the way back instead of the way out — offering both would let somebody dismiss
+           * something that is already dismissed, which the server converges but the screen
+           * would render as nothing happening.
            */
-          onReport={(card) => {
-            closeSheet();
-            setReporting(card);
-          }}
+          {...(showingDismissed
+            ? {
+                onUndismiss: (card: BoardCardView) => {
+                  closeSheet();
+                  undismiss.mutate({ bulletinId: card.id });
+                },
+              }
+            : {
+                onDismiss: (card: BoardCardView) => {
+                  hideBulletin(card.id, { bulletinId: card.id });
+                },
+                onReport: (card: BoardCardView) => {
+                  closeSheet();
+                  setReporting(card);
+                },
+              })}
         />
       )}
 

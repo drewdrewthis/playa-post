@@ -4,16 +4,22 @@ import { ApplicationError } from '../../../shared/errors/application-error';
 import { authenticatedProcedure, router } from '../../../shared/trpc/trpc';
 import type { DismissBulletinService } from '../application/dismiss-bulletin.service';
 import type { ReportBulletinService } from '../application/report-bulletin.service';
+import type { UndismissBulletinService } from '../application/undismiss-bulletin.service';
 import { ModerationTargetUnavailableError } from '../domain/moderation.errors';
 
 import { presentHiddenBulletin, type PresentedHiddenBulletin } from './hidden-bulletin.presenter';
 import { moderationReportInput } from './moderation-report.input';
 import { moderationTargetInput } from './moderation-target.input';
+import {
+  presentRestoredBulletin,
+  type PresentedRestoredBulletin,
+} from './restored-bulletin.presenter';
 
 /** The application operations this router speaks for. One use case, one procedure. */
 export interface ModerationRouterDependencies {
   readonly reportBulletin: ReportBulletinService;
   readonly dismissBulletin: DismissBulletinService;
+  readonly undismissBulletin: UndismissBulletinService;
 }
 
 /**
@@ -59,19 +65,25 @@ async function present<T>(operation: () => Promise<T>): Promise<T> {
 /**
  * The moderation module's tRPC surface.
  *
- * **Two procedures, both writes, and no read.** There is deliberately no
- * `moderation.list`, no "what have I reported", and no board of its own: the only
- * observable effect of either operation is a bulletin's absence from
- * `bulletins.board`, and a second read surface would be a second place for the
- * exclusion to be computed — and, for reports, a surface an author might one day be
- * pointed at (M2-AC10, B9).
+ * **Three procedures, all writes, and still no read.** There is deliberately no
+ * `moderation.list` and no "what have I reported": a second read surface would be a
+ * second place for the board exclusion to be computed — and, for reports, a surface an
+ * author might one day be pointed at (M2-AC10, B9).
+ *
+ * ⚠ The Dismissed category (#170) does **not** change that. It is
+ * `bulletins.dismissed`, served by the module that owns bulletin content and the
+ * authorized read it comes from; this module only answers *which* bulletins a viewer
+ * dismissed, through a port, and never which ones they reported. Putting the category
+ * here would have meant either a read of `app.bulletins` from this module — a second
+ * answer to "what may this viewer see" (ADR-0002 §6) — or a list surface one field away
+ * from also carrying reports.
  *
  * **No procedure takes an identifier for its caller.** `report` takes a bulletin, a
- * reason and an account; `dismiss` takes a bulletin and nothing else; neither takes a
- * reporter — the acting viewer is `ctx.actor.userId` (ADR-0002:180-181, B14).
+ * reason and an account; `dismiss` and `undismiss` take a bulletin and nothing else; none
+ * takes a reporter — the acting viewer is `ctx.actor.userId` (ADR-0002:180-181, B14).
  *
  * Every procedure is `authenticatedProcedure`: each writes state attached to one actor
- * and changes what exactly one board shows, so there is no version of either a
+ * and changes what exactly one board shows, so there is no version of any of them a
  * signed-out caller could sensibly be given.
  */
 export function createModerationRouter(dependencies: ModerationRouterDependencies) {
@@ -107,6 +119,9 @@ export function createModerationRouter(dependencies: ModerationRouterDependencie
     /**
      * Take a bulletin off your own board. Viewer-local and nothing else (M2-AC11):
      * no effect on the bulletin, its author, or any other viewer.
+     *
+     * It is not gone — it moves to the Dismissed category, readable at
+     * `bulletins.dismissed` and reversible with `undismiss` (#170).
      */
     dismiss: authenticatedProcedure
       .input(moderationTargetInput)
@@ -114,6 +129,33 @@ export function createModerationRouter(dependencies: ModerationRouterDependencie
         present(async () =>
           presentHiddenBulletin(
             await dependencies.dismissBulletin.dismiss({
+              actorId: ctx.actor.userId,
+              bulletinId: input.bulletinId,
+            }),
+          ),
+        ),
+      ),
+
+    /**
+     * Put a bulletin you dismissed back on your own board (#170). Viewer-local, the same
+     * way dismissing is.
+     *
+     * Idempotent in both directions: un-dismissing something you never dismissed
+     * succeeds and changes nothing, because the state you asked for already holds.
+     *
+     * ⚠ **It withdraws a dismissal, never a report.** A bulletin you also reported stays
+     * off your board afterwards — reporting says something about the bulletin, and taking
+     * that back is a different act this procedure does not perform.
+     *
+     * Takes the same input as `dismiss` and answers a shape one field shorter: there is
+     * no `hiddenAt` on a row that no longer exists.
+     */
+    undismiss: authenticatedProcedure
+      .input(moderationTargetInput)
+      .mutation(async ({ ctx, input }): Promise<PresentedRestoredBulletin> =>
+        present(async () =>
+          presentRestoredBulletin(
+            await dependencies.undismissBulletin.undismiss({
               actorId: ctx.actor.userId,
               bulletinId: input.bulletinId,
             }),

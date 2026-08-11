@@ -243,6 +243,113 @@ test.describe('The M2 vertical slice, end to end (vertical-slice-e2e.feature, M2
   });
 });
 
+/**
+ * The Dismissed category's round trip (#170,
+ * `specs/features/moderation-report-dismiss.feature`).
+ *
+ * Sibling of the eleven-step slice rather than a twelfth step: that test's step names are
+ * its feature table's, verbatim, and this is a different feature. It picks up where step
+ * 10 stops — a dismissal is where that flow leaves the bulletin, and the thing only a
+ * browser can prove is that the category is reachable from the board, holds the bulletin,
+ * and gives it back. The server halves are
+ * `modules/moderation/tests/integration/dismissed-category.integration.test.ts`.
+ *
+ * Three data-testids beyond the contract table above, none of them part of it:
+ * `board-view-dismissed` and `board-view-board` (the two-view toggle, which writes and
+ * clears `?view=`), and `bulletin-undismiss-button` inside `bulletin-detail-sheet` (the
+ * category's one action, where a board card offers dismiss and report).
+ *
+ * Users A and B are already connected by `global-setup.ts`, so this stands on its own
+ * rather than on the eleven steps above having run first.
+ */
+test.describe('The Dismissed category, end to end (moderation-report-dismiss.feature, #170)', () => {
+  /** Distinctive enough to find this suite's own card on a board every other spec posts to. */
+  const BULLETIN_TITLE = 'Spare goggles at the greeter station';
+
+  test('A dismissed bulletin is browsable under Dismissed, and can be put back', async ({
+    browser,
+  }) => {
+    const contextA = await browser.newContext();
+    const contextB = await browser.newContext();
+    const pageA = await contextA.newPage();
+    const pageB = await contextB.newPage();
+
+    try {
+      let bulletinId = '';
+
+      await test.step('User A posts a bulletin User B can see', async () => {
+        await bootstrapSession(pageA, requireEnv('E2E_USER_A_ACCESS_TOKEN'));
+        await pageA.goto('/board');
+        await pageA.getByTestId('compose-bulletin-button').click();
+        await pageA.getByTestId('compose-bulletin-type-select').selectOption('request');
+        await pageA.getByTestId('compose-bulletin-title-input').fill(BULLETIN_TITLE);
+        await pageA.getByTestId('compose-bulletin-body-input').fill('Two spare pairs, unused.');
+        await pageA.getByTestId('compose-bulletin-submit-button').click();
+
+        // By content rather than by list position: this board carries everything every
+        // other spec has posted, so `.first()` would lean on a newest-first sort
+        // surviving a same-millisecond tie-break.
+        const composed = pageA
+          .locator('[data-testid^="board-bulletin-card-"]')
+          .filter({ hasText: BULLETIN_TITLE });
+        await expect(composed).toBeVisible();
+        bulletinId = ((await composed.getAttribute('data-testid')) ?? '').replace(
+          'board-bulletin-card-',
+          '',
+        );
+        expect(bulletinId).not.toBe('');
+      });
+
+      await test.step('User B dismisses it and it leaves their board', async () => {
+        await bootstrapSession(pageB, requireEnv('E2E_USER_B_ACCESS_TOKEN'));
+        await pageB.goto('/board');
+        const card = pageB.getByTestId(`board-bulletin-card-${bulletinId}`);
+        await expect(card).toBeVisible();
+
+        await card.getByTestId('bulletin-open-button').click();
+        await pageB
+          .getByTestId('bulletin-detail-sheet')
+          .getByTestId('bulletin-dismiss-button')
+          .click();
+        await expect(card).toBeHidden();
+      });
+
+      await test.step('The Dismissed category holds it', async () => {
+        await pageB.getByTestId('board-view-dismissed').click();
+        await expect(
+          pageB.getByTestId('dismissed-list').getByTestId(`board-bulletin-card-${bulletinId}`),
+        ).toBeVisible();
+      });
+
+      await test.step('Putting it back empties the category and returns it to the board', async () => {
+        await pageB
+          .getByTestId('dismissed-list')
+          .getByTestId(`board-bulletin-card-${bulletinId}`)
+          .getByTestId('bulletin-open-button')
+          .click();
+        await pageB
+          .getByTestId('bulletin-detail-sheet')
+          .getByTestId('bulletin-undismiss-button')
+          .click();
+
+        // ⚠ Scoped to this bulletin rather than asserting the whole category is empty.
+        // Every spec in this suite shares one database and one User B, so anything another
+        // spec dismissed is legitimately still here — an emptiness claim would be a claim
+        // about them. The locator passes whether the row went or the `<ul>` did.
+        await expect(
+          pageB.getByTestId('dismissed-list').getByTestId(`board-bulletin-card-${bulletinId}`),
+        ).toBeHidden();
+
+        await pageB.getByTestId('board-view-board').click();
+        await expect(pageB.getByTestId(`board-bulletin-card-${bulletinId}`)).toBeVisible();
+      });
+    } finally {
+      await contextA.close();
+      await contextB.close();
+    }
+  });
+});
+
 function requireEnv(name: string): string {
   const value = process.env[name];
   if (value === undefined || value === '') {

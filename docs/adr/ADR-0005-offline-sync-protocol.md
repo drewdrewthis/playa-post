@@ -92,7 +92,8 @@ Dependent envelopes whose predecessor failed return `rejected` / `PRECONDITION_F
 | `bulletin.create` | no | Idempotent on `mutationId`. Duplicate → one bulletin, `replayed`. |
 | `bulletin.update` | **yes** | Version mismatch → `conflict` with `currentVersion` + `currentState`; client shows both, user picks. Never last-write-wins. |
 | `bulletin.archive` | no | Idempotent — already archived → `applied` (terminal, converging). |
-| `bulletin.dismiss` | no | Viewer-local, idempotent, converging. |
+| `bulletin.dismiss` | no | Viewer-local, idempotent, converging. Not terminal — the bulletin moves to the viewer's Dismissed category and `bulletin.undismiss` reverses it. |
+| `bulletin.undismiss` | no | Viewer-local, idempotent, converging — the exact inverse of `bulletin.dismiss`, and deliberately not version-bearing: it deletes the viewer's own dismissal row, so there is no shared state for two devices to disagree about. Already un-dismissed (or never dismissed) → `applied` no-op. A bulletin that has since been archived or become unreachable → `rejected` / `MODERATION_TARGET_UNAVAILABLE`, the same refusal `bulletin.dismiss` gets, because both ask the same authorization question. **Withdraws a dismissal only**: a bulletin the viewer also reported stays hidden, and no envelope of this type ever touches `app.bulletin_reports`. |
 | `bulletin.report` | no | Idempotent on `mutationId`; a second distinct report of the same bulletin by the same reporter → `applied` no-op (one open report per reporter/bulletin). |
 | `connection.invite` | no | Idempotent on `mutationId`. |
 | `connection.accept` | no | Invitation withdrawn/expired/revoked → `rejected` / `INVITATION_UNAVAILABLE`. Already accepted → `applied`. Blocked → `rejected` / `BLOCKED`. |

@@ -16,6 +16,7 @@ at all. Nothing here needs `pnpm db:start`.
 | `integration/` | `board-visibility-query.integration.test.ts` | `board-visibility-query.feature` — two `@e2e` (API-level) + two `@integration` (M2-AC1/AC5/AC14) |
 | `integration/` | `bulletin-post-types.integration.test.ts` | `bulletin-post-types.feature` — one `@e2e` (API-level) + three `@integration` (#87: six-type round-trip, `type:` narrowing, `update` empty-not-error, update/note refusal) |
 | `unit/` | `visible-bulletins-sql-composition.unit.test.ts` | the checked-in `persistence/sql/visible-bulletins.sql` composes `app.visible_people` and never joins `app.connections` |
+| `unit/` | `list-dismissed-bulletins.unit.test.ts` | `moderation-report-dismiss.feature` (#170) — the Dismissed category's composition rule: dismissal order restored over an order-free authorized read, a dismissed bulletin the viewer may no longer see dropped, and the identifier read bounded by `BOARD_PAGE_SIZE` |
 
 The grammar's four `@unit` scenarios live in `modules/views/tests/unit/` instead — the
 grammar is views' (ADR-0007: one grammar, three consumers), and this module is only its

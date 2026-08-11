@@ -14,6 +14,7 @@ export const MUTATION_TYPES = [
   'bulletin.archive',
   'bulletin.report',
   'bulletin.dismiss',
+  'bulletin.undismiss',
   'connection.accept',
   'trust.set',
   'notifyMe.update',

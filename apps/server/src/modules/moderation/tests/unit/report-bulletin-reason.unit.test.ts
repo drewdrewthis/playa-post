@@ -13,6 +13,7 @@ import type {
   ReportBulletinWrite,
 } from '../../domain/moderation.repository';
 import { REPORT_REASON } from '../../domain/report-reason';
+import type { RestoredBulletin } from '../../domain/restored-bulletin';
 
 /**
  * The reason a reporter gives has to survive the whole way to the repository — and it
@@ -46,6 +47,15 @@ function fakeModeration(): ModerationRepository & { readonly writes: ReportBulle
     },
     findHiddenFor(): Promise<ReadonlySet<string>> {
       return Promise.resolve(new Set());
+    },
+    undismiss(write: HideBulletinWrite): Promise<RestoredBulletin> {
+      return Promise.resolve({
+        bulletinId: write.bulletinId,
+        viewerId: write.viewerId,
+      });
+    },
+    findDismissedFor(): Promise<readonly string[]> {
+      return Promise.resolve([]);
     },
   };
 }

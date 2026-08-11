@@ -54,13 +54,37 @@ export function BulletinDetailSheet({
   onArchive,
   onDismiss,
   onReport,
+  onUndismiss,
 }: {
   readonly card: BoardCardView;
   readonly now: Date;
   readonly onClose: () => void;
   readonly onArchive: (card: BoardCardView) => void;
-  readonly onDismiss: (card: BoardCardView) => void;
-  readonly onReport: (card: BoardCardView) => void;
+  /**
+   * Take it off my board. Absent in the Dismissed category, where it is already off.
+   *
+   * ⚠ **Optional together with {@link onReport}, and mutually exclusive with
+   * {@link onUndismiss}** — the caller passes one direction or the other, never both.
+   * Offering both would let somebody dismiss what is already dismissed: the server
+   * converges on that, so nothing would appear to happen, which reads as a broken button.
+   */
+  readonly onDismiss?: (card: BoardCardView) => void;
+  readonly onReport?: (card: BoardCardView) => void;
+  /**
+   * Put it back on my board (#170) — the Dismissed category's way out.
+   *
+   * ⚠ **Its presence is what tells this sheet it is being opened from that category**, so
+   * it outranks every other action here, including an author's own Remove: a viewer may
+   * dismiss their own post, and one opened from the Dismissed category still needs the way
+   * back rather than a second way out.
+   *
+   * ⚠ **There is deliberately no un-report beside it.** Reporting says something about
+   * the bulletin that the stewards act on; withdrawing that is a different decision the
+   * server does not offer (M5). A viewer who both reported and dismissed something can
+   * un-dismiss it and will still not see it, which is correct — and is why this sheet
+   * never claims the bulletin is coming back, only that it is no longer dismissed.
+   */
+  readonly onUndismiss?: (card: BoardCardView) => void;
 }): JSX.Element {
   const api = useApi();
   const titleId = useId();
@@ -122,8 +146,10 @@ export function BulletinDetailSheet({
 
   /*
    * `BULLETIN_GONE` and a dead connection are two different answers and get two
-   * different treatments. Gone means archived, dismissed, or no longer reachable, and
-   * the copy on screen is genuinely stale — say so. A transport failure means the
+   * different treatments. Gone means archived or no longer reachable — dismissal is
+   * not on that list: it never revokes visibility, so a card opened from the Dismissed
+   * category still reads fine here. When gone does arrive, the copy on screen is
+   * genuinely stale — say so. A transport failure means the
    * server said nothing at all, and announcing "no longer on your board" would turn a
    * tunnel into a deletion.
    */
@@ -295,7 +321,37 @@ export function BulletinDetailSheet({
         )}
 
         <div className="detail-sheet__actions">
-          {card.own ? (
+          {onUndismiss !== undefined ? (
+            /*
+             * The Dismissed category's one action (#170).
+             *
+             * ⚠ **Ahead of the author's own Remove, deliberately.** A viewer may dismiss
+             * their own post, so an own bulletin reaches this sheet from the Dismissed
+             * category too — and there the only thing to offer is the way out of the
+             * category. Removing a post one is not currently being shown is a board
+             * action, and putting it back is what gets somebody to the board.
+             *
+             * ⚠ **"Put back on my board", not "Undo".** Undo describes the gesture; this
+             * describes the outcome, and the outcome is the part a person is deciding
+             * about. It is also the honest wording for a viewer who also reported the
+             * bulletin: the dismissal really is withdrawn, whether or not the card
+             * reappears.
+             *
+             * No Report beside it. Somebody looking at their own dismissals is tidying,
+             * not moderating, and a report filed from here would be one filed without the
+             * sheet that asks what happened.
+             */
+            <button
+              className="button"
+              data-testid="bulletin-undismiss-button"
+              type="button"
+              onClick={() => {
+                onUndismiss(card);
+              }}
+            >
+              Put back on my board
+            </button>
+          ) : card.own ? (
             <button
               className="button button--danger"
               data-testid="bulletin-archive-button"
@@ -312,16 +368,21 @@ export function BulletinDetailSheet({
             </button>
           ) : (
             <>
-              <button
-                className="button"
-                data-testid="bulletin-dismiss-button"
-                type="button"
-                onClick={() => {
-                  onDismiss(card);
-                }}
-              >
-                Dismiss
-              </button>
+              {onDismiss === undefined ? null : (
+                <button
+                  className="button"
+                  data-testid="bulletin-dismiss-button"
+                  type="button"
+                  onClick={() => {
+                    onDismiss(card);
+                  }}
+                >
+                  {/* Not "Remove" — that is the author's word for their own post, and
+                      dismissing removes nothing. It moves the bulletin to this viewer's
+                      Dismissed category, where `onUndismiss` above brings it back. */}
+                  Dismiss
+                </button>
+              )}
 
               {/*
                * ⚠ Dismiss acts; report *asks*. `onReport` opens the report sheet
@@ -330,16 +391,18 @@ export function BulletinDetailSheet({
                * one filed by a single tap carries nothing for them to act on. Nothing is
                * sent from this button.
                */}
-              <button
-                className="button button--danger"
-                data-testid="bulletin-report-button"
-                type="button"
-                onClick={() => {
-                  onReport(card);
-                }}
-              >
-                Report abuse
-              </button>
+              {onReport === undefined ? null : (
+                <button
+                  className="button button--danger"
+                  data-testid="bulletin-report-button"
+                  type="button"
+                  onClick={() => {
+                    onReport(card);
+                  }}
+                >
+                  Report abuse
+                </button>
+              )}
             </>
           )}
         </div>

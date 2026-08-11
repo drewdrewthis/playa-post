@@ -6,6 +6,7 @@ import type {
   ModerationRepository,
   ReportBulletinWrite,
 } from '../domain/moderation.repository';
+import type { RestoredBulletin } from '../domain/restored-bulletin';
 
 /** Everything the repository needs, injected (addendum §12). */
 export interface PostgresModerationRepositoryDependencies {
@@ -112,6 +113,49 @@ export function createPostgresModerationRepository(
         .executeTakeFirstOrThrow();
 
       return { bulletinId: write.bulletinId, viewerId: write.viewerId, hiddenAt: existing.created_at };
+    },
+
+    async undismiss(write: HideBulletinWrite): Promise<RestoredBulletin> {
+      // Scoped to this viewer's own row by `viewer_id`, which is where the authorization
+      // for this operation actually lives: whatever `bulletin_id` names, the statement
+      // can only reach a row this actor wrote. `occurredAt` is unused — a delete has
+      // nothing to stamp — and the caller still passes it because
+      // `HideBulletinWrite` is the shape every viewer-local write in this module takes.
+      //
+      // ⚠ `app.bulletin_reports` is deliberately untouched. A viewer who reported this
+      // bulletin as well keeps it off their board; withdrawing a report is a different
+      // decision (M5) and must never be a side effect of this one.
+      //
+      // No `returning`, and no read of what was deleted: whether a row was there is not a
+      // distinction this operation reports (see `RestoredBulletin`), so asking would only
+      // produce a value the caller must then decide to ignore.
+      await database
+        .deleteFrom('app.bulletin_dismissals')
+        .where('bulletin_id', '=', write.bulletinId)
+        .where('viewer_id', '=', write.viewerId)
+        .execute();
+
+      return { bulletinId: write.bulletinId, viewerId: write.viewerId };
+    },
+
+    async findDismissedFor(viewerId: string, limit: number): Promise<readonly string[]> {
+      // ⚠ `app.bulletin_dismissals` alone. `findHiddenFor` below unions the reports table
+      // because the board does not care which one hid a bulletin; here the union would be
+      // the browsable report list M2-AC10/B9 exists to prevent.
+      //
+      // `created_at desc` is the dismissal order the Dismissed category reads in, with
+      // `bulletin_id desc` breaking ties so two dismissals written in the same statement
+      // do not swap places between reads.
+      const rows = await database
+        .selectFrom('app.bulletin_dismissals')
+        .select('bulletin_id')
+        .where('viewer_id', '=', viewerId)
+        .orderBy('created_at', 'desc')
+        .orderBy('bulletin_id', 'desc')
+        .limit(limit)
+        .execute();
+
+      return rows.map((row) => row.bulletin_id);
     },
 
     async findHiddenFor(viewerId: string): Promise<ReadonlySet<string>> {

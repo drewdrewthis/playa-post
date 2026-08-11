@@ -49,7 +49,11 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  its components, its own <feature>.css, and any pure logic worth unit-testing on its
                  own (src/app/bulletins/
                  is the board: card, detail sheet, search bar, the query builder and the relative-time
-                 formatter; src/app/graph/ is the network canvas: graph-layout.ts seeded from person
+                 formatter, plus dismissed-view.ts — the Dismissed category's pure decisions (#170):
+                 which of the board's two lists `?view=` names, what an unanswered dismissed read may
+                 claim, and how a failed un-dismissal reads. A view rather than a filter chip, because
+                 BOARD_FILTER_CHIPS is closed over BulletinType and every member compiles into a `type:`
+                 term a saved view could store; src/app/graph/ is the network canvas: graph-layout.ts seeded from person
                  ids, graph-viewport.ts pan/zoom arithmetic, graph-node-identity.ts §6a for dots,
                  graph-counts.ts, graph-network.tsx, graph-viz.css; src/app/moderation/ is the report
                  sheet and what the board says when a hide fails: report-abuse-draft.ts holds the

@@ -3,6 +3,7 @@ import type { DatabaseConnection } from '@playa-post/database';
 import { createDismissBulletinService } from './application/dismiss-bulletin.service';
 import type { FindVisibleBulletin } from './application/find-visible-bulletin';
 import { createReportBulletinService } from './application/report-bulletin.service';
+import { createUndismissBulletinService } from './application/undismiss-bulletin.service';
 import type { ModerationRepository } from './domain/moderation.repository';
 import { createPostgresModerationRepository } from './persistence/postgres-moderation.repository';
 import { createModerationRouter, type ModerationRouter } from './transport/moderation.router';
@@ -56,6 +57,24 @@ export function createHiddenBulletins(
 }
 
 /**
+ * The Dismissed category's identifier read, on its own — the port
+ * `modules/bulletins`' `bulletins.dismissed` consumes to learn *which* bulletins this
+ * viewer dismissed (#170).
+ *
+ * **A third entry point rather than a wider {@link createHiddenBulletins}, because the
+ * two reads must not be interchangeable.** `findHiddenFor` unions reports and dismissals;
+ * this returns dismissals alone. Handing a caller an object that answers both makes
+ * picking the wrong one a typo, and the wrong one here is a browsable list of what the
+ * viewer reported — the surface M2-AC10/B9 exists to prevent. Two narrow return types mean
+ * the compiler refuses the mistake instead of a reviewer having to catch it.
+ */
+export function createDismissedBulletins(
+  dependencies: HiddenBulletinsDependencies,
+): Pick<ModerationRepository, 'findDismissedFor'> {
+  return createPostgresModerationRepository({ database: dependencies.database });
+}
+
+/**
  * Wire the moderation module.
  *
  * **This file is the module's only wiring point**, the same shape
@@ -81,6 +100,7 @@ export function createModerationModule(
     router: createModerationRouter({
       reportBulletin: createReportBulletinService({ moderation, findVisibleBulletin }),
       dismissBulletin: createDismissBulletinService({ moderation, findVisibleBulletin }),
+      undismissBulletin: createUndismissBulletinService({ moderation, findVisibleBulletin }),
     }),
   };
 }
