@@ -4,6 +4,7 @@ import {
   BOARD_FILTER_CHIPS,
   isBoardQueryActive,
   matchCountLabel,
+  toggleBoardType,
   type BoardTypeFilter,
 } from './board-query';
 
@@ -173,20 +174,26 @@ export function BoardSearch({
       ) : null}
 
       <div className="board-search__chips" role="group" aria-label="Filter by type">
-        {BOARD_FILTER_CHIPS.map((chip) => (
-          <button
-            key={chip.filter}
-            className="board-search__chip"
-            data-testid={`board-filter-chip-${chip.filter}`}
-            type="button"
-            aria-pressed={chip.filter === filter}
-            onClick={() => {
-              onFilterChange(chip.filter);
-            }}
-          >
-            {chip.label}
-          </button>
-        ))}
+        {BOARD_FILTER_CHIPS.map((chip) => {
+          // "All" is pressed exactly when nothing else is — it is not itself a member
+          // of `filter`, so it cannot be found by `.includes()` the way a type chip is.
+          const pressed = chip.filter === 'all' ? filter.length === 0 : filter.includes(chip.filter);
+
+          return (
+            <button
+              key={chip.filter}
+              className="board-search__chip"
+              data-testid={`board-filter-chip-${chip.filter}`}
+              type="button"
+              aria-pressed={pressed}
+              onClick={() => {
+                onFilterChange(toggleBoardType(filter, chip.filter));
+              }}
+            >
+              {chip.label}
+            </button>
+          );
+        })}
       </div>
     </form>
   );

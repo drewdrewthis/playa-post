@@ -6,22 +6,22 @@ import { BULLETIN_TYPE, type BulletinType } from '@playa-post/contracts';
  * **There is no client-side grammar here, and there must never be one.** The board
  * query language is compiled server-side by `parseBoardQuery`, which refuses an
  * unimplemented token *naming it* rather than ignoring it (ADR-0007:53-56). The client
- * may *read* a query to reflect its own UI state — which chip is selected, what is left
+ * may *read* a query to reflect its own UI state — which chips are selected, what is left
  * in the search box — but must never rewrite, drop, or locally evaluate a term the
  * server would interpret differently. A client that did would show a person results
  * they did not ask for and give them no way to tell.
  *
- * `parseBoardQueryState` reads a `type:` term out into `filter`, and `buildBoardQuery`
- * puts it back — the round trip is lossless, so nothing the server ever sees changes
- * meaning; only where the term is *displayed* (chip vs. search box) changes.
+ * `parseBoardQueryState` reads the `type:` term(s) out into `filter`, and
+ * `buildBoardQuery` puts them back — lossless in meaning: the rebuilt query re-parses to
+ * the same state; term order and spacing may normalise.
  */
 
-/** The chip row's selection: every type, or one of them. */
-export type BoardTypeFilter = 'all' | BulletinType;
+/** The chip row's selection: zero or more types. Empty means no type restriction. */
+export type BoardTypeFilter = readonly BulletinType[];
 
 /** One chip in the board's filter row. */
 export interface BoardFilterChip {
-  readonly filter: BoardTypeFilter;
+  readonly filter: 'all' | BulletinType;
   readonly label: string;
 }
 
@@ -63,22 +63,36 @@ export const BOARD_FILTER_CHIPS: readonly BoardFilterChip[] = [
 ];
 
 /**
- * Compile the chip and the typed text into `bulletins.board`'s `query`.
+ * `types`, deduplicated and ordered to match {@link BULLETIN_TYPE}'s own declaration
+ * order — `buildBoardQuery`'s canonical `type:` value order, so which order chips were
+ * clicked in never changes the compiled query.
+ */
+function canonicalTypeOrder(types: BoardTypeFilter): readonly BulletinType[] {
+  const selected = new Set(types);
+  return Object.values(BULLETIN_TYPE).filter((type) => selected.has(type));
+}
+
+/**
+ * Compile the selected chips and the typed text into `bulletins.board`'s `query`.
  *
- * The chip is sugar over the grammar's own `type:` term rather than a second filter
- * mechanism — exactly how the comp composes it (`fullQ = 'type:' + filter + ' ' +
- * query`). One filter, one place it is applied, and the server remains the only thing
- * that decides what a query means.
+ * Chips are sugar over the grammar's own `type:` term rather than a second filter
+ * mechanism: more than one selected type becomes one `type:` term, OR'ed
+ * (`type:a|b`) — ADR-0007's own alternation production, not a client invention. One
+ * filter, one place it is applied, and the server remains the only thing that decides
+ * what a query means.
  *
- * @param filter - The selected chip.
+ * @param filter - The selected chips, in any order — canonicalised before compiling, so
+ *   selection order never changes the query.
  * @param search - Whatever the person typed, unedited.
  * @returns The query string, or `undefined` for the unfiltered board. `undefined`
  *   rather than `''`: an empty string is a query the server would parse, and the
  *   default board is the absence of one.
  */
 export function buildBoardQuery(filter: BoardTypeFilter, search: string): string | undefined {
+  const types = canonicalTypeOrder(filter);
+
   const terms = [
-    ...(filter === 'all' ? [] : [`type:${filter}`]),
+    ...(types.length === 0 ? [] : [`type:${types.join('|')}`]),
     // Split-and-rejoin, not `trim()`: the server counts whitespace-separated terms
     // against a 16-term limit, so a double space here spends nothing but reads as two.
     ...search.split(/\s+/u).filter((term) => term.length > 0),
@@ -115,47 +129,51 @@ function isBulletinType(value: string): value is BulletinType {
   return (Object.values(BULLETIN_TYPE) as readonly string[]).includes(value);
 }
 
-/** `parseBoardQueryState`'s result: the chip a query selects, paired with the rest of it. */
+/**
+ * `values`, narrowed to {@link BulletinType}s when every one is chip-backed and there is
+ * at least one; `null` when any value has no chip (including no values at all).
+ */
+function recognizedTypes(values: readonly string[]): readonly BulletinType[] | null {
+  return values.length > 0 && values.every(isBulletinType) ? values : null;
+}
+
+/** `parseBoardQueryState`'s result: the chips a query selects, paired with the rest of it. */
 export interface BoardQueryState {
   readonly filter: BoardTypeFilter;
   readonly search: string;
 }
 
 /**
- * Recover both the chip a query's `type:` term selects and the search text that chip
- * does not already cover — `buildBoardQuery`'s inverse, as one pass over the query
- * rather than two independent ones.
+ * Recover the chips a query's `type:` term(s) select and the search text they do not
+ * already cover — `buildBoardQuery`'s inverse. `filter` and `search` come from this one
+ * function together, deliberately: deriving them from two separate reads of the same
+ * query text is how a saved `type:` term once ended up counted twice — recovered as a
+ * chip by one read, left sitting in the search box by the other, for `buildBoardQuery`
+ * to add back a second time.
  *
- * Opening a saved view navigates straight to `/board?q=<source text>` (#173); this is
- * what lets the board's chip row show the term the saved text already carries instead of
- * resetting to "All" underneath it. Deriving `filter` and `search` from two separate
- * calls — the whole query text for one, a parse of the same text for the other — let a
- * saved `type:` term end up in both: once as the chip, once still sitting in the search
- * box for `buildBoardQuery` to add a second time. Reading them together here is what
- * keeps that impossible rather than merely untested.
+ * Populates `filter` with every value from a query's `type:` term(s) once every one of
+ * them is a chip-backed type: an OR'ed term (`type:offer|request`) and the field
+ * repeated (`type:offer type:request`) populate the same chips, because
+ * `parseBoardQuery` gives them the same AST — `queryTypeValues` flattens both shapes the
+ * same way, mirroring ADR-0007's `values` production. Every matched `type:` term is then
+ * stripped from `search`.
  *
- * Degrades to `'all'` — with `search` left **exactly as the query read it, `type:` term
- * and all** — whenever the query does not name exactly one chip-backed type: no `type:`
- * term at all, `type:update` (a real server value with no chip — see
- * {@link BOARD_FILTER_CHIPS}), an unrecognised value, or more than one value from either
- * an OR'ed term or a repeated field. Every one of those is a term this milestone's chip
- * row cannot represent, so it stays in the search box rather than being silently
- * dropped — a person who typed it still sees it, and the server still receives it
- * unchanged. That last multi-value case is unreachable from today's client — it can
- * only ever *write* one type — but the server grammar already allows several, and #171
- * turns this into the multi-select chip row; this function already tells the cases
- * apart, so that work is a change to the `'all'` branch, not a rewrite of the parsing.
+ * Degrades to `filter: []` — with `search` left **exactly as the query read it, every
+ * `type:` term and all** — whenever any value the query names is not a chip-backed type:
+ * `type:update` (a real server value with no chip — see {@link BOARD_FILTER_CHIPS}), an
+ * unrecognised value, or a mix of recognised and unrecognised values in the same query.
+ * That value is a term this chip row cannot represent, so it stays in the search box
+ * rather than being silently dropped — a person who typed it still sees it, and the
+ * server still receives it unchanged.
  *
  * @param query - A `?q=` value, exactly as the URL carries it.
- * @returns The one chip it selects (or `'all'`), and the search text alongside it.
+ * @returns The chips it selects (`[]` for none), and the search text alongside them.
  */
 export function parseBoardQueryState(query: string): BoardQueryState {
-  const values = queryTypeValues(query);
-  const [value] = values;
-  const filter = values.length === 1 && value !== undefined && isBulletinType(value) ? value : 'all';
+  const types = recognizedTypes(queryTypeValues(query));
 
-  if (filter === 'all') {
-    return { filter, search: query };
+  if (types === null) {
+    return { filter: [], search: query };
   }
 
   const search = query
@@ -163,7 +181,21 @@ export function parseBoardQueryState(query: string): BoardQueryState {
     .filter((term) => term.length > 0 && !term.startsWith('type:'))
     .join(' ');
 
-  return { filter, search };
+  return { filter: canonicalTypeOrder(types), search };
+}
+
+/**
+ * One chip's next selection state after being clicked.
+ *
+ * `'all'` always clears every type — it is not itself a member of `filter` to toggle —
+ * and a type toggles its own membership, independent of every other selected type.
+ */
+export function toggleBoardType(filter: BoardTypeFilter, clicked: 'all' | BulletinType): BoardTypeFilter {
+  if (clicked === 'all') {
+    return [];
+  }
+
+  return filter.includes(clicked) ? filter.filter((type) => type !== clicked) : [...filter, clicked];
 }
 
 /**
