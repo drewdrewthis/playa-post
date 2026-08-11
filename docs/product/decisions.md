@@ -83,7 +83,7 @@ Corollaries, recorded so the model is deliberate rather than accidental:
 - **"Cannot see" is not "not enrolled".** With no service worker registered — a `pnpm dev` run, or the seconds a fresh install spends registering one — nothing is claimed and nothing is forgotten. A settled read that answered "not enrolled" there would clear a working device's marker on a race.
 - **Unavailable storage costs a flash, never a failure.** A locked-down profile throws on `localStorage` access; every read and write is guarded, an unreadable marker reads as empty, and correctness is unaffected because the subscription is still the authority. That device pays one frame of consent copy per panel opening.
 
-## D9 — The bulletin-removal action is called "Remove"; removed bulletins stay visible to their author (2026-08-11)
+## D9 — The bulletin-removal action is called "Remove"; removed bulletins stay visible to their author (2026-08-11, owner-directed)
 
 Conflict: [#168](https://github.com/drewdrewthis/playa-post/issues/168) — the owner asked that "Archive should be remove and can be soft deleted." The action already soft-deletes (`Bulletin.archivedAt`), so only the name was wrong; but renaming reopened whether a removed bulletin should keep appearing, marked, on its author's own board.
 

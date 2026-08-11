@@ -198,27 +198,24 @@ test.describe('The M2 vertical slice, end to end (vertical-slice-e2e.feature, M2
           await contextA.setOffline(true);
           // The sheet opens offline: its `bulletins.getById` refresh fails with no
           // network, and it falls back to the copy the board was already built from —
-          // which is exactly the ADR-0005 behaviour this step exists to prove. Archive
-          // is reachable either way.
+          // which is exactly the ADR-0005 behaviour this step exists to prove. The
+          // removal action is reachable either way.
           await pageA
             .getByTestId(`board-bulletin-card-${bulletinId}`)
             .getByTestId('bulletin-open-button')
             .click();
+          const removeButton = pageA
+            .getByTestId('bulletin-detail-sheet')
+            .getByTestId('bulletin-archive-button');
           // Same evidence contract as the board capture below: only a local evidence
           // run sets the env var, and it photographs the open sheet with the removal
           // button showing before the click lands.
           const sheetShotPath = process.env['E2E_SHEET_SCREENSHOT_PATH'];
           if (sheetShotPath !== undefined && sheetShotPath !== '') {
-            const removeButton = pageA
-              .getByTestId('bulletin-detail-sheet')
-              .getByTestId('bulletin-archive-button');
             await removeButton.scrollIntoViewIfNeeded();
             await pageA.screenshot({ path: sheetShotPath, animations: 'disabled' });
           }
-          await pageA
-            .getByTestId('bulletin-detail-sheet')
-            .getByTestId('bulletin-archive-button')
-            .click();
+          await removeButton.click();
           await expect(pageA.getByTestId('offline-pending-badge')).toBeVisible();
 
           await contextA.setOffline(false);
