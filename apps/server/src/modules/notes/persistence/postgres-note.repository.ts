@@ -152,6 +152,26 @@ export function createPostgresNoteRepository(
 
       return rows.map(toVisibleNote);
     },
+
+    async findVisibleById(viewerId: string, noteId: string): Promise<VisibleNote | null> {
+      // The same function the list reads, plus an id predicate — no second statement over
+      // `app.notes` and no second `where` deciding readability. The predicate can only
+      // narrow what the function already produced (B10 stated as a statement), so naming a
+      // note addressed to somebody else returns zero rows rather than a refusal the caller
+      // could tell apart from a note that never existed.
+      //
+      // ⚠ No `order by` and no `limit`: `note_id` is `app.notes`' primary key, so this
+      // matches at most one row. A `limit 1` would suggest the function might return two.
+      const { rows } = await sql<VisibleNoteRow>`
+        select ${VISIBLE_NOTE_COLUMNS}
+          from app.visible_notes(${viewerId})
+         where note_id = ${noteId}
+      `.execute(database);
+
+      const row = rows[0];
+
+      return row === undefined ? null : toVisibleNote(row);
+    },
   };
 }
 

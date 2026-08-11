@@ -1,5 +1,6 @@
 import type { DatabaseConnection } from '@playa-post/database';
 
+import { createGetNoteQuery } from './application/get-note.query';
 import { createListNotesQuery } from './application/list-notes.query';
 import { createPinNoteService, type PinNoteService } from './application/pin-note.service';
 import { createPostgresNoteRepository } from './persistence/postgres-note.repository';
@@ -41,10 +42,14 @@ export interface NotesModule {
  * (`no-domain-to-infrastructure`), so somebody outside both layers builds the repository
  * and injects it.
  *
- * One repository instance serves both operations, because it is one connection pool over
+ * One repository instance serves every operation, because it is one connection pool over
  * one pair of ports — `NoteRepository` for the author's write and `VisibleNotesRepository`
- * for the recipient's §6a-projected read. Each service takes only the port it needs, so
+ * for the recipient's §6a-projected reads. Each service takes only the port it needs, so
  * nothing here hands the pin service a way to read somebody's notes.
+ *
+ * The list and the single-note read (#176, decision D14) are two queries over **one**
+ * port, so neither can reach a row `app.visible_notes` did not produce: adding the
+ * expanded view added a caller, not a second definition of what a viewer may read.
  *
  * ⚠ **This module exists precisely so that a note is not a bulletin.** PDF §6 forbids
  * silently mixing fixed-recipient messaging into the bulletin model, decision D2 cut the
@@ -64,7 +69,11 @@ export function createNotesModule(dependencies: NotesModuleDependencies): NotesM
   const pinNote = createPinNoteService({ notes });
 
   return {
-    router: createNotesRouter({ pinNote, listNotes: createListNotesQuery({ notes }) }),
+    router: createNotesRouter({
+      pinNote,
+      listNotes: createListNotesQuery({ notes }),
+      getNote: createGetNoteQuery({ notes }),
+    }),
     pinNote,
   };
 }

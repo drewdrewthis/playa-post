@@ -23,6 +23,7 @@ import { describeHideFailure } from '../moderation/hide-failure';
 import { ReportAbuseSheet } from '../moderation/report-abuse-sheet';
 import { buildBoardItems, channelState, describeBoardList } from '../notes/note-board-items';
 import { NoteCard } from '../notes/note-card';
+import { NoteDetailSheet } from '../notes/note-detail-sheet';
 import { useOffline } from '../offline/offline-provider';
 import { forgetBoardCard, queueMutation } from '../offline/pending-mutations';
 import { saveViewFailureMessage, seedSavedViewName } from '../views/saved-view-list';
@@ -124,6 +125,19 @@ export function BoardRoute(): JSX.Element {
     setFilter(queryState.filter);
   }, [urlQuery]);
   const [openBulletinId, setOpenBulletinId] = useState<string | null>(null);
+  /*
+   * The note being read (#176, decision D14), held separately from `openBulletinId`
+   * because the two lists are separate reads: a note id and a bulletin id come from two
+   * tables and are comparable nowhere else (`note-board-items.ts`). One state holding
+   * either would need a discriminator to say which table to look in, which is the same
+   * thing as two states with worse ergonomics.
+   *
+   * ⚠ **Opening one closes the other.** Both sheets take the same layer and the same
+   * full-column scrim, so two at once would stack a dialog on a dialog with no way to
+   * tell which Escape belongs to — the setters below are the only places either is
+   * raised, and each clears its sibling.
+   */
+  const [openNoteId, setOpenNoteId] = useState<string | null>(null);
   /*
    * The card being reported, held separately from `openBulletinId`. Reporting hides the
    * bulletin the moment it succeeds, so it leaves `visible` and `openCard` becomes null
@@ -312,6 +326,10 @@ export function BoardRoute(): JSX.Element {
     setOpenBulletinId(null);
   }, []);
 
+  const closeNoteSheet = useCallback(() => {
+    setOpenNoteId(null);
+  }, []);
+
   /**
    * Take a card off this board straight away, then tell the server why (or that).
    *
@@ -446,6 +464,14 @@ export function BoardRoute(): JSX.Element {
   const openCard =
     (showingDismissed ? dismissedCards : visible).find((card) => card.id === openBulletinId) ??
     null;
+  /*
+   * Looked up in the notes read rather than held as an object, for the reason `openCard`
+   * is: a note that has left the list — a `notes.list` refetch that no longer carries it —
+   * closes its own sheet instead of describing something that is no longer there. The
+   * sheet re-reads `notes.getById` regardless, so this is the fallback copy and never the
+   * authority.
+   */
+  const openNote = (notes.data ?? []).find((note) => note.id === openNoteId) ?? null;
 
   return (
     <section className="screen" data-testid="board">
@@ -684,14 +710,22 @@ export function BoardRoute(): JSX.Element {
                   {items.map((item) => (
                     <li key={item.key}>
                       {item.kind === 'note' ? (
-                        /* No `onOpen`: a note carries its whole text on the card and there is
-                           no `notes.getById` to open — see `notes/note-card.tsx`. */
-                        <NoteCard note={item.note} now={now} />
+                        /* A note opens too, since #176 — onto `notes.getById` and the way
+                           to answer it (decision D14, `notes/note-detail-sheet.tsx`). */
+                        <NoteCard
+                          note={item.note}
+                          now={now}
+                          onOpen={(opened) => {
+                            setOpenBulletinId(null);
+                            setOpenNoteId(opened.id);
+                          }}
+                        />
                       ) : (
                         <BulletinCard
                           card={item.card}
                           now={now}
                           onOpen={(opened) => {
+                            setOpenNoteId(null);
                             setOpenBulletinId(opened.id);
                           }}
                         />
@@ -743,6 +777,17 @@ export function BoardRoute(): JSX.Element {
                 },
               })}
         />
+      )}
+
+      {/*
+       * The expanded view of a note (#176, decision D14). A sibling of the bulletin sheet
+       * rather than a branch inside it: the two share a layer and nothing else — no type
+       * badge, no location, no expiry, no archive, dismiss or report — because a note is
+       * not a bulletin and the sheet that reads one may not quietly become the sheet that
+       * reads both.
+       */}
+      {openNote === null ? null : (
+        <NoteDetailSheet note={openNote} now={now} onClose={closeNoteSheet} />
       )}
 
       {reporting === null ? null : (

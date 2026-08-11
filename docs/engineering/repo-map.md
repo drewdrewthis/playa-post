@@ -63,8 +63,13 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  hide-failure-notice.css styles the notice board.tsx renders from it;
                  src/app/notes/ is the private channel (#88): compose-note.tsx is the second thing
                  /board/new can compose (routes/compose-bulletin.tsx dispatches on ?noteTo=),
-                 note-card.tsx + note-card.css are the comp's dashed tilted card, and the decisions
-                 are pure — pin-note-draft.ts (bounds mirrored ahead of the round trip),
+                 note-card.tsx + note-card.css are the comp's dashed tilted card — a tap target
+                 since #176/decision D14, which reversed the card's own "there is no sheet behind
+                 it" note — and note-detail-sheet.tsx + note-detail-sheet.css are what it opens:
+                 notes.getById re-read at open time, the card's copy as the offline fallback, and
+                 the one control the sheet exists for, which pins a NEW note back to the author
+                 through the composer that already exists (no lifecycle, no migration). The
+                 decisions are pure — pin-note-draft.ts (bounds mirrored ahead of the round trip),
                  note-recipient.ts (every sentence in a named and an unnamed form, §6a),
                  note-reach.ts (offer the control at degree 1, the comp's hint beyond it — a UX
                  gate, never an authorization one), note-board-items.ts (notes interleaved into the
@@ -73,16 +78,25 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  pin-note-submit.ts (the total submit flow: queue-write and drain faults each map
                  to a retryable outcome, and a retry replays the queued row rather than queueing a
                  twin), note-author.ts (absent author card → no author line, withheld-but-present
-                 → the private-connection card)).
+                 → the private-connection card), note-pin-back.ts (whether the expanded view
+                 offers to answer: an absent author card is nobody to address and gets no control
+                 at all, a present card past the first degree gets the distance, and an unsettled
+                 graph read is its own silence — #176)).
                  A feature stylesheet is imported
                  by the component that owns it, never added to screens.css.
-                 ⚠ The unit project runs in environment: 'node' and there is no component-test
-                 harness, so logic left inside a component is logic no test can reach — extract it
-                 to a sibling module, as compose-bulletin-draft.ts, report-abuse-draft.ts and
-                 auth/sign-in-failure.ts all do. The one exception is router.unit.test.tsx, which
-                 opts into jsdom with a per-file // @vitest-environment jsdom pragma because the
-                 thing under test is the route tree's own wiring; it is not a licence to leave
-                 decisions inside components.
+                 ⚠ The unit project runs in environment: 'node', so a component test costs a
+                 per-file // @vitest-environment jsdom pragma and a mount. src/app/testing/
+                 mount-with-api.tsx is that harness — a fake PlayaPostClient (an in-memory
+                 implementation of an interface this app owns, never a mock) over a throwaway
+                 query cache, with seedQueries for the §6a tests whose point is that a component
+                 does NOT read something the shared cache is genuinely holding. It is still not a
+                 licence to leave decisions inside components: extract them to a sibling module,
+                 as compose-bulletin-draft.ts, report-abuse-draft.ts, note-pin-back.ts and
+                 auth/sign-in-failure.ts all do, and mount only for what a mount alone can prove —
+                 wiring, focus and the ways out of a sheet, and an absence that has to be observed
+                 in the DOM (person-sheet, intro-sheet, intro-inbox, note-detail-sheet,
+                 connect-card, enable-push-control; router.unit.test.tsx mounts the route tree
+                 itself).
                  src/app/theme/ is the design system: tokens.css (two token sets, light on :root and
                  dark on [data-theme='dark']), screens.css (the column and every shared screen
                  element), typefaces.ts (the self-hosted font imports, which double as the service

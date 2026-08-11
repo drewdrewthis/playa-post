@@ -48,6 +48,22 @@ export interface PinnedNote {
 }
 
 /**
+ * `notes.getById` input — the expanded view's whole claim (#176, decision D14).
+ *
+ * A note that is not addressed to you, and a UUID naming no note at all, are refused
+ * identically with `NOTE_GONE`. Do not build a "does this note exist" probe out of it: the
+ * answer is deliberately the same for both, exactly as `notes.pin` answers "not connected"
+ * and "no such person" the same way.
+ *
+ * ⚠ **The author cannot read their own note back through this.** A note is addressed, and
+ * its recipient is its only reader — asking for one you pinned gets the same `NOTE_GONE` a
+ * stranger gets. There is no procedure that reads a note you sent, deliberately (PDF §6).
+ */
+export interface NoteIdRequest {
+  readonly noteId: string;
+}
+
+/**
  * The author of a note on your board, under the same §6a disclosure rule the graph and
  * the board use.
  *
@@ -71,10 +87,17 @@ export interface NoteAuthor {
 }
 
 /**
- * A note as its **recipient** sees it — one row of `notes.list`.
+ * A note as its **recipient** sees it — one row of `notes.list`, and the whole of
+ * `notes.getById`.
  *
  * ⚠ Carries no `recipientId`, not even optionally: the only person who can receive one of
  * these is the recipient, so the field could only ever say "you".
+ *
+ * **One shape for both procedures, deliberately.** The expanded view (#176, decision D14)
+ * shows more of the same note rather than more *about* it: the card already carries the
+ * body, so a detail payload with extra fields would mean the list had been withholding
+ * something. Both are `app.visible_notes` projected the same way, so a client may open a
+ * sheet from a row it already holds and swap in the server's answer when it lands.
  */
 export interface Note {
   readonly id: string;

@@ -63,3 +63,37 @@ export class NoteRecipientUnreachableError extends ApplicationError {
     this.name = 'NoteRecipientUnreachableError';
   }
 }
+
+/**
+ * The named note is not there for you (#176, decision D14).
+ *
+ * **One answer for three situations** — no such note, a note addressed to somebody else,
+ * and a note whose author is no longer in your world — and the uniformity *is* the
+ * security property, exactly as it is for
+ * {@link import('../../bulletins/domain/bulletin.errors').BulletinGoneError}. `notes.pin`
+ * refuses a stranger identically to a UUID naming nobody; a read that answered "that note
+ * exists, it is simply not yours" would give back through the front door the existence
+ * oracle the write path spent its design closing (ADR-0002 §10, B17).
+ *
+ * ⚠ Two of those three cases are not even distinguishable *here*, and that is deliberate:
+ * `app.visible_notes` gates on `recipient_id = viewer_id` and returns nothing at all for
+ * the other two, so this class is raised without ever learning which it was. There is no
+ * branch that could grow a distinguishing message because there is no information to
+ * distinguish with.
+ *
+ * ⚠ It is **not** a lifecycle state. Notes have no unpin, no archive, and no take-down
+ * (see {@link import('./note').Note}); "gone" here means *not yours to read*, never
+ * *withdrawn*. A note its recipient can see once, they can see always — nothing in this
+ * product removes one.
+ *
+ * ⚠ The message must never grow a detail. "That note was for someone else" or an echoed
+ * author handle each turn this error back into the oracle it exists to close.
+ */
+export class NoteGoneError extends ApplicationError {
+  static readonly code = 'NOTE_GONE';
+
+  constructor() {
+    super(NoteGoneError.code, 'That note is not available.');
+    this.name = 'NoteGoneError';
+  }
+}

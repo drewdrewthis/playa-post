@@ -1,0 +1,197 @@
+/*
+ * The note detail sheet (#176, decision D14) — the expanded view a note card now opens.
+ *
+ * ⚠ Its own class tree rather than reusing `bulletins/detail-sheet.css`, for the reason
+ * `note-card.css` gives about the card: a note is not a bulletin (decision D6), `note` is
+ * never a value on the wire, and `.detail-sheet` carries a `[data-type]` tint map keyed on
+ * `BulletinType` that this sheet has no member of. The house convention is one stylesheet
+ * per sheet anyway — `person-sheet.css`, `intro-sheet.css` and `report-abuse-sheet.css`
+ * each carry their own scrim and their own keyframes rather than reaching into another
+ * module's.
+ *
+ * Both elements are `position: absolute` against `.app-column`, which is the nearest
+ * positioned ancestor and therefore their containing block — so they cover the tab bar and
+ * are not clipped by `.app-shell__main`'s own scrolling, even though the board renders
+ * inside it.
+ *
+ * The z-indices are the bulletin sheet's own 32 and 33, below the notifications takeover
+ * at 35. The same layer, not a new one, because the two are alternatives: the board opens
+ * one card at a time, so a note sheet and a bulletin sheet are never on screen together.
+ */
+
+.note-detail-sheet__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 32;
+  background: var(--pp-scrim);
+}
+
+.note-detail-sheet {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.875rem;
+  left: 0.75rem;
+  z-index: 33;
+  max-height: 80%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-3);
+  padding: var(--pp-space-5);
+
+  /* Dashed and tinted, as the card is: the sheet has to read as the same private thing
+     the reader tapped, rather than as the bulletin chrome with a note inside it. */
+  border: 1px dashed var(--pp-note-tint);
+  border-radius: var(--pp-radius-lg);
+  background: var(--pp-sheet-bg);
+  box-shadow: var(--pp-sheet-shadow);
+  animation: pp-note-sheetup 0.22s ease-out;
+}
+
+/* Named for this file, not shared: `report-abuse-sheet.css` sets the precedent that each
+   sheet carries its own keyframes rather than reaching into another module's. */
+@keyframes pp-note-sheetup {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.note-detail-sheet__header {
+  display: flex;
+  align-items: center;
+  gap: var(--pp-space-2);
+}
+
+/* The card's dashed tag, at the sheet's scale. */
+.note-detail-sheet__type {
+  align-self: flex-start;
+  padding: 3px 7px;
+  border: 1px dashed var(--pp-note-tint);
+  border-radius: 3px;
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-note-tint);
+}
+
+/* The comp's PRIVATE pill: filled rather than outlined, so it reads as a state. */
+.note-detail-sheet__private {
+  padding: 3px 8px;
+  border-radius: var(--pp-radius-pill);
+  background: var(--pp-input-bg);
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-sub);
+}
+
+.note-detail-sheet__time {
+  font-size: var(--pp-text-xs);
+  color: var(--pp-faint);
+}
+
+.note-detail-sheet__close {
+  margin-left: auto;
+  padding: var(--pp-space-1) var(--pp-space-2);
+  border: none;
+  background: none;
+  color: var(--pp-faint);
+  font-weight: 700;
+  font-size: var(--pp-text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/*
+ * The note, in the reading face and one step up from the card's size.
+ *
+ * `pre-wrap` because a note is somebody typing to one person: the line they broke is a
+ * line they meant, and this is the surface where the whole of it is on screen.
+ */
+.note-detail-sheet__body {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: var(--pp-font-display);
+  font-weight: 400;
+  font-size: var(--pp-text-lg);
+  line-height: 1.5;
+  color: var(--pp-ink);
+}
+
+/* The same dashed warn box `.detail-sheet__gone` uses, saying the same kind of thing: what
+   is on screen is not what the server would give you now. */
+.note-detail-sheet__gone {
+  margin: 0;
+  padding: var(--pp-space-2) var(--pp-space-3);
+  border: 1px dashed var(--pp-warn);
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-warn-bg);
+  font-size: var(--pp-text-xs);
+  line-height: 1.5;
+  color: var(--pp-warn);
+}
+
+/* A dashed rule above the author, as the comp separates a text from who wrote it. */
+.note-detail-sheet__author {
+  margin: 0;
+  padding-top: var(--pp-space-2);
+  border-top: 1px dashed var(--pp-note-tint);
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-sub);
+}
+
+/*
+ * The pin-back control, in the bulletin sheet's ink fill (`design/Playa Post.dc.html:285`
+ * — `background:t.ink;color:t.bgSolid`).
+ *
+ * ⚠ The **same** treatment as `.detail-sheet__pin-note`, not a new one, and that is the
+ * point: it is the same gesture reaching the same screen through the same procedure, so it
+ * has to look like the same thing. Not `.button--primary` either — the orange fill is the
+ * FAB's and means "compose" everywhere in this app.
+ */
+.note-detail-sheet__pin-back {
+  display: block;
+  padding: var(--pp-space-3);
+  border: 1px solid var(--pp-ink);
+  border-radius: var(--pp-radius-pill);
+  background: var(--pp-ink);
+  color: var(--pp-bg-solid);
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  text-align: center;
+  text-decoration: none;
+}
+
+/*
+ * The distance hint, where the control would be — the comp's italic serif in the warn
+ * palette, inside a dashed warn box, exactly as `.detail-sheet__intro-hint` renders the
+ * same sentence. Both say *the thing you are looking at is not what you can act on*.
+ */
+.note-detail-sheet__hint {
+  margin: 0;
+  padding: var(--pp-space-2) var(--pp-space-3);
+  border: 1px dashed var(--pp-warn);
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-warn-bg);
+  font-family: var(--pp-font-display);
+  font-style: italic;
+  font-size: var(--pp-text-sm);
+  line-height: 1.45;
+  color: var(--pp-warn);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-detail-sheet {
+    animation: none;
+  }
+}

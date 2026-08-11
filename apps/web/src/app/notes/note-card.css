@@ -11,6 +11,28 @@
  * that claims a kinship this product denies.
  */
 
+/*
+ * The card's tap target (#176, decision D14) — the whole card, as one button.
+ *
+ * The same reset `.bulletin-card__open` uses, restated rather than shared for the reason
+ * the file header gives: a note is not a bulletin, and borrowing that selector would claim
+ * a kinship the schema, the router and the contracts all deny.
+ */
+.note-card__open {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4375rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
 .note-card {
   display: flex;
   flex-direction: column;
@@ -19,6 +41,7 @@
   border: 1px dashed var(--pp-note-tint);
   border-radius: var(--pp-radius);
   background: var(--pp-note-bg);
+  transition: border-color 0.15s ease;
 
   /*
    * The comp's half-degree tilt: a note reads as something left on your board rather
@@ -27,6 +50,15 @@
    * layout, not a calmer one.
    */
   transform: rotate(-0.5deg);
+}
+
+/*
+ * The comp's `style-hover="border-color:{{ t.faint }}"`, as the bulletin card reads it —
+ * the card now opens, so it has to look like it does. The dashed border stays dashed: what
+ * changes on hover is its colour, not the treatment that says "this one is private".
+ */
+.note-card:hover {
+  border-color: var(--pp-faint);
 }
 
 .note-card__header {
@@ -72,6 +104,9 @@
  * one person: the line they broke is a line they meant.
  */
 .note-card__body {
+  /* A `<span>` since the card became a button (a `<p>` inside one is invalid HTML and gets
+     reparented), so it needs the block display a paragraph had by default. */
+  display: block;
   margin: 0;
   white-space: pre-wrap;
   font-family: var(--pp-font-display);
@@ -83,6 +118,8 @@
 
 /* A dashed rule above the author, as the comp separates a text from who wrote it. */
 .note-card__author {
+  /* A `<span>` for the same reason as `.note-card__body` above. */
+  display: block;
   margin: 0;
   padding-top: var(--pp-space-2);
   border-top: 1px dashed var(--pp-note-tint);

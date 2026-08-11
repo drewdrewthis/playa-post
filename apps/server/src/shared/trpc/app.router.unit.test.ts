@@ -63,6 +63,7 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
     notes: createNotesRouter({
       pinNote: { pin: unreachable },
       listNotes: { list: unreachable },
+      getNote: { getById: unreachable },
     }),
     intros: createIntrosRouter({
       listIntroViaCandidates: { list: unreachable },
