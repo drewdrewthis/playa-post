@@ -146,8 +146,10 @@ export function BulletinDetailSheet({
 
   /*
    * `BULLETIN_GONE` and a dead connection are two different answers and get two
-   * different treatments. Gone means archived, dismissed, or no longer reachable, and
-   * the copy on screen is genuinely stale — say so. A transport failure means the
+   * different treatments. Gone means archived or no longer reachable — dismissal is
+   * not on that list: it never revokes visibility, so a card opened from the Dismissed
+   * category still reads fine here. When gone does arrive, the copy on screen is
+   * genuinely stale — say so. A transport failure means the
    * server said nothing at all, and announcing "no longer on your board" would turn a
    * tunnel into a deletion.
    */

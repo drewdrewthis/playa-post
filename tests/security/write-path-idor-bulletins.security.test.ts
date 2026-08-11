@@ -13,6 +13,7 @@ import { createPostgresBulletinRepository } from '../../apps/server/src/modules/
 import { createDismissBulletinService } from '../../apps/server/src/modules/moderation/application/dismiss-bulletin.service';
 import { createReportBulletinService } from '../../apps/server/src/modules/moderation/application/report-bulletin.service';
 import { createUndismissBulletinService } from '../../apps/server/src/modules/moderation/application/undismiss-bulletin.service';
+import { ModerationTargetUnavailableError } from '../../apps/server/src/modules/moderation/domain/moderation.errors';
 import { createPostgresModerationRepository } from '../../apps/server/src/modules/moderation/persistence/postgres-moderation.repository';
 import { createDeleteSavedViewService } from '../../apps/server/src/modules/views/application/delete-saved-view.service';
 import { createRenameSavedViewService } from '../../apps/server/src/modules/views/application/rename-saved-view.service';
@@ -207,7 +208,9 @@ describe('B13 — write-path IDOR matrix (bulletin.archive, bulletin.undismiss, 
           moderation: createPostgresModerationRepository({ database }),
           findVisibleBulletin: createFindVisibleBulletinAuthorQuery({ bulletins }),
         }).undismiss({ actorId: actorC, bulletinId: created.id }),
-      ).rejects.toBeInstanceOf(Error);
+        // The specific refusal, not any Error — a wiring or database failure would also
+        // reject, and this row is only proven if the *authorization* check is what fired.
+      ).rejects.toBeInstanceOf(ModerationTargetUnavailableError);
 
       expect(await dismissalRowCount()).toBe(0);
       expect(await outboxRowCount()).toBe(outboxAfterCreate);

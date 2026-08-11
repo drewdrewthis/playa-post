@@ -343,9 +343,9 @@ export function buildAppContainer(
   // ⚠ Two reads, built separately and never merged (#170): `hiddenBulletins` unions
   // reports and dismissals, because the board's exclusion does not care which one hid a
   // bulletin; `dismissedBulletins` returns dismissals alone, because that one is
-  // browsable and a report list is not (M2-AC10, B9). They are the same object at
-  // runtime and two types at compile time, which is what keeps the browsable one
-  // unable to grow a report.
+  // browsable and a report list is not (M2-AC10, B9). Both are the same persistence
+  // implementation constructed twice, narrowed to two disjoint types — and the types
+  // are what keep the browsable one unable to grow a report.
   const hiddenBulletins = createHiddenBulletins({ database });
   const dismissedBulletins = createDismissedBulletins({ database });
   const bulletins = createBulletinsModule({ database, hiddenBulletins, dismissedBulletins });
