@@ -8,8 +8,8 @@ import {
 /**
  * Where this device stands on push, as the panel has to render it.
  *
- * Six states rather than a boolean, because four of them need different words and four
- * of them are not the person's fault:
+ * Six states rather than a boolean: three of them render different words, three render
+ * nothing, and each says nothing for its own reason:
  *
  * - `unsupported` — this browser has no Push API, or this build registered no service
  *   worker (a `pnpm dev` run, where the PWA plugin is off). Nothing to offer.
