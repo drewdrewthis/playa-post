@@ -140,5 +140,10 @@ test.describe('signing in with the emailed code', () => {
     await expect(page.getByTestId('sign-in-code-input')).toBeVisible();
     await expect(page).toHaveURL(/\/signin$/);
     await capture(page, 'sign-in-code-rejected');
+
+    // The rejection copy says "Request a new sign-in email" — that offer must
+    // actually be there and must actually work.
+    await page.getByTestId('sign-in-request-new-code-button').click();
+    await expect(page.getByLabel('Email')).toBeVisible();
   });
 });

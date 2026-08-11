@@ -52,6 +52,11 @@ export function SignInRoute(): JSX.Element {
       // to `'signed-in'` — the redirect above then takes over on the next render.
     } catch (error) {
       setFailure(describeSignInFailure(error));
+      // A rejected code is never worth retrying as typed — `isCodeRejected` in
+      // `sign-in-failure.ts` collapses wrong/expired/already-used into one signal, so
+      // the one honest move is clearing the field rather than leaving a digit that
+      // looks correct sitting in a box that will refuse it again.
+      setCode('');
     }
   }
 
@@ -98,6 +103,25 @@ export function SignInRoute(): JSX.Element {
                   Sign in with code
                 </button>
               </form>
+
+              {/* The rejection copy in `sign-in-failure.ts` tells a rejected-code
+                  reader to "Request a new sign-in email" — this is that offer. Ghost
+                  styling (the bare `.button`, same as the dismiss action in
+                  `bulletin-detail-sheet.tsx`) keeps it visibly secondary to "Sign in
+                  with code" above, and it doubles as the only way back to the email
+                  form once `sent` is `true`, rejection or not. */}
+              <button
+                className="button"
+                type="button"
+                data-testid="sign-in-request-new-code-button"
+                onClick={() => {
+                  setSent(false);
+                  setCode('');
+                  setFailure(null);
+                }}
+              >
+                Send a new sign-in email
+              </button>
             </>
           ) : (
             <form

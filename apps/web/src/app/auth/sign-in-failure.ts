@@ -90,7 +90,7 @@ function isCodeRejected(error: unknown): boolean {
  * - an unconfigured build is not theirs to fix, and saying "check the address" would
  *   send them to re-read an address that was never the problem;
  * - a rate limit clears on its own, and re-checking the address is the one thing that
- *   *cannot* help — the previous link is already in their inbox;
+ *   *cannot* help — the last email already sent, link and code alike, is still valid;
  * - a rejected code (wrong, expired, or already used — `isCodeRejected` above) cannot
  *   be told apart from the wire signal alone, so the message is honest about that and
  *   names the one remedy that covers all three: request a new code;
@@ -108,7 +108,7 @@ export function describeSignInFailure(error: unknown): string {
   }
 
   if (isRateLimited(error)) {
-    return 'Too many sign-in links have been requested for that address. Wait a few minutes and try again — the last link we sent is still valid.';
+    return 'Too many sign-in attempts for that address. Wait a few minutes and try again — the last email we sent is still valid.';
   }
 
   if (isCodeRejected(error)) {
