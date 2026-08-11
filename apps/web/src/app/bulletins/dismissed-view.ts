@@ -1,5 +1,9 @@
+import type { Bulletin, VisibleBulletin } from '@playa-post/contracts';
+
 import { applicationErrorCode } from '../api/client';
 import type { BoardChannel } from '../notes/note-board-items';
+
+import type { BoardCardView } from './board-card-view';
 
 /**
  * Which of the board's two lists is on screen (#170).
@@ -29,6 +33,48 @@ export type BoardView = (typeof BOARD_VIEW)[keyof typeof BOARD_VIEW];
  */
 export function parseBoardView(raw: string | null): BoardView {
   return raw === BOARD_VIEW.dismissed ? BOARD_VIEW.dismissed : BOARD_VIEW.board;
+}
+
+/**
+ * The Dismissed category's rows, with the viewer's own posts marked as theirs.
+ *
+ * ⚠ **`bulletins.dismissed` alone cannot say whose a bulletin is**, and a viewer may
+ * dismiss their own post — the dismiss use case permits it, and the visibility traversal
+ * this category composes seeds at the viewer. Rendering one of those as a stranger's puts
+ * the sheet's "pin them a note / ask for an intro" controls under somebody's own bulletin,
+ * addressed to themselves. Own-ness is therefore merged in from `bulletins.listMine` by
+ * identifier, exactly as the board does it, rather than by comparing the §6a author card's
+ * `userId` — the author card is a disclosure and may legitimately withhold everything.
+ *
+ * ⚠ **An own row carries no author card**, matching the board's own rows: `listMine` has
+ * none, and the sheet resolves that absence to "You". Keeping the §6a projection of
+ * oneself would render a person their own name where every other surface says "You".
+ *
+ * `archived` is `false` throughout: an archived bulletin has already left
+ * `app.visible_bulletins`, so it cannot reach this list at all.
+ */
+export function buildDismissedCards(input: {
+  readonly dismissed: readonly VisibleBulletin[];
+  readonly mine: readonly Bulletin[];
+}): readonly BoardCardView[] {
+  const ownIds = new Set(input.mine.map((bulletin) => bulletin.id));
+
+  return input.dismissed.map((item) => {
+    const card = {
+      id: item.id,
+      type: item.type,
+      title: item.title,
+      body: item.body,
+      createdAt: item.createdAt,
+      loc: item.loc,
+      expiresAt: item.expiresAt,
+      archived: false,
+    };
+
+    return ownIds.has(item.id)
+      ? { ...card, own: true }
+      : { ...card, own: false, author: item.author };
+  });
 }
 
 /** What the Dismissed list may claim about itself. */

@@ -73,6 +73,11 @@ export function BulletinDetailSheet({
   /**
    * Put it back on my board (#170) — the Dismissed category's way out.
    *
+   * ⚠ **Its presence is what tells this sheet it is being opened from that category**, so
+   * it outranks every other action here, including an author's own Remove: a viewer may
+   * dismiss their own post, and one opened from the Dismissed category still needs the way
+   * back rather than a second way out.
+   *
    * ⚠ **There is deliberately no un-report beside it.** Reporting says something about
    * the bulletin that the stewards act on; withdrawing that is a different decision the
    * server does not offer (M5). A viewer who both reported and dismissed something can
@@ -314,24 +319,15 @@ export function BulletinDetailSheet({
         )}
 
         <div className="detail-sheet__actions">
-          {card.own ? (
-            <button
-              className="button button--danger"
-              data-testid="bulletin-archive-button"
-              type="button"
-              disabled={card.archived}
-              onClick={() => {
-                onArchive(card);
-              }}
-            >
-              {/* "Remove", not the comp's "Delete post": the server soft-deletes, the
-                  bulletin stays on its author's own list, and a button that said delete
-                  would promise an erasure that did not happen. */}
-              Remove post
-            </button>
-          ) : onUndismiss !== undefined ? (
+          {onUndismiss !== undefined ? (
             /*
              * The Dismissed category's one action (#170).
+             *
+             * ⚠ **Ahead of the author's own Remove, deliberately.** A viewer may dismiss
+             * their own post, so an own bulletin reaches this sheet from the Dismissed
+             * category too — and there the only thing to offer is the way out of the
+             * category. Removing a post one is not currently being shown is a board
+             * action, and putting it back is what gets somebody to the board.
              *
              * ⚠ **"Put back on my board", not "Undo".** Undo describes the gesture; this
              * describes the outcome, and the outcome is the part a person is deciding
@@ -352,6 +348,21 @@ export function BulletinDetailSheet({
               }}
             >
               Put back on my board
+            </button>
+          ) : card.own ? (
+            <button
+              className="button button--danger"
+              data-testid="bulletin-archive-button"
+              type="button"
+              disabled={card.archived}
+              onClick={() => {
+                onArchive(card);
+              }}
+            >
+              {/* "Remove", not the comp's "Delete post": the server soft-deletes, the
+                  bulletin stays on its author's own list, and a button that said delete
+                  would promise an erasure that did not happen. */}
+              Remove post
             </button>
           ) : (
             <>

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import type { Bulletin, VisibleBulletin } from '@playa-post/contracts';
+
 import {
   BOARD_VIEW,
+  buildDismissedCards,
   describeDismissedList,
   describeUndismissFailure,
   parseBoardView,
@@ -29,6 +32,89 @@ describe('parseBoardView', () => {
     // A typo must not open somebody's private list. Asserted separately from the table
     // above because it is the security-shaped half of the same rule.
     expect(parseBoardView('dismiss')).toBe(BOARD_VIEW.board);
+  });
+});
+
+describe('buildDismissedCards', () => {
+  function dismissedBulletin(id: string, authorId: string): VisibleBulletin {
+    return {
+      id,
+      type: 'request',
+      title: `Bulletin ${id}`,
+      body: 'Body.',
+      createdAt: '2026-08-01T00:00:00.000Z',
+      loc: null,
+      expiresAt: null,
+      version: 1,
+      author: { userId: authorId, disclosure: 'full', displayName: 'Author', handle: 'author' },
+    };
+  }
+
+  function ownBulletin(id: string): Bulletin {
+    return {
+      id,
+      type: 'request',
+      title: `Bulletin ${id}`,
+      body: 'Body.',
+      createdAt: '2026-08-01T00:00:00.000Z',
+      loc: null,
+      expiresAt: null,
+      archivedAt: null,
+      version: 1,
+    };
+  }
+
+  it('marks a bulletin the viewer wrote as their own, and drops its author card', () => {
+    // The bug this closes: a self-authored dismissal rendered as a stranger's, under the
+    // sheet's controls for reaching its author — addressed to the reader themselves.
+    const [card] = buildDismissedCards({
+      dismissed: [dismissedBulletin('b1', 'viewer')],
+      mine: [ownBulletin('b1')],
+    });
+
+    expect(card?.own).toBe(true);
+    expect(card).not.toHaveProperty('author');
+  });
+
+  it('keeps somebody else’s bulletin not-own, with its §6a author card intact', () => {
+    const [card] = buildDismissedCards({
+      dismissed: [dismissedBulletin('b1', 'someone-else')],
+      mine: [ownBulletin('b2')],
+    });
+
+    expect(card?.own).toBe(false);
+    expect(card?.author?.userId).toBe('someone-else');
+  });
+
+  it('reads own-ness from the identifier rather than from the author card', () => {
+    // A §6a projection may withhold every identity column, so an author card is never a
+    // reliable way to ask "is this mine".
+    const withheld: VisibleBulletin = {
+      ...dismissedBulletin('b1', 'viewer'),
+      author: { userId: 'viewer', disclosure: 'private' },
+    };
+
+    expect(buildDismissedCards({ dismissed: [withheld], mine: [ownBulletin('b1')] })[0]?.own).toBe(
+      true,
+    );
+  });
+
+  it('preserves the dismissal order the server sent', () => {
+    const cards = buildDismissedCards({
+      dismissed: [dismissedBulletin('b3', 'a'), dismissedBulletin('b1', 'a')],
+      mine: [],
+    });
+
+    expect(cards.map((card) => card.id)).toEqual(['b3', 'b1']);
+  });
+
+  it('never marks a row archived — an archived bulletin cannot reach this list', () => {
+    const cards = buildDismissedCards({
+      dismissed: [dismissedBulletin('b1', 'viewer')],
+      mine: [ownBulletin('b1')],
+    });
+
+    expect(cards.every((card) => !card.archived)).toBe(true);
   });
 });
 

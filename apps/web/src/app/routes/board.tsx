@@ -14,6 +14,7 @@ import { BulletinCard } from '../bulletins/bulletin-card';
 import { BulletinDetailSheet } from '../bulletins/bulletin-detail-sheet';
 import {
   BOARD_VIEW,
+  buildDismissedCards,
   describeDismissedList,
   describeUndismissFailure,
   parseBoardView,
@@ -266,7 +267,13 @@ export function BoardRoute(): JSX.Element {
    */
   const undismiss = useMutation({
     mutationFn: (input: ModerationTargetRequest) => api.mutate('moderation.undismiss', input),
-    onSuccess: async () => {
+    onSuccess: async (_result, input) => {
+      // ⚠ The optimistic hide `hideBulletin` set is withdrawn here, and nothing else
+      // withdraws it. It is harmless while the dismissal stands — the server stops
+      // returning the bulletin anyway — but a bulletin dismissed and then put back within
+      // one visit would come off the server's board and be filtered straight back off this
+      // one, staying invisible until a reload nobody would know to do.
+      setHidden((previous) => previous.filter((id) => id !== input.bulletinId));
       // Both lists move: the bulletin leaves this one and rejoins the board. Blanket
       // invalidation for the reason `hide` uses one — the effect crosses read models.
       await queryClient.invalidateQueries();
@@ -410,26 +417,18 @@ export function BoardRoute(): JSX.Element {
   /*
    * The Dismissed category's rows.
    *
-   * ⚠ **Built from `bulletins.dismissed` alone — no union with `listMine`, and no offline
-   * cache.** Both of those exist on the board to answer "what has this person written",
-   * and neither knows anything about dismissals; folding them in would put bulletins into
-   * a list of decisions that were never made. `own` is `false` for the same reason the
-   * board's server rows carry `false`: this read model has no `archivedAt`, so archived-ness
-   * is not observable here — and an archived bulletin is not in the category at all,
-   * because the server's authorized read has already left it out.
+   * ⚠ **`bulletins.dismissed` decides which rows are here; `listMine` only says which of
+   * them are the viewer's own.** No row is ever *added* from `listMine` or from the
+   * offline cache — both of those answer "what has this person written", neither knows
+   * anything about dismissals, and folding them in would put bulletins into a list of
+   * decisions that were never made. The own-marking half is the board's union rule
+   * narrowed to correction only, and it matters here because a viewer may dismiss their
+   * own post — see `buildDismissedCards`.
    */
-  const dismissedCards: readonly BoardCardView[] = (dismissed.data?.items ?? []).map((item) => ({
-    id: item.id,
-    type: item.type,
-    title: item.title,
-    body: item.body,
-    createdAt: item.createdAt,
-    loc: item.loc,
-    expiresAt: item.expiresAt,
-    own: false,
-    archived: false,
-    author: item.author,
-  }));
+  const dismissedCards: readonly BoardCardView[] = buildDismissedCards({
+    dismissed: dismissed.data?.items ?? [],
+    mine: mine.data ?? [],
+  });
 
   const dismissedRegion = describeDismissedList({
     itemCount: dismissedCards.length,
@@ -580,129 +579,129 @@ export function BoardRoute(): JSX.Element {
         </>
       ) : (
         <>
-        <BoardSearch
-          search={search}
-          onSearchChange={setSearch}
-          filter={filter}
-          onFilterChange={setFilter}
-          // ⚠ Bulletins matched, not rows on screen: a search never reaches a note, so
-          // counting them would report matches against a query they were never tested by.
-          matchCount={board.isSuccess ? visible.length : null}
-          saving={saveView.isPending}
-          // ⚠ The *settled* query, not the raw field. `BoardSearch` knows a query is being
-          // typed; only this route knows whether one has composed yet, because only it holds
-          // the debounce. Without this the control is live for ~250ms doing nothing.
-          settledQueryActive={queryActive}
-          onSave={() => {
-            if (query === undefined) {
-              return;
-            }
-            setSavedNotice(null);
-            saveView.mutate({ name: seedSavedViewName(query), sourceText: query });
-          }}
-        />
+          <BoardSearch
+            search={search}
+            onSearchChange={setSearch}
+            filter={filter}
+            onFilterChange={setFilter}
+            // ⚠ Bulletins matched, not rows on screen: a search never reaches a note, so
+            // counting them would report matches against a query they were never tested by.
+            matchCount={board.isSuccess ? visible.length : null}
+            saving={saveView.isPending}
+            // ⚠ The *settled* query, not the raw field. `BoardSearch` knows a query is being
+            // typed; only this route knows whether one has composed yet, because only it holds
+            // the debounce. Without this the control is live for ~250ms doing nothing.
+            settledQueryActive={queryActive}
+            onSave={() => {
+              if (query === undefined) {
+                return;
+              }
+              setSavedNotice(null);
+              saveView.mutate({ name: seedSavedViewName(query), sourceText: query });
+            }}
+          />
 
-        {/*
-         * ⚠ **Persistent, not a toast.** Every other confirmation on this app borrows the
-         * comp's `say()` pill, which fades after 2400ms — right for "Posted", wrong here.
-         * The comp has no failure state at all (`sendReport` cannot fail against a mock),
-         * so nothing is being contradicted; but a notice that leaves on its own is one a
-         * person can miss, and missing it returns them to believing a report was filed.
-         * It goes when they say so, or when the retry succeeds.
-         */}
-        {hideFailure === null ? null : (
-          <div className="hide-failure" role="alert" data-testid="hide-failure">
-            <p className="hide-failure__message">{hideFailure.message}</p>
+          {/*
+           * ⚠ **Persistent, not a toast.** Every other confirmation on this app borrows the
+           * comp's `say()` pill, which fades after 2400ms — right for "Posted", wrong here.
+           * The comp has no failure state at all (`sendReport` cannot fail against a mock),
+           * so nothing is being contradicted; but a notice that leaves on its own is one a
+           * person can miss, and missing it returns them to believing a report was filed.
+           * It goes when they say so, or when the retry succeeds.
+           */}
+          {hideFailure === null ? null : (
+            <div className="hide-failure" role="alert" data-testid="hide-failure">
+              <p className="hide-failure__message">{hideFailure.message}</p>
 
-            {/*
-             * The retry is `screens.css`'s own `button--quiet` — the app's pill for a
-             * row-level action, borrowed rather than restyled. It re-sends `failedHide`,
-             * the exact request react-query held onto, so the reporter's account of what
-             * happened goes again without being retyped.
-             */}
-            <div className="hide-failure__actions">
-              {/* Absent, not dimmed, when a retry cannot work — see `hide-failure.ts`. */}
-              {hideFailure.retryable && failedHide !== null ? (
+              {/*
+               * The retry is `screens.css`'s own `button--quiet` — the app's pill for a
+               * row-level action, borrowed rather than restyled. It re-sends `failedHide`,
+               * the exact request react-query held onto, so the reporter's account of what
+               * happened goes again without being retyped.
+               */}
+              <div className="hide-failure__actions">
+                {/* Absent, not dimmed, when a retry cannot work — see `hide-failure.ts`. */}
+                {hideFailure.retryable && failedHide !== null ? (
+                  <button
+                    className="button button--quiet"
+                    data-testid="hide-failure-retry-button"
+                    type="button"
+                    onClick={() => {
+                      hide.mutate(failedHide);
+                    }}
+                  >
+                    Try again
+                  </button>
+                ) : null}
+
                 <button
-                  className="button button--quiet"
-                  data-testid="hide-failure-retry-button"
+                  className="hide-failure__dismiss"
+                  data-testid="hide-failure-dismiss-button"
                   type="button"
                   onClick={() => {
-                    hide.mutate(failedHide);
+                    hide.reset();
                   }}
                 >
-                  Try again
+                  Dismiss
                 </button>
-              ) : null}
-
-              <button
-                className="hide-failure__dismiss"
-                data-testid="hide-failure-dismiss-button"
-                type="button"
-                onClick={() => {
-                  hide.reset();
-                }}
-              >
-                Dismiss
-              </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/*
-         * `screen__notice` rather than a new class: this is the shared "small line of prose
-         * under the controls" treatment, and a second one would be a second thing to keep
-         * in sync.
-         */}
-        {savedNotice === null ? null : (
-          <p className="screen__notice" data-testid="board-save-view-notice" role="status">
-            {savedNotice}
-          </p>
-        )}
+          {/*
+           * `screen__notice` rather than a new class: this is the shared "small line of prose
+           * under the controls" treatment, and a second one would be a second thing to keep
+           * in sync.
+           */}
+          {savedNotice === null ? null : (
+            <p className="screen__notice" data-testid="board-save-view-notice" role="status">
+              {savedNotice}
+            </p>
+          )}
 
-        {region.boardError ? (
-          <p className="form__error" data-testid="board-error">
-            {boardErrorMessage(board.error)}
-          </p>
-        ) : (
-          <>
-            {/*
-             * `.form__error`, sitting beside the refused-query line above and reading the
-             * same way, because it is the same kind of thing: a read that did not answer.
-             * `role="status"` rather than `alert` — the bulletins under it are still worth
-             * reading, and this is not an interruption.
-             */}
-            {region.notesFailure === null ? null : (
-              <p className="form__error" data-testid="board-notes-error" role="status">
-                {region.notesFailure}
-              </p>
-            )}
+          {region.boardError ? (
+            <p className="form__error" data-testid="board-error">
+              {boardErrorMessage(board.error)}
+            </p>
+          ) : (
+            <>
+              {/*
+               * `.form__error`, sitting beside the refused-query line above and reading the
+               * same way, because it is the same kind of thing: a read that did not answer.
+               * `role="status"` rather than `alert` — the bulletins under it are still worth
+               * reading, and this is not an interruption.
+               */}
+              {region.notesFailure === null ? null : (
+                <p className="form__error" data-testid="board-notes-error" role="status">
+                  {region.notesFailure}
+                </p>
+              )}
 
-            {region.empty === null ? null : <p className="screen__empty">{region.empty}</p>}
+              {region.empty === null ? null : <p className="screen__empty">{region.empty}</p>}
 
-            {region.items ? (
-              <ul className="board-list">
-                {items.map((item) => (
-                  <li key={item.key}>
-                    {item.kind === 'note' ? (
-                      /* No `onOpen`: a note carries its whole text on the card and there is
-                         no `notes.getById` to open — see `notes/note-card.tsx`. */
-                      <NoteCard note={item.note} now={now} />
-                    ) : (
-                      <BulletinCard
-                        card={item.card}
-                        now={now}
-                        onOpen={(opened) => {
-                          setOpenBulletinId(opened.id);
-                        }}
-                      />
-                    )}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </>
-        )}
+              {region.items ? (
+                <ul className="board-list">
+                  {items.map((item) => (
+                    <li key={item.key}>
+                      {item.kind === 'note' ? (
+                        /* No `onOpen`: a note carries its whole text on the card and there is
+                           no `notes.getById` to open — see `notes/note-card.tsx`. */
+                        <NoteCard note={item.note} now={now} />
+                      ) : (
+                        <BulletinCard
+                          card={item.card}
+                          now={now}
+                          onOpen={(opened) => {
+                            setOpenBulletinId(opened.id);
+                          }}
+                        />
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
+          )}
         </>
       )}
 
