@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
 import type { GroupedNotification } from '@playa-post/contracts';
 
@@ -49,6 +50,79 @@ function setUnread(
         named.has(notification.notificationId) ? { ...notification, unread } : notification,
       ),
   );
+}
+
+/**
+ * Flip `seen` on every notification in the cache the panel and the bell read.
+ *
+ * ⚠ **Every one of them, with no list of identifiers** — which is the same claim
+ * `notifications.markSeen` makes on the server, restated locally so the optimistic write
+ * and the server's answer cannot describe different sets. A notification that lands
+ * between this write and the refetch below comes back `seen: false` from the server and
+ * puts the badge back up, which is correct: it arrived after the panel was opened.
+ */
+function setAllSeen(queryClient: QueryClient): void {
+  queryClient.setQueryData<readonly GroupedNotification[]>(
+    NOTIFICATIONS_QUERY_KEY,
+    (current) => current?.map((notification) => ({ ...notification, seen: true })),
+  );
+}
+
+/**
+ * Tell the server this panel is open, once per opening (issue #178).
+ *
+ * **Called from the panel, which is mounted only while it is open** — that is what makes
+ * "once per opening" a fact about the component tree rather than a flag somebody has to
+ * remember to reset. The effect has an empty dependency list for the same reason: a
+ * remount is a new opening, and a re-render is not.
+ *
+ * ⚠ **Optimistic, and the optimism is the feature.** Without the local write the badge
+ * would hold its old count for a whole round trip *while the reader is looking at the
+ * screen that is supposed to be clearing it*. `onSettled` then reconciles from the server,
+ * so what the badge finally shows is always the server's answer.
+ *
+ * ⚠ **A failure is deliberately silent, and it is not a swallowed error.** There is no
+ * affordance here to report on: the reader did not press anything, nothing they typed is
+ * at risk, and there is nothing to retry — the reconcile below puts the true count back,
+ * so a failed mark leaves the badge up, which is exactly what an unrecorded open means. A
+ * banner over somebody's notifications saying "we could not record that you looked" would
+ * be noise about the product's bookkeeping.
+ *
+ * Online-only, like `notifications.dismiss` and for the same reason: `notification.markSeen`
+ * is deliberately absent from `MUTATION_TYPES`, so ADR-0005's conflict matrix does not
+ * define it and the offline queue would replay it as `rejected` /
+ * `UNSUPPORTED_MUTATION_TYPE`. A watermark replayed out of order is also the one write
+ * whose late arrival would be wrong — hence the server's monotonic upsert as the backstop.
+ */
+export function useMarkNotificationsSeen(): void {
+  const api = useApi();
+  const queryClient = useQueryClient();
+
+  const markSeen = useMutation({
+    mutationFn: () => api.mutate('notifications.markSeen', undefined),
+
+    onMutate: async () => {
+      // The list polls while the panel is open. A refetch already in flight would
+      // resolve after this write and put the badge back as it was a second ago.
+      await queryClient.cancelQueries({ queryKey: NOTIFICATIONS_QUERY_KEY });
+      setAllSeen(queryClient);
+    },
+
+    onSettled: () => queryClient.invalidateQueries({ queryKey: NOTIFICATIONS_QUERY_KEY }),
+  });
+
+  // `mutate`, not `mutateAsync`: the former reports failure through the mutation's own
+  // state instead of rejecting, so there is no floating promise for an unhandled
+  // rejection to escape from. Read out of a ref-stable mutation object, so the effect
+  // does not need it in its dependency list to be correct.
+  const { mutate } = markSeen;
+
+  useEffect(() => {
+    mutate();
+    // Once per mount. The panel mounts when it opens and unmounts when it closes, so a
+    // second open is a second mark — which is what makes anything that arrived in
+    // between count as new.
+  }, [mutate]);
 }
 
 /**

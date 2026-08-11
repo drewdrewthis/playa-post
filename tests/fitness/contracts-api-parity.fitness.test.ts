@@ -126,6 +126,7 @@ const inputParity: InputParity = {
   'views.saved.setNotify': true,
   'views.notifyMe.update': true,
   'notifications.list': true,
+  'notifications.markSeen': true,
   'notifications.dismiss': true,
   'notifications.push.subscribe': true,
 };
@@ -163,6 +164,7 @@ const outputParity: OutputParity = {
   'views.saved.setNotify': true,
   'views.notifyMe.update': true,
   'notifications.list': true,
+  'notifications.markSeen': true,
   'notifications.dismiss': true,
   'notifications.push.subscribe': true,
 };

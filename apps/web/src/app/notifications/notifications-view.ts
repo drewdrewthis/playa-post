@@ -26,15 +26,28 @@ export function dismissedNotifications(
 }
 
 /**
- * What the bell's badge shows.
+ * What the bell's badge shows: what has happened **since the reader last looked**.
  *
- * ⚠ **Counts `unread`, never `list.length`.** Dismissed notifications stay in the list,
- * so a length-based badge would never fall back to zero once anything had ever arrived.
+ * ⚠ **`unread && !seen`, and both halves matter** (issue #178). `unread` alone was the
+ * badge until the panel had no way to lower it: opening the notifications screen marked
+ * nothing, so the count sat there until every row was dismissed one at a time — a badge
+ * that punished the reader for having read it. `seen` alone is not enough either: a
+ * dismissed notification is dealt with whether or not a watermark covers it, and it must
+ * leave the count with the row.
+ *
+ * ⚠ **Never `list.length`.** Dismissed notifications stay in the list, so a length-based
+ * badge would never fall back to zero once anything had ever arrived.
+ *
+ * ⚠ **This is the only thing `seen` changes.** {@link unreadNotifications} and
+ * {@link dismissedNotifications} still split the panel on `unread` alone — a seen
+ * notification is still waiting to be dealt with, and moving it out of the body because
+ * somebody glanced at the screen would delete the thing they came to look at.
  */
-export function unreadNotificationCount(
+export function unseenNotificationCount(
   notifications: readonly GroupedNotification[],
 ): number {
-  return unreadNotifications(notifications).length;
+  return notifications.filter((notification) => notification.unread && !notification.seen)
+    .length;
 }
 
 /**

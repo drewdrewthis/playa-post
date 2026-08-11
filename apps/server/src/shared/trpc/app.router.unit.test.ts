@@ -86,6 +86,7 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
     notifications: createNotificationsRouter({
       subscribeToPush: { subscribe: unreachable },
       listNotifications: { list: unreachable },
+      markNotificationsSeen: { markSeen: unreachable },
       dismissNotification: { dismiss: unreachable },
     }),
   });

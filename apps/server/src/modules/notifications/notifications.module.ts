@@ -13,6 +13,7 @@ import {
   type EvaluateNotifyMeHandler,
 } from './application/evaluate-notify-me.handler';
 import { createListNotificationsQuery } from './application/list-notifications.query';
+import { createMarkNotificationsSeenService } from './application/mark-notifications-seen.service';
 import {
   createSendGroupedPushHandler,
   type SendGroupedPushHandler,
@@ -23,6 +24,7 @@ import type { PushTransport } from './domain/push-transport';
 import { createPostgresDeliveredNotificationRepository } from './persistence/postgres-delivered-notification.repository';
 import { createPostgresNoteNotificationRepository } from './persistence/postgres-note-notification.repository';
 import { createPostgresNotificationDismissalRepository } from './persistence/postgres-notification-dismissal.repository';
+import { createPostgresNotificationSeenWatermarkRepository } from './persistence/postgres-notification-seen-watermark.repository';
 import { createPostgresNotifyMeMatchRepository } from './persistence/postgres-notify-me-match.repository';
 import { createPostgresPushSubscriptionRepository } from './persistence/postgres-push-subscription.repository';
 import {
@@ -127,15 +129,24 @@ export function createNotificationsModule(
   const deliveredNotifications = createPostgresDeliveredNotificationRepository({ database });
   const noteNotifications = createPostgresNoteNotificationRepository({ database });
   const dismissals = createPostgresNotificationDismissalRepository({ database });
+  const seenWatermarks = createPostgresNotificationSeenWatermarkRepository({ database });
 
   return {
     router: createNotificationsRouter({
       subscribeToPush: createSubscribeToPushService({ pushSubscriptions }),
-      listNotifications: createListNotificationsQuery({ deliveredNotifications, dismissals }),
+      listNotifications: createListNotificationsQuery({
+        deliveredNotifications,
+        dismissals,
+        seenWatermarks,
+      }),
       // The read and the write share both collaborators on purpose: `unread` is the
       // negation of what `dismiss` writes, so a second store behind either one would be
       // two answers to one question.
       dismissNotification: createDismissNotificationService({ deliveredNotifications, dismissals }),
+      // Same reason again, for the second pair: `seen` is a comparison against exactly
+      // what `markSeen` writes (issue #178). ⚠ It takes no `deliveredNotifications` —
+      // there is no notification to prove ownership of, because the command names none.
+      markNotificationsSeen: createMarkNotificationsSeenService({ seenWatermarks }),
     }),
     evaluateNotifyMe: createEvaluateNotifyMeHandler({
       notifyMeQueries: createNotifyMeQueryDirectory({ database }),

@@ -4,14 +4,17 @@ import { ApplicationError } from '../../../shared/errors/application-error';
 import { authenticatedProcedure, router } from '../../../shared/trpc/trpc';
 import type { DismissNotificationService } from '../application/dismiss-notification.service';
 import type { ListNotificationsQuery } from '../application/list-notifications.query';
+import type { MarkNotificationsSeenService } from '../application/mark-notifications-seen.service';
 import type { SubscribeToPushService } from '../application/subscribe-to-push.service';
 import { NotificationUnavailableError } from '../domain/notification.errors';
 
 import {
   presentNotification,
   presentNotificationDismissal,
+  presentNotificationSeenMark,
   type PresentedNotification,
   type PresentedNotificationDismissal,
+  type PresentedNotificationSeenMark,
 } from './grouped-notification.presenter';
 import { notificationIdInput } from './notification-id.input';
 import { subscribeToPushInput } from './subscribe-to-push.input';
@@ -20,6 +23,7 @@ import { subscribeToPushInput } from './subscribe-to-push.input';
 export interface NotificationsRouterDependencies {
   readonly subscribeToPush: SubscribeToPushService;
   readonly listNotifications: ListNotificationsQuery;
+  readonly markNotificationsSeen: MarkNotificationsSeenService;
   readonly dismissNotification: DismissNotificationService;
 }
 
@@ -64,7 +68,7 @@ async function present<T>(operation: () => Promise<T>): Promise<T> {
 /**
  * The notifications module's tRPC surface.
  *
- * **Three procedures, and the delivery half of this module still has none on purpose.**
+ * **Four procedures, and the delivery half of this module still has none on purpose.**
  * `EvaluateNotifyMeHandler` is an outbox consumer and `SendGroupedPushHandler` is a
  * scheduled flush (ADR-0006's "notification grouping window flush") — neither has a
  * caller who could sensibly invoke it over HTTP, and exposing "flush now" would hand a
@@ -72,10 +76,10 @@ async function present<T>(operation: () => Promise<T>): Promise<T> {
  * already did; it never causes one.
  *
  * `subscribe` is nested under `push` so the path spells what it acts on, the same
- * convention `connections.trust.set` follows. `list` and `dismiss` are not, because they
- * are about notifications rather than about the push transport — a person reading or
- * clearing their panel has one whether or not a device is subscribed. Notification
- * *preferences* are M5 and arrive as a sibling.
+ * convention `connections.trust.set` follows. `list`, `markSeen` and `dismiss` are not,
+ * because they are about notifications rather than about the push transport — a person
+ * reading or clearing their panel has one whether or not a device is subscribed.
+ * Notification *preferences* are M5 and arrive as a sibling.
  *
  * **There is deliberately no `dismissAll`.** The panel's "CLEAR ALL" is the client
  * calling `dismiss` once per notification it is currently showing, which is the only
@@ -98,6 +102,33 @@ export function createNotificationsRouter(dependencies: NotificationsRouterDepen
         present(async () =>
           (await dependencies.listNotifications.list({ viewerId: ctx.viewerId })).map(
             presentNotification,
+          ),
+        ),
+    ),
+
+    /**
+     * Say that you have your notifications panel open now (issue #178).
+     *
+     * **No input at all**, for two reasons rather than one. The first is `list`'s: there
+     * is exactly one person's watermark a caller may move (ADR-0002 §5a). The second is
+     * the design — the watermark claims "everything up to now", deliberately covering
+     * even what arrived since the caller's last read (decision D7's accepted
+     * consequence), so there is no identifier list to carry, and none to trust.
+     *
+     * Viewer-local and nothing else: it changes what `list` marks `seen` for the caller,
+     * which is what their bell's badge counts. It dismisses nothing — every notification
+     * stays exactly where it was in the panel — and it has no effect on any other
+     * recipient, on delivery, or on the bulletins and notes behind it.
+     *
+     * ⚠ **Not idempotent, deliberately.** Every call advances `seenAt`; see
+     * {@link import('../application/mark-notifications-seen.service').MarkNotificationsSeenService}.
+     * It is still safe to repeat — the watermark never moves backwards.
+     */
+    markSeen: authenticatedProcedure.mutation(
+      async ({ ctx }): Promise<PresentedNotificationSeenMark> =>
+        present(async () =>
+          presentNotificationSeenMark(
+            await dependencies.markNotificationsSeen.markSeen({ actorId: ctx.actor.userId }),
           ),
         ),
     ),

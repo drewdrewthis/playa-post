@@ -27,6 +27,7 @@ import type {
   GroupedNotification,
   NotificationDismissal,
   NotificationIdRequest,
+  NotificationSeenMark,
   SubscribeToPushRequest,
 } from './notifications';
 import type { MutationBatch, SubmitMutationsRequest } from './sync';
@@ -129,6 +130,7 @@ export interface PlayaPostApi {
   'views.notifyMe.update': MutationSpec<UpdateNotifyMeQueryRequest, NotifyMeQuery>;
 
   'notifications.list': QuerySpec<void, readonly GroupedNotification[]>;
+  'notifications.markSeen': MutationSpec<void, NotificationSeenMark>;
   'notifications.dismiss': MutationSpec<NotificationIdRequest, NotificationDismissal>;
   'notifications.push.subscribe': MutationSpec<SubscribeToPushRequest, void>;
 }

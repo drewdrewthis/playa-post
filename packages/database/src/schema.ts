@@ -177,6 +177,14 @@ export interface AppNotificationDismissals {
   recipient_id: string;
 }
 
+export interface AppNotificationSeenWatermarks {
+  /**
+   * Advances on every notifications.markSeen and never retreats — the upsert refuses a timestamp older than the stored one. Compared inclusively against a notification's occurred_at.
+   */
+  last_seen_at: Timestamp;
+  recipient_id: string;
+}
+
 export interface AppNotifyMeQueries {
   /**
    * The validated AST, ADR-0007's restricted filter grammar compiled by modules/views. Never raw SQL, never a second grammar — same shape the board and saved views use.
@@ -271,6 +279,7 @@ export interface DB {
   "app.mutation_results": AppMutationResults;
   "app.notes": AppNotes;
   "app.notification_dismissals": AppNotificationDismissals;
+  "app.notification_seen_watermarks": AppNotificationSeenWatermarks;
   "app.notify_me_queries": AppNotifyMeQueries;
   "app.outbox_events": AppOutboxEvents;
   "app.push_subscriptions": AppPushSubscriptions;

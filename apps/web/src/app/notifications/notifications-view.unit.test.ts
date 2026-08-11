@@ -6,8 +6,8 @@ import {
   dismissedNotifications,
   notificationTitle,
   relativeTime,
-  unreadNotificationCount,
   unreadNotifications,
+  unseenNotificationCount,
 } from './notifications-view';
 
 function notification(
@@ -19,6 +19,7 @@ function notification(
     occurredAt: '2026-08-08T12:00:00.000Z',
     bulletinIds: ['b1'],
     unread: true,
+    seen: false,
     ...overrides,
   };
 }
@@ -32,6 +33,7 @@ function noteNotification(
     occurredAt: '2026-08-08T12:00:00.000Z',
     noteId: 'note-1',
     unread: true,
+    seen: false,
     ...overrides,
   };
 }
@@ -91,7 +93,7 @@ describe('dismissedNotifications', () => {
   });
 });
 
-describe('unreadNotificationCount', () => {
+describe('unseenNotificationCount', () => {
   describe('given dismissed notifications still in the list', () => {
     it('counts the unread ones rather than the length of the list', () => {
       const list = [
@@ -100,19 +102,42 @@ describe('unreadNotificationCount', () => {
         notification({ notificationId: 'n3', unread: false }),
       ];
 
-      expect(unreadNotificationCount(list)).toBe(1);
+      expect(unseenNotificationCount(list)).toBe(1);
     });
   });
 
-  describe('given nothing unread', () => {
-    it('is zero, which is what hides the bell badge', () => {
-      expect(unreadNotificationCount([notification({ unread: false })])).toBe(0);
+  describe('given an unread notification the reader has already seen', () => {
+    it('does not count it — opening the panel is what clears the badge (issue #178)', () => {
+      // The row is still unread and still renders in the panel body. Only the badge
+      // stops counting it: the badge answers "has anything happened since you last
+      // looked", not "is anything still outstanding".
+      expect(unseenNotificationCount([notification({ unread: true, seen: true })])).toBe(0);
+    });
+  });
+
+  describe('given a notification that arrived after the last panel open', () => {
+    it('counts it, so the badge comes back up', () => {
+      const list = [
+        notification({ notificationId: 'before', unread: true, seen: true }),
+        notification({ notificationId: 'after', unread: true, seen: false }),
+      ];
+
+      expect(unseenNotificationCount(list)).toBe(1);
+    });
+  });
+
+  describe('given a dismissed notification that was never seen', () => {
+    it('does not count it — dismissing takes it out of the badge too', () => {
+      // Both flags gate the badge independently. Dismissing an unseen row (the panel's
+      // `✕` before any watermark exists) has to drop the count, or "clear all" would
+      // leave a badge nothing on screen explains.
+      expect(unseenNotificationCount([notification({ unread: false, seen: false })])).toBe(0);
     });
   });
 
   describe('given an empty list', () => {
     it('is zero', () => {
-      expect(unreadNotificationCount([])).toBe(0);
+      expect(unseenNotificationCount([])).toBe(0);
     });
   });
 });
@@ -168,7 +193,27 @@ describe('a mixed list of both kinds', () => {
     expect(dismissedNotifications(list).map((item) => item.notificationId)).toEqual([
       'note-dismissed',
     ]);
-    expect(unreadNotificationCount(list)).toBe(2);
+    expect(unseenNotificationCount(list)).toBe(2);
+  });
+
+  it('keeps the panel split on unread alone — seen changes the badge and nothing else', () => {
+    // Issue #178's load-bearing separation. Every row here has been seen; the body and
+    // the history section must look exactly as they did before the panel was opened,
+    // while the badge is empty.
+    const list = [
+      notification({ notificationId: 'bulletin-unread', unread: true, seen: true }),
+      noteNotification({ notificationId: 'note-dismissed', unread: false, seen: true }),
+      noteNotification({ notificationId: 'note-unread', unread: true, seen: true }),
+    ];
+
+    expect(unreadNotifications(list).map((item) => item.notificationId)).toEqual([
+      'bulletin-unread',
+      'note-unread',
+    ]);
+    expect(dismissedNotifications(list).map((item) => item.notificationId)).toEqual([
+      'note-dismissed',
+    ]);
+    expect(unseenNotificationCount(list)).toBe(0);
   });
 });
 
