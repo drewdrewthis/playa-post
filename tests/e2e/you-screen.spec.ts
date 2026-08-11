@@ -105,6 +105,57 @@ test.describe('the You screen renders in both themes', () => {
   });
 
   /**
+   * Renaming yourself, through the real server ([#177](https://github.com/drewdrewthis/playa-post/issues/177)).
+   *
+   * ⚠ **The name it asserts is the one `graph.list` came back with, not the one that
+   * was typed.** The mutation invalidates the query cache and the heading re-renders
+   * from the refetched graph, so this is a round trip through `app.users` and
+   * `app.visible_people` rather than a local echo — which is the whole claim, and the
+   * only part of it a browser can make.
+   *
+   * ⚠ **It reads the starting name and restores it**, exactly as the dial test lands
+   * back on 'sixth'. `playwright.config.ts` pins `workers: 1` and `fullyParallel:
+   * false`, so specs share these three users in sequence; a suite that left user A
+   * renamed would be a booby trap for the next one written.
+   *
+   * The cross-user half of AC5 — B's board attribution showing A's new name — is
+   * proved in `modules/identity/tests/integration/edit-display-name.integration.test.ts`
+   * against the real §6a projection, which is stronger evidence than a rendered card
+   * and does not need two browser sessions and a connection to say it.
+   */
+  test('renames you through the real server, and the heading comes back changed', async ({
+    page,
+  }) => {
+    await bootstrapSession(page, requireEnv('E2E_USER_A_ACCESS_TOKEN'));
+    await page.goto('/you');
+
+    const heading = page.locator('.profile__name');
+    await expect(heading).toBeVisible();
+    const original = (await heading.textContent()) ?? '';
+    expect(original).not.toBe('');
+
+    const renamed = `${original} Renamed`;
+
+    await page.getByTestId('display-name-edit-button').click();
+    await page.getByTestId('display-name-input').fill(renamed);
+    await page.getByTestId('display-name-save-button').click();
+
+    // Back to a heading, carrying the refetched name.
+    await expect(page.getByTestId('display-name-form')).toBeHidden();
+    await expect(heading).toHaveText(renamed);
+
+    // A reload proves it was stored rather than held in a warm cache.
+    await page.reload();
+    await expect(heading).toHaveText(renamed);
+
+    // Put it back for whoever runs next.
+    await page.getByTestId('display-name-edit-button').click();
+    await page.getByTestId('display-name-input').fill(original);
+    await page.getByTestId('display-name-save-button').click();
+    await expect(heading).toHaveText(original);
+  });
+
+  /**
    * The dial round-trips through the real server: every click is an
    * `identity.visibility.set` mutation, and the label the next assertion reads comes
    * from the row the server stored, not from optimistic local state. Four clicks walk

@@ -3,23 +3,38 @@ import { TRPCError } from '@trpc/server';
 import { ApplicationError } from '../../../shared/errors/application-error';
 import { authenticatedProcedure, router, signedInProcedure } from '../../../shared/trpc/trpc';
 import type { CompleteOnboardingService } from '../application/complete-onboarding.service';
+import type { UpdateDisplayNameService } from '../application/update-display-name.service';
 import type { VisibilitySettingService } from '../application/visibility-setting.service';
 import { HandleImmutableError } from '../domain/user.errors';
 import type { VisibleToDistance } from '../domain/visible-to-distance';
 
 import { completeOnboardingInput } from './complete-onboarding.input';
 import { setVisibilityInput } from './set-visibility.input';
+import { updateDisplayNameInput } from './update-display-name.input';
 import { presentUser, type PresentedUser } from './user.presenter';
 
 /** The application operations this router speaks for. */
 export interface IdentityRouterDependencies {
   readonly completeOnboarding: CompleteOnboardingService;
   readonly visibilitySetting: VisibilitySettingService;
+  readonly updateDisplayName: UpdateDisplayNameService;
 }
 
 /** `identity.visibility.*`'s output — the caller's own setting, nothing else. */
 export interface PresentedVisibilitySetting {
   readonly visibleToDistance: VisibleToDistance;
+}
+
+/**
+ * `identity.updateDisplayName`'s output — the stored name, echoed back.
+ *
+ * The name and nothing more, following `PresentedVisibilitySetting` rather than
+ * `PresentedUser`: the caller already knows its own handle and id, and the smallest
+ * payload that answers "what is stored now" is the one that cannot leak the next
+ * field by accident (`user.presenter.ts`).
+ */
+export interface PresentedDisplayName {
+  readonly displayName: string;
 }
 
 /**
@@ -77,6 +92,32 @@ export function createIdentityRouter(dependencies: IdentityRouterDependencies) {
           }
           throw error;
         }
+      }),
+
+    /*
+     * The caller renames themselves, and there is deliberately **no matching read**:
+     * a person's own display name already arrives on `graph.list` (they are on their
+     * own graph at degree 0 with `full` disclosure), and a second answer to "what am
+     * I called" is a second thing that can disagree.
+     *
+     * `authenticatedProcedure`, so `ctx.actor.userId` is the only identifier this
+     * procedure ever sees. Together with an input carrying no identity field, that is
+     * the whole of AC2: the caller cannot express renaming anybody but themselves,
+     * rather than being checked against a target they supplied (ADR-0002:180-181).
+     *
+     * **`identity.updateDisplayName`, not `identity.displayName.set`.** The sibling
+     * dial is a namespace because it genuinely has two operations; a one-procedure
+     * namespace would be a placeholder for a `get` that must not exist (addendum §4).
+     */
+    updateDisplayName: authenticatedProcedure
+      .input(updateDisplayNameInput)
+      .mutation(async ({ ctx, input }): Promise<PresentedDisplayName> => {
+        return {
+          displayName: await dependencies.updateDisplayName.update(
+            ctx.actor.userId,
+            input.displayName,
+          ),
+        };
       }),
 
     // The caller's own "who can see you at all" dial. `authenticatedProcedure`, not

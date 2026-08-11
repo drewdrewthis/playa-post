@@ -62,6 +62,20 @@
   min-width: 0;
 }
 
+/**
+ * The heading and its Edit control, on one line (#177).
+ *
+ * `align-items: baseline` rather than `center`: the quiet Edit label sits on the
+ * name's baseline the way the comp's other secondary text does, and centring a
+ * small-caps label against a display-size heading reads as misaligned.
+ */
+.profile__name-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--pp-space-2);
+  min-width: 0;
+}
+
 .profile__name {
   margin: 0;
   font-family: var(--pp-font-display);
@@ -69,6 +83,43 @@
   font-size: var(--pp-text-xl);
   line-height: 1.15;
   color: var(--pp-ink);
+}
+
+/**
+ * Quiet by design: a person came to this screen to read their name, not to be invited
+ * to change it. Sized and coloured like `.profile__section-label` so it reads as
+ * chrome, with a hit area the comp's other inline controls also carry.
+ */
+.profile__name-edit {
+  flex: none;
+  padding: var(--pp-space-1) var(--pp-space-2);
+  border: 0;
+  border-radius: var(--pp-radius-sm);
+  background: none;
+  color: var(--pp-faint);
+  font: inherit;
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.profile__name-edit:hover {
+  color: var(--pp-ink);
+}
+
+/* The form that replaces the heading in place. */
+.profile__name-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+  min-width: 0;
+}
+
+.profile__name-actions {
+  display: flex;
+  gap: var(--pp-space-2);
 }
 
 .profile__counts {

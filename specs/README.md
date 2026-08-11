@@ -2,7 +2,8 @@
 
 This directory began as the milestone-M2 vertical-slice suite (`docs/engineering/implementation-plan.md`
 §"M2 — First production vertical slice", the addendum §23 flow exactly) and now also carries feature
-files for later-milestone work (`bulletin-post-types.feature`, #87; `pin-a-note.feature`, #88). For M2
+files for later-milestone work (`bulletin-post-types.feature`, #87; `pin-a-note.feature`, #88;
+`edit-display-name.feature`, #177). For M2
 the completeness claim holds both ways: if a behavior is not captured in an M2 scenario below, it is not in M2 scope, and
 every M2-AC1…AC26 is captured here or explicitly named as not cleanly mappable.
 
@@ -10,7 +11,8 @@ Sources of truth, in precedence order: `docs/engineering/implementation-plan.md`
 `docs/engineering/architecture-addendum.md` §21 (test levels) + §23 (slice flow) →
 `docs/adr/ADR-0002` (authorization/visibility), `ADR-0005` (offline idempotency), `ADR-0006` (outbox),
 `ADR-0008` (identity) → `docs/product/decisions.md` (D1–D3 for the M2 files; D5 for
-`bulletin-post-types.feature`, D6 for `pin-a-note.feature`) → the handoff PDF.
+`bulletin-post-types.feature`, D6 for `pin-a-note.feature`, D15 for
+`edit-display-name.feature`) → the handoff PDF.
 
 ⚠ **`docs/product/decisions.md` is read newest-first for the later-milestone files.** D2 cut private
 notes from v1; **D6 supersedes that for [#88](https://github.com/drewdrewthis/playa-post/issues/88)** and
@@ -68,9 +70,10 @@ per-module for independent module-level suites — this is deliberate duplicatio
 | `bulletin-post-types.feature` | The six postable types; filterable ≠ postable (#87, M5) | 1 e2e, 3 integration |
 | `pin-a-note.feature` | Private person-to-person notes, degree-1 gated (#88, D6); the expanded view and answering one (#176, D14) | 1 e2e, 16 integration, 9 unit |
 | `request-an-intro.feature` | One-hop introductions: eligibility, the pass-on, and the target's answer (#89, #166, #175, D11, D12) | 25 integration, 4 unit |
-| **Total** | | **14 e2e, 98 integration, 23 unit — 132 scenarios** |
+| `edit-display-name.feature` | Editing your own display name; the handle stays immutable (#177, D15) | 1 e2e, 11 integration, 6 unit |
+| **Total** | | **15 e2e, 109 integration, 29 unit — 150 scenarios** |
 
-The three numbers sum to 135, not 132, and the gap is not an arithmetic slip: three scenarios in
+The three numbers sum to 153, not 150, and the gap is not an arithmetic slip: three scenarios in
 `request-an-intro.feature` (lines 172, 182, 259) carry `@unit @integration` together, so each is
 counted at both levels and once in the total. They are the standing exception to the one-tag rule
 above, and they are counted here rather than quietly rounded away — a total that disagrees with its
@@ -107,6 +110,7 @@ own columns invites exactly the drift the last recount found.
 | M2-AC24 (concurrent drainers) | `notify-me.feature` › "Two concurrent drainers claim disjoint events" |
 | M2-AC25 (handle rules) | `identity-magic-link.feature` › the six handle-rule scenarios |
 | M2-AC26 (regression) | **Not mapped — see below** |
+| Editing your display name ([#177](https://github.com/drewdrewthis/playa-post/issues/177)) | `edit-display-name.feature` › the eighteen scenarios — the rename itself, the caller-follows-the-context authorization, the handle surviving untouched and a submitted handle being refused, the §6a projection returning the new name on the next read without disclosing one it withheld, and the shared bounds |
 
 ## ACs that do not map cleanly to a BDD scenario
 
