@@ -8,7 +8,7 @@ import type { ModerationTargetRequest, ReportBulletinRequest } from '@playa-post
 import { useApi } from '../api/api-provider';
 import { applicationErrorCode } from '../api/client';
 import type { BoardCardView } from '../bulletins/board-card-view';
-import { buildBoardQuery, parseBoardTypeFilter, type BoardTypeFilter } from '../bulletins/board-query';
+import { buildBoardQuery, parseBoardQueryState, type BoardTypeFilter } from '../bulletins/board-query';
 import { BoardSearch } from '../bulletins/board-search';
 import { BulletinCard } from '../bulletins/bulletin-card';
 import { BulletinDetailSheet } from '../bulletins/bulletin-detail-sheet';
@@ -92,18 +92,27 @@ export function BoardRoute(): JSX.Element {
   const [hidden, setHidden] = useState<readonly string[]>([]);
   const urlQuery = searchParams.get('q') ?? '';
   // Seeded from `?q=` on mount and re-synced whenever it changes (the effect below) —
-  // that is how the Saved screen's "OPEN ON BOARD" arrives (#173), and the chip is
-  // derived the same way: a saved `type:` term now selects its own chip instead of
-  // resetting to "All" underneath it (`parseBoardTypeFilter`). Typing or clicking a chip
+  // that is how the Saved screen's "OPEN ON BOARD" arrives (#173). `search` and `filter`
+  // both come from this one `parseBoardQueryState` call so they can never drift apart the
+  // way they once did: the chip a saved `type:` term selects and the text left in the
+  // search box used to be derived separately — the whole query for one, a parse of the
+  // same query for the other — so the search box kept the `type:` term that
+  // `buildBoardQuery` below was about to add a second time. Typing or clicking a chip
   // never writes back to `?q=`, so re-deriving here can never fight a person's own edit —
   // it only ever reacts to a *new* URL, which is exactly a saved view opening or a
   // browser back/forward landing on a different `?q=`.
-  const [search, setSearch] = useState(() => urlQuery);
-  const [filter, setFilter] = useState<BoardTypeFilter>(() => parseBoardTypeFilter(urlQuery));
+  //
+  // Lazy initializers, not a plain `useState(urlQuery)`: without them React mounts at the
+  // unfiltered state and this comp's query below fetches for it once before the effect
+  // below ever runs — one wasted request before the real, `?q=`-derived state lands.
+  const initialQueryState = parseBoardQueryState(urlQuery);
+  const [search, setSearch] = useState(() => initialQueryState.search);
+  const [filter, setFilter] = useState<BoardTypeFilter>(() => initialQueryState.filter);
 
   useEffect(() => {
-    setSearch(urlQuery);
-    setFilter(parseBoardTypeFilter(urlQuery));
+    const queryState = parseBoardQueryState(urlQuery);
+    setSearch(queryState.search);
+    setFilter(queryState.filter);
   }, [urlQuery]);
   const [openBulletinId, setOpenBulletinId] = useState<string | null>(null);
   /*

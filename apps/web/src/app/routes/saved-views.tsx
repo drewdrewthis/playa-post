@@ -116,9 +116,9 @@ export function SavedViewsRoute(): JSX.Element {
 
   function openOnBoard(sourceText: string): void {
     // The comp's `onOpen`: the whole saved text becomes the board's query, `type:` term
-    // included. The board itself now derives which chip that term selects
-    // (`board-query.ts`'s `parseBoardTypeFilter`, #173), so this call carries no filter
-    // state of its own.
+    // included. The board itself now derives which chip that term selects, and strips it
+    // back out of the search box (`board-query.ts`'s `parseBoardQueryState`, #173), so
+    // this call carries no filter state of its own.
     void navigate(`/board?q=${encodeURIComponent(sourceText)}`);
   }
 
