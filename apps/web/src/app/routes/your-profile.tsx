@@ -12,6 +12,7 @@ import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
 import { useOffline } from '../offline/offline-provider';
 import { describeQueuedMutation, sortedQueue } from '../offline/sync-queue-view';
 import { ConnectCard } from '../profile/connect-card';
+import { DisplayNameEditor } from '../profile/display-name-editor';
 import { RetryRow } from '../profile/retry-row';
 import {
   describeVisibility,
@@ -101,7 +102,12 @@ export function YourProfileRoute(): JSX.Element {
           {me?.displayName?.slice(0, 1).toUpperCase() ?? ''}
         </span>
         <div className="profile__identity-text">
-          <h1 className="profile__name">{me?.displayName ?? 'You'}</h1>
+          {/*
+            The heading and the way to change it are one component, so the edit happens
+            where the name is rather than on a screen of its own (#177). The handle is
+            deliberately not editable beside it — ADR-0008 rule 4, decision D15.
+          */}
+          <DisplayNameEditor displayName={me?.displayName} />
           <p className="profile__counts" data-testid="profile-counts">
             {summary.people} connections · {summary.trusted} trusted
           </p>

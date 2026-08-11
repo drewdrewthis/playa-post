@@ -1,8 +1,14 @@
 import type { inferRouterInputs, inferRouterOutputs } from '@trpc/server';
 import { describe, expect, it } from 'vitest';
 
-import type { ProcedureInput, ProcedureOutput, ProcedurePath } from '@playa-post/contracts';
+import {
+  DISPLAY_NAME_MAX_LENGTH as CONTRACTS_DISPLAY_NAME_MAX_LENGTH,
+  type ProcedureInput,
+  type ProcedureOutput,
+  type ProcedurePath,
+} from '@playa-post/contracts';
 
+import { DISPLAY_NAME_MAX_LENGTH as MODULE_DISPLAY_NAME_MAX_LENGTH } from '../../apps/server/src/modules/identity/transport/display-name';
 import type { AppRouter } from '../../apps/server/src/shared/trpc/app.router';
 
 import { procedurePaths } from './find-viewer-identifier-inputs';
@@ -30,6 +36,11 @@ import { buildNullObjectAppRouter, EXPECTED_PROCEDURE_COUNT } from './null-objec
  * 2. *Run time* — the key set equals `procedurePaths()` **in both directions**. A
  *    procedure added to the router without a contract key is caught here, because a
  *    type-level check can only check the keys it was given.
+ *
+ * **Shapes are not the only thing this package restates.** A contract that also copies a
+ * *value* — a bound a client enforces ahead of the round trip — can rot the same way and
+ * more quietly, because nothing about it is a type at all. Those are held together at the
+ * bottom of this file, for the same reason and by the same licence to import both sides.
  */
 
 /** Index a nested inference record by the dotted path the contracts spec uses. */
@@ -96,6 +107,7 @@ type OutputParity = {
 const inputParity: InputParity = {
   'health.check': true,
   'identity.completeOnboarding': true,
+  'identity.updateDisplayName': true,
   'identity.visibility.get': true,
   'identity.visibility.set': true,
   'connections.invitations.create': true,
@@ -138,6 +150,7 @@ const inputParity: InputParity = {
 const outputParity: OutputParity = {
   'health.check': true,
   'identity.completeOnboarding': true,
+  'identity.updateDisplayName': true,
   'identity.visibility.get': true,
   'identity.visibility.set': true,
   'connections.invitations.create': true,
@@ -194,5 +207,27 @@ describe('packages/contracts is the router, restated (ADR-0014)', () => {
 
   it('checks the output of every path it checks the input of', () => {
     expect(Object.keys(outputParity).sort()).toEqual(contractPaths);
+  });
+});
+
+/**
+ * The same gate, over the numbers rather than the shapes.
+ *
+ * `DISPLAY_NAME_MAX_LENGTH` is declared in `modules/identity/transport/display-name.ts`
+ * and restated in `packages/contracts` — one-directional and deliberate, because a
+ * module never imports the contracts package (ADR-0014). Nothing else can notice if the
+ * two stop agreeing: it is a `number`, not a shape, so no assignability check anywhere
+ * has an opinion about its value.
+ *
+ * ⚠ **The drift would be silent in the worst possible direction.** The You screen sizes
+ * its `maxLength` attribute from the contracts copy, so lowering the server's bound and
+ * forgetting this one leaves a field that lets a person type a name and a server that
+ * refuses it — a rejection with no visible cause, on the field that renders their own
+ * name back to them. Raising it instead truncates them in the browser at a length the
+ * server would have accepted, with no error at all.
+ */
+describe('packages/contracts restates the server-side bounds, and they still agree', () => {
+  it('bounds a display name at the same length the module does', () => {
+    expect(CONTRACTS_DISPLAY_NAME_MAX_LENGTH).toBe(MODULE_DISPLAY_NAME_MAX_LENGTH);
   });
 });

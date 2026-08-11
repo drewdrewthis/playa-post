@@ -4,6 +4,7 @@ import type { ActorResolver } from '../../shared/auth/actor-resolver';
 
 import { createCompleteOnboardingService } from './application/complete-onboarding.service';
 import { createResolveActorQuery } from './application/resolve-actor.query';
+import { createUpdateDisplayNameService } from './application/update-display-name.service';
 import { createVisibilitySettingService } from './application/visibility-setting.service';
 import { createPostgresUserRepository } from './persistence/postgres-user.repository';
 import { createIdentityRouter, type IdentityRouter } from './transport/identity.router';
@@ -47,6 +48,7 @@ export function createIdentityModule(dependencies: IdentityModuleDependencies): 
     router: createIdentityRouter({
       completeOnboarding: createCompleteOnboardingService({ users }),
       visibilitySetting: createVisibilitySettingService({ users }),
+      updateDisplayName: createUpdateDisplayNameService({ users }),
     }),
     actorResolver: createResolveActorQuery({ users }),
   };

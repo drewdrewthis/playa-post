@@ -87,4 +87,21 @@ export interface UserRepository {
    * ordinary answer rather than a 500.
    */
   setVisibleToDistance(userId: string, distance: VisibleToDistance): Promise<User | null>;
+
+  /**
+   * Store this user's own display name and return the stored row.
+   *
+   * Keyed on the internal `app.users.id` the caller already resolved from its verified
+   * token — never on a client-supplied identifier (ADR-0002:180-181). There is no
+   * parameter naming a subject, so this port cannot express renaming somebody else.
+   *
+   * ⚠ **Writes `display_name` and nothing else.** `handle` is immutable (ADR-0008
+   * rule 4, decision D15), so a rename must leave it exactly where it was — every
+   * reference by handle keeps resolving to the same person under a new name.
+   *
+   * Returns `null` if no such user exists, for the same reason the finders do: the
+   * row can be erased between resolving the actor and this write, and that is an
+   * ordinary answer rather than a 500.
+   */
+  setDisplayName(userId: string, displayName: string): Promise<User | null>;
 }

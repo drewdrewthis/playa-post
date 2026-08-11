@@ -43,6 +43,7 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
     identity: createIdentityRouter({
       completeOnboarding: { complete: unreachable },
       visibilitySetting: { get: unreachable, set: unreachable },
+      updateDisplayName: { update: unreachable },
     }),
     connections: createConnectionsRouter({
       createInvite: { create: unreachable },

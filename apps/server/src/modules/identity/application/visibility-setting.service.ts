@@ -1,4 +1,5 @@
 import type { User } from '../domain/user';
+import { UserRowMissingError } from '../domain/user.errors';
 import type { UserRepository } from '../domain/user.repository';
 import type { VisibleToDistance } from '../domain/visible-to-distance';
 
@@ -19,20 +20,6 @@ export interface VisibilitySettingService {
   get(userId: string): Promise<VisibleToDistance>;
   /** Store the caller's setting and return what was stored. */
   set(userId: string, distance: VisibleToDistance): Promise<VisibleToDistance>;
-}
-
-/**
- * Thrown only for the race where the account vanishes (erasure) between actor
- * resolution and this call. `authenticatedProcedure` already guarantees an onboarded,
- * active actor on entry, so this is not a state a well-behaved client can reach —
- * which is why it is a plain error the transport renders as a 500, not an
- * `ApplicationError` with a client-facing code.
- */
-class UserRowMissingError extends Error {
-  constructor() {
-    super('User row disappeared between actor resolution and the visibility operation.');
-    this.name = 'UserRowMissingError';
-  }
 }
 
 export function createVisibilitySettingService(

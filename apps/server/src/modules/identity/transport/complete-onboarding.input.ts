@@ -1,14 +1,6 @@
 import { z } from 'zod';
 
-/**
- * The longest display name this API accepts.
- *
- * A transport concern, not a domain rule: nothing in ADR-0008 constrains a display
- * name beyond `not null`, and a person's name is theirs. This bound exists so the
- * column cannot be used as free storage, and it lives here because "how big may a
- * request field be" is a question about the wire, not about identity.
- */
-export const DISPLAY_NAME_MAX_LENGTH = 80;
+import { displayNameSchema } from './display-name';
 
 /**
  * `identity.completeOnboarding`'s input.
@@ -25,10 +17,15 @@ export const DISPLAY_NAME_MAX_LENGTH = 80;
  * boundary; a caller asserting who it is would be total, silent impersonation (R14).
  * `tests/fitness/viewer-id-provenance.fitness.test.ts` walks the built router and
  * fails on any such field.
+ *
+ * **`displayName` is validated by the shared {@link displayNameSchema}**, which
+ * `identity.updateDisplayName` also takes — the name a person may choose at sign-up
+ * and the name they may rename themselves to are one rule with one home (decision
+ * D15).
  */
 export const completeOnboardingInput = z.object({
   handle: z.string(),
-  displayName: z.string().trim().min(1).max(DISPLAY_NAME_MAX_LENGTH),
+  displayName: displayNameSchema,
 });
 
 export type CompleteOnboardingInput = z.infer<typeof completeOnboardingInput>;

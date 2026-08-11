@@ -1,4 +1,17 @@
-/** Longest `displayName` the server accepts. Mirrors `DISPLAY_NAME_MAX_LENGTH`. */
+/**
+ * Longest `displayName` the server accepts.
+ *
+ * Mirrors `modules/identity/transport/display-name.ts`'s `DISPLAY_NAME_MAX_LENGTH`,
+ * which is the declaration — a module never imports this package, so the copy is
+ * one-directional and deliberate (ADR-0014). It is here so a client can stop a person
+ * overrunning the bound before the round trip; the server refuses it either way, and
+ * a client that omitted the check would be rude, not unsafe.
+ *
+ * The same number bounds **both** `identity.completeOnboarding` and
+ * `identity.updateDisplayName`, because they take one shared schema server-side: the
+ * name you may rename yourself to is exactly the name you could have joined under
+ * (decision D15).
+ */
 export const DISPLAY_NAME_MAX_LENGTH = 80;
 
 /**
@@ -64,4 +77,34 @@ export interface VisibilitySetting {
 /** `identity.visibility.set` input — the caller's own setting, never anyone else's. */
 export interface SetVisibilityRequest {
   readonly visibleToDistance: VisibleToDistance;
+}
+
+/**
+ * `identity.updateDisplayName` input — the caller's own name, never anyone else's.
+ *
+ * ⚠ **No handle field, and adding one is an ADR change rather than a contract
+ * change.** A handle is chosen once and never changed
+ * ([ADR-0008](../../../docs/adr/ADR-0008-identity-model.md) rule 4): re-issuing a
+ * retired one lets its next holder inherit shared links and real-world recognition,
+ * which is an impersonation vector in a network built on recognition. Decision D15
+ * records that issue #177 deliberately did not reopen it.
+ */
+export interface UpdateDisplayNameRequest {
+  readonly displayName: string;
+}
+
+/**
+ * `identity.updateDisplayName` output — the name the server actually stored.
+ *
+ * The echo, not the request: trimming happens server-side, so this is the truthful
+ * value for a client that caches what it just sent rather than re-reading.
+ *
+ * ⚠ **The You screen is deliberately not that client.** A display name renders in more
+ * places than this response knows about — the profile heading, the graph, board
+ * attribution, note author cards — so it invalidates its queries and lets every one of
+ * them re-read, and never looks at this field. The echo is here for the caller that has
+ * only this answer to go on, not because the shipped client leans on it.
+ */
+export interface StoredDisplayName {
+  readonly displayName: string;
 }

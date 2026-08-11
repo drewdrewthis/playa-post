@@ -18,6 +18,27 @@ import { HANDLE_MAX_LENGTH, HANDLE_MIN_LENGTH } from './handle';
  */
 export const HANDLE_NOT_AVAILABLE_MESSAGE = 'That handle is not available. Choose another one.';
 
+/**
+ * The account vanished (erasure) between actor resolution and a write to its own row.
+ *
+ * ⚠ **Deliberately not an {@link ApplicationError}, unlike everything else in this
+ * file.** `authenticatedProcedure` already guarantees an onboarded, active actor on
+ * entry, so this is not a state a well-behaved client can reach; giving it a
+ * client-facing code would publish a refusal nobody can act on and invite a client to
+ * branch on it. It is a plain error the transport renders as a 500, which is the
+ * honest status for "the row this request was resolved from is gone".
+ *
+ * Shared by every service that writes the caller's own `app.users` row — the
+ * visibility dial and the display-name edit both reach it through the same race, and
+ * a second copy of this class would be a second answer to one question.
+ */
+export class UserRowMissingError extends Error {
+  constructor() {
+    super('User row disappeared between actor resolution and the write to it.');
+    this.name = 'UserRowMissingError';
+  }
+}
+
 /** ADR-0008:54 — the handle is on the reserved-word blocklist. */
 export class HandleReservedError extends ApplicationError {
   static readonly code = 'HANDLE_RESERVED';

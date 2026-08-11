@@ -163,5 +163,28 @@ export function createPostgresUserRepository(
           .executeTakeFirst(),
       );
     },
+
+    async setDisplayName(userId: string, displayName: string): Promise<User | null> {
+      // `version` is deliberately not bumped and no expected version is required, for
+      // the same reason `setVisibleToDistance` above does not: ADR-0005's optimistic
+      // concurrency guards *content* two people can both edit, and this column has a
+      // single writer who is its owner. ADR-0005's matrix has no row for a rename, and
+      // a conflict error here would mean "your own name change was rejected because
+      // your other device also changed it" — last-write-wins is what a person editing
+      // their own name expects.
+      //
+      // ⚠ **`display_name` is the only column in the SET clause.** `handle` stays put
+      // (ADR-0008 rule 4, decision D15), so every reference by handle survives a
+      // rename; widening this statement is how handle editing would arrive by
+      // accident rather than by amending that ADR.
+      return firstOrNull(
+        await database
+          .updateTable('app.users')
+          .set({ display_name: displayName })
+          .where('id', '=', userId)
+          .returningAll()
+          .executeTakeFirst(),
+      );
+    },
   };
 }

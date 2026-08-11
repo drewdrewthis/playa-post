@@ -6,6 +6,8 @@ import type {
   CompleteOnboardingRequest,
   OnboardedUser,
   SetVisibilityRequest,
+  StoredDisplayName,
+  UpdateDisplayNameRequest,
   VisibilitySetting,
 } from './identity';
 import type {
@@ -93,6 +95,7 @@ export interface PlayaPostApi {
   'health.check': QuerySpec<void, Health>;
 
   'identity.completeOnboarding': MutationSpec<CompleteOnboardingRequest, OnboardedUser>;
+  'identity.updateDisplayName': MutationSpec<UpdateDisplayNameRequest, StoredDisplayName>;
   'identity.visibility.get': QuerySpec<void, VisibilitySetting>;
   'identity.visibility.set': MutationSpec<SetVisibilityRequest, VisibilitySetting>;
 

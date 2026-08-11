@@ -52,6 +52,7 @@ function repositoryHolding(user: User | null): UserRepository {
       Promise.reject(new Error('resolving an actor must never write')),
     setVisibleToDistance: () =>
       Promise.reject(new Error('resolving an actor must never write')),
+    setDisplayName: () => Promise.reject(new Error('resolving an actor must never write')),
   };
 }
 
