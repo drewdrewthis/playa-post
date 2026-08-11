@@ -104,10 +104,10 @@ describe('describeHideFailure', () => {
   });
 
   describe('a report the server refuses on its merits', () => {
-    it('points an author at archiving, which is the operation they wanted', () => {
+    it('points an author at removal, which is the operation they wanted', () => {
       const notice = describeHideFailure(REPORT, refusal('BULLETIN_REPORT_OWN_NOT_ALLOWED'));
 
-      expect(notice.message).toBe('You wrote that bulletin. Archive it instead of reporting it.');
+      expect(notice.message).toBe('You wrote that bulletin. Remove it instead of reporting it.');
       expect(notice.retryable).toBe(false);
       expect(notice.restoresCard).toBe(true);
     });
