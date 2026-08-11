@@ -1,9 +1,12 @@
-import type { OfflineDatabase, PendingMutationRow } from '../offline/database';
+import type { OfflineDatabase, PendingMutationRow, PendingMutationState } from '../offline/database';
 import { queueMutation } from '../offline/pending-mutations';
 import type { SyncRunner } from '../offline/sync-runner';
 
 import { buildPinNotePayload } from './pin-note-draft';
 import { describePinNoteOutcome, type PinOutcomeKind } from './pin-note-outcome';
+
+/** A row read back by its mutationId, or which of two ways there is none to find. */
+type SettledRow = PendingMutationRow | 'missing' | 'unreadable';
 
 /**
  * What one press of Pin ended in: {@link PinOutcomeKind}, plus the one outcome that is
@@ -63,6 +66,12 @@ export const NOTE_NOT_SAVED_MESSAGE = 'Couldn’t save your note on this device 
  * what makes the connected case feel immediate rather than what decides it. The queue row,
  * not the drain's return, is the account of what happened: a drain that threw says nothing
  * about this write, because the transport failing is not an answer about the note.
+ *
+ * ⚠ **An absent row after a drain that did not throw means synced, not queued.**
+ * `pruneSyncedMutations` deletes a row once it syncs, and this call's own `mutationId` is
+ * one it just wrote — so a `readRow` that finds nothing here is a row this drain, or one
+ * racing it in another tab, already finished, never a write that never happened (issue
+ * #180).
  */
 export async function submitPinNote(
   request: PinNoteSubmitRequest,
@@ -82,11 +91,8 @@ export async function submitPinNote(
   await drainQuietly(request.syncRunner);
 
   const settled = await readRow(request.database, mutationId);
-  const outcome = describePinNoteOutcome(
-    settled?.state ?? 'pending',
-    settled?.lastError ?? null,
-    request.recipientName,
-  );
+  const { state, lastError } = settledOutcome(settled);
+  const outcome = describePinNoteOutcome(state, lastError, request.recipientName);
 
   return {
     kind: outcome.kind,
@@ -116,7 +122,7 @@ async function replayableRowId(request: PinNoteSubmitRequest): Promise<string | 
 
   const row = await readRow(request.database, queued);
 
-  return row !== null && row.state === 'pending' ? queued : null;
+  return typeof row === 'object' && row.state === 'pending' ? queued : null;
 }
 
 async function queueNote(request: PinNoteSubmitRequest): Promise<string | null> {
@@ -143,20 +149,42 @@ async function drainQuietly(syncRunner: SyncRunner): Promise<void> {
   }
 }
 
-async function readRow(
-  database: OfflineDatabase,
-  mutationId: string,
-): Promise<PendingMutationRow | null> {
+/**
+ * The row a mutationId names, or which of two ways there is none to find.
+ *
+ * ⚠ **`missing` and `unreadable` are different verdicts, not the same "nothing" twice.**
+ * `pruneSyncedMutations` deletes a row once it syncs (issue #174), so a mutationId this
+ * device wrote and just drained that now names nothing was synced and swept — never a
+ * write that never happened. `unreadable` is the one case IndexedDB can still actually
+ * produce: a store that cannot be read is not a store that lost the write (issue #180).
+ */
+async function readRow(database: OfflineDatabase, mutationId: string): Promise<SettledRow> {
   try {
-    return (await database.pendingMutations.get(mutationId)) ?? null;
+    return (await database.pendingMutations.get(mutationId)) ?? 'missing';
   } catch {
-    // A store that cannot be read is not a store that lost the write. `pending` is the
-    // state the row was written in, and the caller reads an unreadable row as that.
-    return null;
+    return 'unreadable';
   }
 }
 
+/** The state and error to describe a settled row as. The one place `missing` becomes `synced`. */
+function settledOutcome(settled: SettledRow): {
+  readonly state: PendingMutationState;
+  readonly lastError: string | null;
+} {
+  if (settled === 'missing') {
+    return { state: 'synced', lastError: null };
+  }
+
+  if (settled === 'unreadable') {
+    // `pending` is the state the row was written in, and the caller reads an unreadable
+    // row as that — the conservative reading `missing` no longer gets (issue #180).
+    return { state: 'pending', lastError: null };
+  }
+
+  return { state: settled.state, lastError: settled.lastError };
+}
+
 /** Whether another drain could still move this row. An unreadable one is assumed live. */
-function stillQueued(row: PendingMutationRow | null): boolean {
-  return row === null || row.state === 'pending';
+function stillQueued(settled: SettledRow): boolean {
+  return settledOutcome(settled).state === 'pending';
 }
