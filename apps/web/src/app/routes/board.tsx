@@ -28,6 +28,15 @@ import { useOffline } from '../offline/offline-provider';
 import { forgetBoardCard, queueMutation } from '../offline/pending-mutations';
 import { saveViewFailureMessage, seedSavedViewName } from '../views/saved-view-list';
 
+import {
+  bulletinSheet,
+  bulletinSheetId,
+  noteSheet,
+  noteSheetId,
+  NO_SHEET,
+  type OpenSheet,
+} from './board-open-sheet';
+
 import '../bulletins/board-views.css';
 import '../moderation/hide-failure-notice.css';
 
@@ -124,22 +133,15 @@ export function BoardRoute(): JSX.Element {
     setSearch(queryState.search);
     setFilter(queryState.filter);
   }, [urlQuery]);
-  const [openBulletinId, setOpenBulletinId] = useState<string | null>(null);
   /*
-   * The note being read (#176, decision D14), held separately from `openBulletinId`
-   * because the two lists are separate reads: a note id and a bulletin id come from two
-   * tables and are comparable nowhere else (`note-board-items.ts`). One state holding
-   * either would need a discriminator to say which table to look in, which is the same
-   * thing as two states with worse ergonomics.
-   *
-   * ⚠ **Opening one closes the other.** Both sheets take the same layer and the same
-   * full-column scrim, so two at once would stack a dialog on a dialog with no way to
-   * tell which Escape belongs to — the setters below are the only places either is
-   * raised, and each clears its sibling.
+   * One sheet at a time, and the type is what enforces it — see `board-open-sheet.ts` for
+   * why this is not two `useState`s with a comment promising they stay in step. A note's
+   * sheet arrived with #176 (decision D14) and raised the count from one to two, which is
+   * the point at which "clear the other one" stopped being reliably done.
    */
-  const [openNoteId, setOpenNoteId] = useState<string | null>(null);
+  const [openSheet, setOpenSheet] = useState<OpenSheet>(NO_SHEET);
   /*
-   * The card being reported, held separately from `openBulletinId`. Reporting hides the
+   * The card being reported, held separately from `openSheet`. Reporting hides the
    * bulletin the moment it succeeds, so it leaves `visible` and `openCard` becomes null
    * — and a sheet keyed off the open card would unmount mid-send, taking the reporter's
    * typed account with it. Holding the card is also what lets the sheet quote a title
@@ -322,12 +324,9 @@ export function BoardRoute(): JSX.Element {
     await syncRunner.drain();
   }
 
+  // One close for both sheets: there is one thing raised, so there is one way to lower it.
   const closeSheet = useCallback(() => {
-    setOpenBulletinId(null);
-  }, []);
-
-  const closeNoteSheet = useCallback(() => {
-    setOpenNoteId(null);
+    setOpenSheet(NO_SHEET);
   }, []);
 
   /**
@@ -462,8 +461,9 @@ export function BoardRoute(): JSX.Element {
   // not on the board by definition, so searching `visible` there would close the sheet the
   // moment it opened.
   const openCard =
-    (showingDismissed ? dismissedCards : visible).find((card) => card.id === openBulletinId) ??
-    null;
+    (showingDismissed ? dismissedCards : visible).find(
+      (card) => card.id === bulletinSheetId(openSheet),
+    ) ?? null;
   /*
    * Looked up in the notes read rather than held as an object, for the reason `openCard`
    * is: a note that has left the list — a `notes.list` refetch that no longer carries it —
@@ -471,7 +471,7 @@ export function BoardRoute(): JSX.Element {
    * sheet re-reads `notes.getById` regardless, so this is the fallback copy and never the
    * authority.
    */
-  const openNote = (notes.data ?? []).find((note) => note.id === openNoteId) ?? null;
+  const openNote = (notes.data ?? []).find((note) => note.id === noteSheetId(openSheet)) ?? null;
 
   return (
     <section className="screen" data-testid="board">
@@ -498,7 +498,7 @@ export function BoardRoute(): JSX.Element {
           type="button"
           aria-pressed={!showingDismissed}
           onClick={() => {
-            setOpenBulletinId(null);
+            closeSheet();
             undismiss.reset();
             setSearchParams(
               (previous) => {
@@ -520,7 +520,7 @@ export function BoardRoute(): JSX.Element {
           type="button"
           aria-pressed={showingDismissed}
           onClick={() => {
-            setOpenBulletinId(null);
+            closeSheet();
             hide.reset();
             setSearchParams(
               (previous) => {
@@ -595,7 +595,7 @@ export function BoardRoute(): JSX.Element {
                     card={card}
                     now={now}
                     onOpen={(opened) => {
-                      setOpenBulletinId(opened.id);
+                      setOpenSheet(bulletinSheet(opened.id));
                     }}
                   />
                 </li>
@@ -716,8 +716,7 @@ export function BoardRoute(): JSX.Element {
                           note={item.note}
                           now={now}
                           onOpen={(opened) => {
-                            setOpenBulletinId(null);
-                            setOpenNoteId(opened.id);
+                            setOpenSheet(noteSheet(opened.id));
                           }}
                         />
                       ) : (
@@ -725,8 +724,7 @@ export function BoardRoute(): JSX.Element {
                           card={item.card}
                           now={now}
                           onOpen={(opened) => {
-                            setOpenNoteId(null);
-                            setOpenBulletinId(opened.id);
+                            setOpenSheet(bulletinSheet(opened.id));
                           }}
                         />
                       )}
@@ -787,7 +785,7 @@ export function BoardRoute(): JSX.Element {
        * reads both.
        */}
       {openNote === null ? null : (
-        <NoteDetailSheet note={openNote} now={now} onClose={closeNoteSheet} />
+        <NoteDetailSheet note={openNote} now={now} onClose={closeSheet} />
       )}
 
       {reporting === null ? null : (

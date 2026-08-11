@@ -1,8 +1,23 @@
-import type { Person } from '@playa-post/contracts';
-
+import type { GraphNodeIdentity } from '../graph/graph-node-identity';
 import { requestIntroLabel } from '../intros/intro-copy';
 
 import { composeNoteTitle, noteRecipientName } from './note-recipient';
+
+/**
+ * The two things reachability is decided from: how far away they are, and what this
+ * viewer may call them.
+ *
+ * ⚠ **Narrower than `Person` on purpose.** A `Person` also carries a `userId`, a
+ * `disclosure` and the viewer's `trust`, none of which this file reads — and a caller
+ * holding a name from one payload and a degree from another (`note-pin-back.ts`, where
+ * the note's §6a author card names the author and only the graph knows the distance) had
+ * to fabricate the other three to call in. Asking for exactly what is read means such a
+ * caller assembles two fields instead of five, and the compiler stops it carrying a name
+ * it did not mean to.
+ *
+ * `Person` satisfies this structurally, so every existing caller passes one unchanged.
+ */
+export type ReachablePerson = GraphNodeIdentity & { readonly degree: number };
 
 /**
  * How far this viewer can reach a person: pin a note, ask for an intro, or neither.
@@ -38,7 +53,7 @@ export type NoteReach =
  *   means the settled read did not contain them; call this only once that read has
  *   landed, or a loading graph renders as "not connected".
  */
-export function describeNoteReach(person: Person | undefined): NoteReach {
+export function describeNoteReach(person: ReachablePerson | undefined): NoteReach {
   if (person !== undefined && person.degree === 1) {
     return { kind: 'can-pin', label: composeNoteTitle(noteRecipientName(person)) };
   }

@@ -43,7 +43,12 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  one pathless root carrying the app-styled error boundary and the * catch-all —
                  routes/route-error.tsx and routes/not-found.tsx, sharing routes/route-message-screen.tsx
                  and routes/route-error-copy.ts, so neither a throw nor an unknown address reaches
-                 React Router's developer screen (issue #125).
+                 React Router's developer screen (issue #125). A route's own pure decisions sit
+                 beside it rather than in a feature directory when they belong to no one feature —
+                 routes/board-open-sheet.ts is which sheet the board has raised, a union rather
+                 than one nullable id per kind, so "at most one open" is a thing the type cannot
+                 express the negation of instead of an invariant re-stated at every call site
+                 (#176; it was two states, and the view toggle cleared only one of them).
                  A screen whose pieces outgrow one route file gets a sibling feature directory —
                  src/app/{people,notifications,bulletins,graph,moderation,notes,profile}/ — holding
                  its components, its own <feature>.css, and any pure logic worth unit-testing on its
@@ -80,8 +85,12 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  twin), note-author.ts (absent author card → no author line, withheld-but-present
                  → the private-connection card), note-pin-back.ts (whether the expanded view
                  offers to answer: an absent author card is nobody to address and gets no control
-                 at all, a present card past the first degree gets the distance, and an unsettled
-                 graph read is its own silence — #176)).
+                 at all, a present card past the first degree gets the distance, and a graph read
+                 that has not landed — still in flight, or settled with an error — is its own
+                 silence, named unknown-distance for what is missing rather than for waiting),
+                 note-sheet-title.ts (a note has no title, so the dialog's accessible name is
+                 built from who it is from and how it starts, out of the note's own author card
+                 and never the graph — a name announced is a name disclosed) — #176).
                  A feature stylesheet is imported
                  by the component that owns it, never added to screens.css.
                  ⚠ The unit project runs in environment: 'node', so a component test costs a

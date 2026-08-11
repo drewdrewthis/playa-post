@@ -1,6 +1,4 @@
-import type { Person } from '@playa-post/contracts';
-
-import { nodeLabel } from '../graph/graph-node-identity';
+import { nodeLabel, type GraphNodeIdentity } from '../graph/graph-node-identity';
 
 /**
  * The person a note is being pinned to: who the URL names, and what the compose screen
@@ -40,8 +38,12 @@ export function noteRecipientParam(raw: string | null): string | null {
  * `undefined` in — a `noteTo` naming somebody who is not on this viewer's graph, or a
  * graph read that has not landed — is also `null`: **not** a placeholder, and never the
  * `userId`.
+ *
+ * Takes the identity fields alone rather than a whole `Person`, so a caller that has a
+ * name from one payload and a degree from another cannot pass the wrong payload's name
+ * without saying so. Every `Person` still satisfies it.
  */
-export function noteRecipientName(person: Person | undefined): string | null {
+export function noteRecipientName(person: GraphNodeIdentity | undefined): string | null {
   return (person === undefined ? undefined : nodeLabel(person)) ?? null;
 }
 

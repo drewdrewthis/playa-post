@@ -112,6 +112,23 @@ function container(): HTMLElement {
   return tree.container;
 }
 
+/**
+ * What a screen reader would announce the dialog as — resolved the way one resolves it,
+ * by following `aria-labelledby` rather than by reading whatever element the test expected
+ * to find there. An attribute selector because React's `useId` produces `:r0:`-shaped ids,
+ * which are not valid in a `#id` selector without escaping.
+ */
+function dialogName(): string {
+  const sheet = requireElement(container(), '[data-testid="note-detail-sheet"]');
+  const labelledBy = sheet.getAttribute('aria-labelledby');
+
+  if (labelledBy === null) {
+    throw new Error('the sheet names itself with nothing');
+  }
+
+  return requireElement(container(), `[id="${labelledBy}"]`).textContent ?? '';
+}
+
 function calls(): FakeApi['calls'] {
   if (api === null) {
     throw new Error('the sheet is not mounted');
@@ -174,6 +191,54 @@ describe('the read behind the expanded view (#176)', () => {
     expect(requireElement(container(), '[data-testid="note-detail-sheet"]').textContent).toContain(
       'The card’s copy of the note.',
     );
+  });
+
+  /*
+   * ⚠ Load-bearing because the graph *does* answer here: Lena is degree 1 in `GRAPH`, so
+   * every other input to the offer says yes and only the refusal says no. Offering to write
+   * back one line under "this note is not on your board" is the screen contradicting itself
+   * within a single sheet.
+   */
+  it('offers no way to answer a note the server just refused', async () => {
+    await openSheet(CARD_NOTE, {
+      'notes.getById': () => {
+        throw serverRefusal('NOTE_GONE');
+      },
+    });
+
+    expect(container().querySelector('[data-testid="note-detail-gone"]')).not.toBeNull();
+    expect(container().querySelector('[data-testid="note-detail-pin-back-link"]')).toBeNull();
+    expect(container().querySelector('[data-testid="note-detail-pin-back-hint"]')).toBeNull();
+  });
+});
+
+/*
+ * A dialog is announced by its accessible name before its contents are read, so the name
+ * has to distinguish this note from the last one. It used to point at the type pill, whose
+ * text is the literal word "Note" for every note there has ever been.
+ */
+describe('how the expanded view announces itself', () => {
+  it('names the dialog after the note, not after the word “Note”', async () => {
+    await openSheet();
+
+    expect(dialogName()).toBe('Note from Lena — The server’s copy of the note.');
+  });
+
+  /*
+   * §6a again, on the one surface where a name is heard rather than seen. `GRAPH` discloses
+   * "Lena" and the note does not, so a label built from the wrong payload would say so out
+   * loud — the same leak `note-pin-back.ts` closes for the button.
+   */
+  it('names nobody in the announcement when the note withheld the name', async () => {
+    const withheld: Note = {
+      ...CARD_NOTE,
+      author: { userId: AUTHOR_ID, disclosure: 'topology_only' },
+    };
+
+    await openSheet(withheld, { 'notes.getById': () => withheld });
+
+    expect(dialogName()).toBe('Note — The card’s copy of the note.');
+    expect(dialogName()).not.toContain('Lena');
   });
 });
 

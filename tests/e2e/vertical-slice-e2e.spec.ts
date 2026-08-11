@@ -45,8 +45,8 @@ import { mintInviteViaYouScreen } from './support/mint-invite';
  * | `bulletin-archive-button` | inside `bulletin-detail-sheet`, author only | Archive the bulletin |
  * | `offline-pending-badge` | app shell | Visible while a mutation is queued/pending/inflight per the offline store (ADR-0005:105-107); hidden once synced |
  * | `board-note-card-<noteId>` | board | One note's card, interleaved into the board by time (#88) |
- * | `note-open-button` | inside a `board-note-card-*` | The note card's tap target. A note became a tap target with #176/decision D14 — before that it opened nothing |
- * | `note-detail-sheet` | board | The expanded view one card's `note-open-button` opens (#176) |
+ * | `note-open-button-<noteId>` | inside a `board-note-card-*` | The note card's tap target. A note became a tap target with #176/decision D14 — before that it opened nothing. Suffixed like its parent card, so a board carrying many notes has many distinguishable ones |
+ * | `note-detail-sheet` | board | The expanded view one card's `note-open-button-*` opens (#176) |
  * | `note-detail-pin-back-link` | inside `note-detail-sheet` | Answer the note — routes to the composer with its author preselected. Absent when the author has left the viewer's world, or is further away than one hop |
  * | `person-sheet-pin-note-link` | person sheet | The composer's other entrance, used here only to put a note on a board to open |
  * | `compose-note` | `/board/new?noteTo=…` | The note composer, which is where both pin entrances land |
@@ -420,7 +420,7 @@ test.describe('Opening a note and answering it (pin-a-note.feature, #176)', () =
           .filter({ hasText: NOTE_BODY });
         await expect(card).toBeVisible({ timeout: 20_000 });
 
-        await card.getByTestId('note-open-button').click();
+        await card.locator('[data-testid^="note-open-button-"]').click();
 
         const sheet = pageB.getByTestId('note-detail-sheet');
         await expect(sheet).toBeVisible();

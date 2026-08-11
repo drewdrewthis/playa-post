@@ -56,7 +56,7 @@ export function NoteCard({
     <article className="note-card" data-testid={`board-note-card-${note.id}`}>
       <button
         className="note-card__open"
-        data-testid="note-open-button"
+        data-testid={`note-open-button-${note.id}`}
         type="button"
         onClick={() => {
           onOpen(note);

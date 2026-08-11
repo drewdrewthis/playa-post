@@ -1,6 +1,6 @@
 import type { Note, NoteAuthor, Person } from '@playa-post/contracts';
 
-import { describeNoteReach } from './note-reach';
+import { describeNoteReach, type ReachablePerson } from './note-reach';
 
 /**
  * Whether the expanded view offers to answer a note, and with what (#176, decision D14).
@@ -24,13 +24,21 @@ export type NotePinBack =
    */
   | { readonly kind: 'no-author' }
   /**
-   * The graph read has not landed, so the distance is not yet known.
+   * The distance is not known, so nothing is offered and nothing is claimed.
    *
-   * Silence rather than a guess: rendering "not connected" while the read is in flight
-   * would flash a refusal at somebody who is in fact a direct connection — the same
-   * four-states discipline `people/person-sheet.tsx` and `bulletin-detail-sheet.tsx` keep.
+   * ⚠ **Two causes, one answer, and the name says the answer rather than either cause.**
+   * The graph read may still be in flight, or it may have settled with an error — the
+   * screen holds `undefined` in both, and this used to be called `unsettled`, which named
+   * only the first and quietly mislabelled the second as loading forever.
+   *
+   * They are deliberately not split. What the screen may say is decided by what it knows,
+   * and it knows the same nothing either way: rendering "not connected" would flash a
+   * refusal at somebody who may well be a direct connection, and rendering a control would
+   * offer a write whose recipient nobody has confirmed is reachable. A retry belongs to
+   * the graph read that failed, not to the sheet reporting it — the same four-states
+   * discipline `people/person-sheet.tsx` and `bulletin-detail-sheet.tsx` keep.
    */
-  | { readonly kind: 'unsettled' }
+  | { readonly kind: 'unknown-distance' }
   /** Ready to answer. `label` is the control's copy, `recipientId` is who it addresses. */
   | { readonly kind: 'can-pin'; readonly recipientId: string; readonly label: string }
   /** Too far to write to. `hint` is the one line explaining the distance. */
@@ -47,23 +55,15 @@ export type NotePinBack =
  * graph's own row would let a name the note withheld reach the control's label, and the
  * screen would render "Private connection" over a button that names them.
  *
- * ⚠ Fields are copied one by one rather than spread over the graph row. A spread would
- * leave `displayName` and `handle` in place whenever the note omits them, which is exactly
- * the case this exists to close — the leak survives the fix and nothing type-checks it.
- *
- * `trust` is the viewer's own directional setting, read by nothing on this path and
- * neutral here rather than carried, so no reader mistakes it for something the label
- * depends on.
+ * The return type is `ReachablePerson` and not `Person` precisely so this cannot be
+ * written the other way: the three fields that would have had to be invented to satisfy
+ * `Person` are the three nobody downstream reads.
  */
-function asAuthorAtTheirDistance(author: NoteAuthor, person: Person): Person {
+function asAuthorAtTheirDistance(author: NoteAuthor, person: Person): ReachablePerson {
   return {
-    userId: author.userId,
     degree: person.degree,
-    trust: null,
-    disclosure: author.disclosure,
     ...(author.displayName === undefined ? {} : { displayName: author.displayName }),
     ...(author.handle === undefined ? {} : { handle: author.handle }),
-    ...(author.avatarUrl === undefined ? {} : { avatarUrl: author.avatarUrl }),
   };
 }
 
@@ -95,7 +95,9 @@ function asAuthorAtTheirDistance(author: NoteAuthor, person: Person): Person {
  * to you" is a different feature (#89) on a surface that does not need it.
  *
  * @param note - The note being read, as the server projected it.
- * @param people - `graph.list`'s people, or `undefined` while that read is unsettled.
+ * @param people - `graph.list`'s people, or `undefined` when that read has not landed —
+ *   whether it is still in flight or settled with an error. The caller holds one value for
+ *   both, and {@link NotePinBack} explains why one answer is right for them.
  */
 export function describeNotePinBack(
   note: Note,
@@ -108,7 +110,7 @@ export function describeNotePinBack(
   }
 
   if (people === undefined) {
-    return { kind: 'unsettled' };
+    return { kind: 'unknown-distance' };
   }
 
   const person = people.find((candidate) => candidate.userId === author.userId);

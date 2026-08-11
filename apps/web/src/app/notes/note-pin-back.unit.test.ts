@@ -170,12 +170,20 @@ describe('describeNotePinBack (#176)', () => {
   describe('given a graph read that has not landed', () => {
     /*
      * Distinct from every other silence here, and the distinction is why this is its own
-     * case rather than a `null`: nothing is known yet, so nothing may be claimed. A
-     * pending read rendering as "needs a direct connection" would tell somebody they
-     * cannot answer their own friend.
+     * case rather than a `null`: nothing is known, so nothing may be claimed. A read still
+     * in flight rendering as "needs a direct connection" would tell somebody they cannot
+     * answer their own friend.
+     *
+     * ⚠ One case, not two, and that is the whole reason the state is named for what is
+     * known rather than for waiting. A graph read still in flight and one that settled with
+     * an error are the same `undefined` by the time they reach here, so there is no second
+     * input to write a second assertion about — `note-detail-sheet.unit.test.tsx` is where
+     * the erroring read is distinguishable, and it checks the same silence there.
      */
     it('says so, rather than claiming the author is out of reach', () => {
-      expect(describeNotePinBack(noteFrom('Lena'), undefined)).toEqual({ kind: 'unsettled' });
+      expect(describeNotePinBack(noteFrom('Lena'), undefined)).toEqual({
+        kind: 'unknown-distance',
+      });
     });
   });
 });

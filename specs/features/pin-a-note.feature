@@ -246,6 +246,18 @@ Feature: Pin a note — the private channel between two people who are already c
     Then the note is still returned in full
     And it carries no author card and no trace of user A's identifier
 
+  # The partial absence, as distinct from the total one above: there is still somebody
+  # there to describe, and §6a is re-evaluated on this read rather than inherited from
+  # whatever the list disclosed when the card was drawn.
+  @integration
+  # @issue:176
+  Scenario: An author who discloses only limited is opened with no name
+    Given user A has pinned a note to user B
+    And user A discloses only their presence to user B
+    When user B fetches that note by its id
+    Then the note is returned in full and still carries user A's card
+    And the card carries no display name and no handle
+
   @unit
   # @issue:176
   Scenario: The expanded view offers to pin back only when there is somebody to address
@@ -254,7 +266,7 @@ Feature: Pin a note — the private channel between two people who are already c
     Then an author who is still a direct connection gets the pin-back control
     And an author further away than one hop gets the distance and no control
     And an author with no card at all gets nothing, and no recipient derived from anywhere
-    And an unsettled graph read is its own silence, never a claim the author is out of reach
+    And a graph read that has not landed is its own silence, never a claim the author is out of reach
 
   @unit
   # @issue:176

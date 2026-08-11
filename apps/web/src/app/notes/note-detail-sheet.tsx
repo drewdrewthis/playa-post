@@ -13,6 +13,7 @@ import { PersonIdentity } from '../people/person-identity';
 import { noteAuthorCard } from './note-author';
 import { describeNotePinBack, type NotePinBack } from './note-pin-back';
 import { pinNoteHref } from './note-recipient';
+import { noteSheetTitle } from './note-sheet-title';
 
 import './note-detail-sheet.css';
 
@@ -143,10 +144,19 @@ export function NoteDetailSheet({
         aria-labelledby={titleId}
         tabIndex={-1}
       >
+        {/*
+         * ⚠ **The dialog's name, and the only part of this sheet written for ears alone.**
+         * Every other sheet on the board names itself with something on screen, because
+         * every other sheet has a title to name itself with. A note has none, so the name
+         * is built (`note-sheet-title.ts`) — and it is `sr-only` rather than rendered
+         * because the thing it says is the note, which is directly below it.
+         */}
+        <h2 className="sr-only" id={titleId}>
+          {noteSheetTitle(shown)}
+        </h2>
+
         <div className="note-detail-sheet__header">
-          <span className="note-detail-sheet__type" id={titleId}>
-            Note
-          </span>
+          <span className="note-detail-sheet__type">Note</span>
 
           {/* The comp's pill, as the card carries it. A note is always private, so it
               always says so — here as much as on the card it was opened from. */}
@@ -184,7 +194,18 @@ export function NoteDetailSheet({
           </p>
         )}
 
-        <PinBackFooter pinBack={pinBack} />
+        {/*
+         * ⚠ **Nothing to answer means nothing offered.** When the server refuses the read,
+         * the sheet has just said this note is not on your board — and offering to write
+         * back to its author in the next breath contradicts the sentence above it. The
+         * offer is not wrong so much as incoherent: what is on screen is the viewer's own
+         * stale copy, and the author card it would address came out of that same copy.
+         *
+         * The refusal is deliberately not narrowed further. `NOTE_GONE` is one answer for
+         * three situations by design (`note.errors.ts`), so the screen cannot tell which,
+         * and a control that assumes the friendliest of the three is the screen guessing.
+         */}
+        {gone ? null : <PinBackFooter pinBack={pinBack} />}
       </section>
     </>
   );
@@ -197,10 +218,11 @@ export function NoteDetailSheet({
  * it is a *navigation* to the compose screen, exactly as the shell's FAB is, which also
  * means a middle-click opens it in a new tab instead of being silently swallowed.
  *
- * ⚠ **Neither silence is an error state.** `no-author` and `unsettled` both render nothing,
- * and they render nothing for different reasons the type keeps apart — there is nobody to
- * write to, versus nobody known *yet*. Collapsing them into one branch is how a pending
- * graph read turns into a claim that somebody's friend is out of reach.
+ * ⚠ **Neither silence is an error state.** `no-author` and `unknown-distance` both render
+ * nothing, and they render nothing for different reasons the type keeps apart — there is
+ * nobody to write to, versus nobody whose distance is known. Collapsing them into one
+ * branch is how a graph read that has not landed turns into a claim that somebody's friend
+ * is out of reach.
  */
 function PinBackFooter({ pinBack }: { readonly pinBack: NotePinBack }): JSX.Element | null {
   if (pinBack.kind === 'can-pin') {
