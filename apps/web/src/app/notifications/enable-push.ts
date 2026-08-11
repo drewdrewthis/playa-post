@@ -1,10 +1,15 @@
 import type { SubscribeToPushRequest } from '@playa-post/contracts';
 
+import {
+  deviceLocalPushEnrollmentStore,
+  type PushEnrollmentStore,
+} from './push-enrollment-store';
+
 /**
  * Where this device stands on push, as the panel has to render it.
  *
- * Five states rather than a boolean, because four of them need different words and
- * three of them are not the person's fault:
+ * Six states rather than a boolean, because four of them need different words and four
+ * of them are not the person's fault:
  *
  * - `unsupported` — this browser has no Push API, or this build registered no service
  *   worker (a `pnpm dev` run, where the PWA plugin is off). Nothing to offer.
@@ -16,14 +21,30 @@ import type { SubscribeToPushRequest } from '@playa-post/contracts';
  * - `denied` — the browser is blocking, and only the browser's own settings can undo
  *   it. `Notification.requestPermission()` resolves `'denied'` immediately without
  *   showing anything, so a control that "asks again" would do nothing, visibly.
- * - `subscribed` — the server has this device's subscription.
+ * - `dismissed` — this device closed the browser's prompt without answering, recently
+ *   enough that the offer is not being made again. Renders nothing, like `unsupported`,
+ *   and for the opposite reason: it *could* be asked, and has said not now.
+ * - `subscribed` — this device is holding a subscription minted under this build's key.
  */
 export type PushEnrollment =
   | 'unsupported'
   | 'not-configured'
   | 'default'
   | 'denied'
+  | 'dismissed'
   | 'subscribed';
+
+/**
+ * How long a dismissed prompt retires the offer for — `docs/product/decisions.md` D8.
+ *
+ * A cooldown rather than a permanent retirement: a browser permission dialog is as often
+ * dismissed by a stray tap or an Escape as by a decision, and "clear this site's data" is
+ * not a path back a person will find. Exported so the decision, the flow, and the test
+ * that walks the edge all read the same number.
+ */
+export const PROMPT_DISMISSAL_COOLDOWN_DAYS = 30;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * This build ships no VAPID public key.
@@ -93,24 +114,140 @@ export function browserPush(): PushBrowser {
 }
 
 /**
- * What to render before anybody presses anything.
+ * Whether a recorded dismissal is still holding the offer back.
  *
- * Synchronous on purpose: it decides whether a control exists at all, and a control
- * that appears one tick after the panel opens is a control that moves under a thumb
- * already travelling towards it. The one thing it cannot know without awaiting — is
- * there a service worker — is settled inside {@link enablePush} instead, before any
- * permission is asked for.
+ * A stamp in the *future* counts as lapsed: a clock that moved is not an answer, and
+ * trusting one would retire the offer for however long the skew lasts.
  */
-export function readPushEnrollment(browser: PushBrowser = browserPush()): PushEnrollment {
+function withinDismissalCooldown(dismissedAt: Date | null, now: Date): boolean {
+  if (dismissedAt === null) {
+    return false;
+  }
+
+  const elapsed = now.getTime() - dismissedAt.getTime();
+
+  return elapsed >= 0 && elapsed < PROMPT_DISMISSAL_COOLDOWN_DAYS * DAY_MS;
+}
+
+/**
+ * What to render before anybody presses anything, and before anything is awaited.
+ *
+ * Synchronous on purpose: it decides whether a control exists at all, and a control that
+ * appears one tick after the panel opens is a control that moves under a thumb already
+ * travelling towards it. What it cannot know without awaiting — is there a service
+ * worker, is a subscription actually held — {@link settlePushEnrollment} answers a tick
+ * later and corrects this.
+ *
+ * ⚠ **`'subscribed'` here is the device's own memory, gated on a granted permission.**
+ * The marker alone is never enough: permission revoked in browser or OS settings must
+ * flip this device straight back to the offer, whatever it remembers and whatever it is
+ * still holding (issue #167). The gate is what makes a stale marker harmless rather than
+ * a device that quietly believes it is reachable.
+ *
+ * ⚠ **A granted permission outranks a recorded dismissal.** The dismissal recorded "the
+ * browser asked and got no answer"; a granted permission means that question has since
+ * been answered yes, in the browser's own settings. Honouring the dismissal there would
+ * leave somebody who changed their mind no way in at all until the cooldown lapsed.
+ *
+ * `'denied'` is deliberately checked *first*: Chrome blocks an origin by itself after
+ * repeated dismissals, so "dismissed, then blocked" arrives without anybody choosing it,
+ * and going quiet would leave a reader wondering why the app never mentions push.
+ */
+export function readPushEnrollment(
+  browser: PushBrowser = browserPush(),
+  store: PushEnrollmentStore = deviceLocalPushEnrollmentStore(),
+  now: Date = new Date(),
+): PushEnrollment {
   if (!browser.supported) {
     return 'unsupported';
   }
 
-  if (browser.applicationServerKey === null) {
+  const { applicationServerKey } = browser;
+
+  if (applicationServerKey === null) {
     return 'not-configured';
   }
 
-  return browser.permission() === 'denied' ? 'denied' : 'default';
+  const permission = browser.permission();
+
+  if (permission === 'denied') {
+    return 'denied';
+  }
+
+  const marker = store.read();
+
+  if (permission === 'granted') {
+    return marker.subscribedKey === applicationServerKey ? 'subscribed' : 'default';
+  }
+
+  return withinDismissalCooldown(marker.dismissedAt, now) ? 'dismissed' : 'default';
+}
+
+/**
+ * The same question, answered from the subscription this browser is actually holding.
+ *
+ * This is what fixes issue #167: enrolment is a subscription, not a permission, and the
+ * only place that fact lives is `pushManager.getSubscription()`. Reading it costs two
+ * awaits, so {@link readPushEnrollment} paints first and this corrects — and the
+ * correction is authoritative in both directions. It reconciles the marker as it goes:
+ * a device whose subscription is gone stops claiming one, and a device that enrolled
+ * before the marker existed acquires one from what was found.
+ *
+ * ⚠ **It never asks for permission.** This runs in an effect, on mount. Browsers only
+ * show the prompt inside a user activation and Chrome holds a without-a-gesture ask
+ * against the origin permanently, so `requestPermission()` belongs to {@link enablePush}
+ * and the press that calls it, and to nothing else.
+ *
+ * ⚠ **"Cannot see" is not "not enrolled".** With no registration — a `pnpm dev` build,
+ * or the seconds a fresh install spends registering one — nothing is claimed and nothing
+ * is forgotten: the synchronous answer stands. Answering `'default'` there would clear a
+ * working device's marker and swap its enrolled line for the offer, on a race.
+ *
+ * @param store - Defaults to this device's `localStorage`; a test hands in its own.
+ * @param now - The reading clock, for the dismissal cooldown.
+ */
+export async function settlePushEnrollment(
+  browser: PushBrowser = browserPush(),
+  store: PushEnrollmentStore = deviceLocalPushEnrollmentStore(),
+  now: Date = new Date(),
+): Promise<PushEnrollment> {
+  if (!browser.supported) {
+    return 'unsupported';
+  }
+
+  const { applicationServerKey } = browser;
+
+  if (applicationServerKey === null) {
+    return 'not-configured';
+  }
+
+  if (browser.permission() !== 'granted') {
+    // Checked before anything is awaited, so a revoked permission cannot be masked by a
+    // subscription the browser has not got round to dropping. Nothing will be delivered
+    // through it, which makes it not an enrolment.
+    store.forgetSubscribed();
+
+    return readPushEnrollment(browser, store, now);
+  }
+
+  const registration = await browser.registration();
+
+  if (registration === null) {
+    // Nothing to ask, so nothing is claimed and — deliberately — nothing is forgotten.
+    return readPushEnrollment(browser, store, now);
+  }
+
+  const held = await registration.pushManager.getSubscription();
+
+  if (held !== null && isKeyedTo(held, applicationServerKeyBytes(applicationServerKey))) {
+    store.rememberSubscribed(applicationServerKey);
+
+    return 'subscribed';
+  }
+
+  store.forgetSubscribed();
+
+  return readPushEnrollment(browser, store, now);
 }
 
 /**
@@ -195,16 +332,26 @@ function isKeyedTo(subscription: PushSubscription, key: Uint8Array): boolean {
  * plainly — see `subscribe-to-push.service.ts`. That is what makes forwarding a
  * subscription this device was already holding a repair rather than a no-op.
  *
+ * ⚠ **The outcome is written to the device-local marker, and the order matters.** The
+ * enrolment is recorded only after the server has stored the subscription — a marker
+ * written earlier would leave a device claiming an enrolment nothing will be delivered
+ * to. A *dismissed* prompt is recorded too, which is what stops later loads re-offering
+ * (`docs/product/decisions.md` D8) while this session's control stays exactly as it was.
+ *
  * @param subscribe - Sends `notifications.push.subscribe`. Injected so a test asserts on
  *   what was forwarded rather than on a transport.
  * @param browser - Defaults to the real browser; a test hands in its own.
+ * @param store - Defaults to this device's `localStorage`; a test hands in its own.
  * @returns The state to render. Never `'not-configured'` — that is a build fact known
- *   before the press, and reaching this function without a key throws instead.
+ *   before the press, and reaching this function without a key throws instead. Never
+ *   `'dismissed'` either: retiring the offer under the thumb that just pressed it would
+ *   read as a crash, so a dismissal only takes effect on the next load.
  * @throws {PushNotConfiguredError} when the build ships no `VITE_VAPID_PUBLIC_KEY`.
  */
 export async function enablePush(
   subscribe: (request: SubscribeToPushRequest) => Promise<void>,
   browser: PushBrowser = browserPush(),
+  store: PushEnrollmentStore = deviceLocalPushEnrollmentStore(),
 ): Promise<PushEnrollment> {
   if (!browser.supported) {
     return 'unsupported';
@@ -228,8 +375,15 @@ export async function enablePush(
   const permission = await browser.requestPermission();
 
   if (permission !== 'granted') {
-    // 'denied' is a decision; 'default' is a dismissed prompt, which leaves the control
-    // exactly as it was so a second press asks again.
+    if (permission !== 'denied') {
+      // A dismissed prompt: no answer, so nothing is decided *here* — the control stays
+      // exactly as it was and a second press asks again. The record is for later loads,
+      // which stop making an offer this person has already waved away once.
+      store.rememberPromptDismissed();
+    }
+
+    // 'denied' is a decision, with its own copy naming the only thing that can undo it.
+    // Recording a dismissal on top would silence that copy the day the browser unblocked.
     return permission === 'denied' ? 'denied' : 'default';
   }
 
@@ -251,6 +405,10 @@ export async function enablePush(
   // optional. Narrowing it by hand would mean rebuilding the object, which is the one
   // thing the server's input contract asks a client not to do.
   await subscribe(subscription.toJSON() as unknown as SubscribeToPushRequest);
+
+  // After the server has agreed, never before — and it clears any earlier dismissal,
+  // because this device has now said yes to the question that recorded one.
+  store.rememberSubscribed(applicationServerKey);
 
   return 'subscribed';
 }
