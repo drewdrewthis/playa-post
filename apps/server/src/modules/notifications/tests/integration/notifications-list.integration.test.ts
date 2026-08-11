@@ -431,6 +431,9 @@ describe('notifications.list (issue #31, vertical-slice step 9)', () => {
           occurredAt: occurredAt.toISOString(),
           noteId,
           unread: true,
+          // Never opened their panel, so nothing is seen yet (issue #178). Like `unread`
+          // it is a fact about this caller alone and quotes nothing.
+          seen: false,
         },
       ]);
       // A full-equality assertion above already forbids an extra field; this says why it
@@ -825,15 +828,17 @@ describe('notifications.list (issue #31, vertical-slice step 9)', () => {
       // A full key-set equality rather than a subset match, so an accidentally-added
       // field fails this test rather than passing silently — the same discipline
       // M2-AC21's payload assertion uses on the push side.
-      // `unread` is a boolean derived from the caller's own dismissals, so it says
-      // nothing about anybody else — but it is still a field, and this assertion is a
-      // full key-set equality precisely so that adding one is a decision rather than a
-      // drift.
+      // `unread` and `seen` are booleans derived from the caller's own dismissals and
+      // their own last panel open, so each says nothing about anybody else — but both are
+      // still fields, and this assertion is a full key-set equality precisely so that
+      // adding one is a decision rather than a drift. `seen` was added by issue #178 and
+      // this line is where that decision is recorded.
       expect(Object.keys(notification as object).sort()).toEqual([
         'bulletinIds',
         'kind',
         'notificationId',
         'occurredAt',
+        'seen',
         'unread',
       ]);
 

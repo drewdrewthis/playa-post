@@ -1,12 +1,20 @@
 import type { GroupedNotification } from '../application/grouped-notification';
 import type { NotificationDismissal } from '../domain/notification-dismissal';
+import type { NotificationSeenMark } from '../domain/notification-seen-mark';
 
 /** What every notification on the wire carries, whatever caused it. */
 interface PresentedNotificationBase {
   readonly notificationId: string;
   readonly occurredAt: string;
-  /** `false` once this recipient has dismissed it. The badge counts the `true`s. */
+  /** `false` once this recipient has dismissed it. The panel's sections split on it. */
   readonly unread: boolean;
+  /**
+   * `true` once this notification was already on the list the last time the recipient
+   * opened their panel. **The badge counts `unread && !seen`** — see
+   * {@link import('../application/grouped-notification').GroupedNotification.seen} for why
+   * the two flags are independent.
+   */
+  readonly seen: boolean;
 }
 
 /** A Notify Me window's worth of bulletins, on the wire. */
@@ -50,6 +58,21 @@ export interface PresentedNotificationDismissal {
 }
 
 /**
+ * What comes back when a recipient's panel is marked seen.
+ *
+ * One field and no echo of the list: `markSeen` names no notification and the caller is
+ * about to refetch `list` anyway, so a payload here would only invite a client to render
+ * from a response that describes a moment rather than a state.
+ */
+export interface PresentedNotificationSeenMark {
+  /**
+   * ISO-8601. **Advanced by every call**, unlike a dismissal's `dismissedAt` — see
+   * {@link import('../domain/notification-seen-mark').NotificationSeenMark.seenAt}.
+   */
+  readonly seenAt: string;
+}
+
+/**
  * Project one notification onto the wire.
  *
  * A field-by-field copy rather than a spread: a spread would carry whatever the read
@@ -71,6 +94,7 @@ export function presentNotification(notification: GroupedNotification): Presente
         // are applied.
         noteId: notification.noteId,
         unread: notification.unread,
+        seen: notification.seen,
       }
     : {
         kind: 'bulletins',
@@ -78,6 +102,7 @@ export function presentNotification(notification: GroupedNotification): Presente
         occurredAt: notification.occurredAt.toISOString(),
         bulletinIds: [...notification.bulletinIds],
         unread: notification.unread,
+        seen: notification.seen,
       };
 }
 
@@ -88,5 +113,14 @@ export function presentNotificationDismissal(
   return {
     notificationId: dismissal.notificationId,
     dismissedAt: dismissal.dismissedAt.toISOString(),
+  };
+}
+
+/** Project one seen watermark onto the wire. */
+export function presentNotificationSeenMark(
+  mark: NotificationSeenMark,
+): PresentedNotificationSeenMark {
+  return {
+    seenAt: mark.seenAt.toISOString(),
   };
 }

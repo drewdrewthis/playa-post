@@ -4,7 +4,7 @@ import { Link } from 'react-router';
 import type { GroupedNotification } from '@playa-post/contracts';
 
 import { EnablePushControl } from './enable-push-control';
-import { useNotificationDismissal } from './notifications-mutation';
+import { useMarkNotificationsSeen, useNotificationDismissal } from './notifications-mutation';
 import { useGroupedNotifications } from './notifications-query';
 import {
   dismissedNotifications,
@@ -30,10 +30,21 @@ import './notifications-panel.css';
  * keeps a dismissed notification and marks it, so the panel splits: what is still
  * waiting, then what has been dealt with. Rendering the list whole would mean nothing
  * ever left the screen.
+ *
+ * ⚠ **Opening this screen clears the bell's badge and moves nothing** (issue #178).
+ * `useMarkSeen` below records that the panel was open; the badge then counts only what
+ * arrives after. It changes **nothing on this screen** — the split above is still on
+ * `unread`, so every row the reader came to deal with is exactly where it was. Being
+ * looked at is not being dealt with, and the `✕` is still the only thing that moves a row
+ * into Dismissed.
  */
 export function NotificationsPanel({ onClose }: { readonly onClose: () => void }): JSX.Element {
   const notifications = useGroupedNotifications(true);
   const dismissal = useNotificationDismissal();
+
+  // Mounted only while the panel is open (see `app-shell.tsx`), so this is once per
+  // opening — which is what makes anything arriving between two openings count as new.
+  useMarkNotificationsSeen();
 
   const unread = unreadNotifications(notifications);
   const dismissed = dismissedNotifications(notifications);

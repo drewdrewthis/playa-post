@@ -13,6 +13,11 @@ import type {
   DismissNotificationWrite,
   NotificationDismissalRepository,
 } from '../../domain/notification-dismissal.repository';
+import type { NotificationSeenMark } from '../../domain/notification-seen-mark';
+import type {
+  MarkNotificationsSeenWrite,
+  NotificationSeenWatermarkRepository,
+} from '../../domain/notification-seen-watermark.repository';
 import { NotificationUnavailableError } from '../../domain/notification.errors';
 
 /**
@@ -89,11 +94,28 @@ describe('notifications unread + dismiss', () => {
     };
   }
 
+  /**
+   * A recipient who has never opened their panel, which is what keeps every `seen` in
+   * this file `false` and every assertion below about `unread` alone.
+   *
+   * The watermark's own boundary cases are `list-notifications-seen.unit.test.ts`'s —
+   * this file is the dismissal rule, and the two must stay separable.
+   */
+  function fakeNeverSeen(): NotificationSeenWatermarkRepository {
+    return {
+      markSeen: async (write: MarkNotificationsSeenWrite): Promise<NotificationSeenMark> => ({
+        seenAt: write.occurredAt,
+      }),
+      findSeenWatermarkFor: async () => null,
+    };
+  }
+
   describe('list', () => {
     it('marks a notification unread while nothing has dismissed it', async () => {
       const query = createListNotificationsQuery({
         deliveredNotifications: fakeDelivered([match('event-1', 'bulletin-1')]),
         dismissals: fakeDismissals(),
+        seenWatermarks: fakeNeverSeen(),
       });
 
       const listed = await query.list({ viewerId });
@@ -110,6 +132,7 @@ describe('notifications unread + dismiss', () => {
       const query = createListNotificationsQuery({
         deliveredNotifications: fakeDelivered([match('event-1', 'bulletin-1')]),
         dismissals: fakeDismissals(['event-1']),
+        seenWatermarks: fakeNeverSeen(),
       });
 
       const listed = await query.list({ viewerId });
@@ -129,6 +152,7 @@ describe('notifications unread + dismiss', () => {
           match('event-2', 'bulletin-2', 61_000),
         ]),
         dismissals: fakeDismissals(['event-2']),
+        seenWatermarks: fakeNeverSeen(),
       });
 
       const listed = await query.list({ viewerId });
@@ -152,6 +176,7 @@ describe('notifications unread + dismiss', () => {
           match('event-joiner', 'bulletin-2', 59_000),
         ]),
         dismissals: fakeDismissals(['event-joiner']),
+        seenWatermarks: fakeNeverSeen(),
       });
 
       const listed = await query.list({ viewerId });
@@ -168,6 +193,7 @@ describe('notifications unread + dismiss', () => {
           [note('event-note', 'note-1', 120_000)],
         ),
         dismissals: fakeDismissals(),
+        seenWatermarks: fakeNeverSeen(),
       });
 
       const listed = await query.list({ viewerId });
@@ -181,6 +207,7 @@ describe('notifications unread + dismiss', () => {
         occurredAt: new Date(windowStart.getTime() + 120_000),
         noteId: 'note-1',
         unread: true,
+        seen: false,
       });
       expect(listed[1]).toEqual({
         kind: 'bulletins',
@@ -188,6 +215,7 @@ describe('notifications unread + dismiss', () => {
         occurredAt: windowStart,
         bulletinIds: ['bulletin-1'],
         unread: true,
+        seen: false,
       });
     });
 
@@ -201,6 +229,7 @@ describe('notifications unread + dismiss', () => {
           [note('event-note-1', 'note-1'), note('event-note-2', 'note-2', 1_000)],
         ),
         dismissals: fakeDismissals(),
+        seenWatermarks: fakeNeverSeen(),
       });
 
       const listed = await query.list({ viewerId });
@@ -218,6 +247,7 @@ describe('notifications unread + dismiss', () => {
           [note('event-note', 'note-1')],
         ),
         dismissals: fakeDismissals(['event-note']),
+        seenWatermarks: fakeNeverSeen(),
       });
 
       const listed = await query.list({ viewerId });
@@ -240,7 +270,11 @@ describe('notifications unread + dismiss', () => {
         dismissals,
         now: () => new Date('2026-08-02T09:00:00.000Z'),
       });
-      const query = createListNotificationsQuery({ deliveredNotifications, dismissals });
+      const query = createListNotificationsQuery({
+        deliveredNotifications,
+        dismissals,
+        seenWatermarks: fakeNeverSeen(),
+      });
 
       await service.dismiss({ actorId: recipientId, notificationId: 'event-1' });
 
@@ -257,7 +291,11 @@ describe('notifications unread + dismiss', () => {
         dismissals,
         now: () => new Date('2026-08-02T09:00:00.000Z'),
       });
-      const query = createListNotificationsQuery({ deliveredNotifications, dismissals });
+      const query = createListNotificationsQuery({
+        deliveredNotifications,
+        dismissals,
+        seenWatermarks: fakeNeverSeen(),
+      });
 
       await service.dismiss({ actorId: recipientId, notificationId: 'event-note' });
 

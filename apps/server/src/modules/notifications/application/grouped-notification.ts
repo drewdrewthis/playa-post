@@ -46,6 +46,36 @@ interface NotificationBase {
    * lets this read take no page size.
    */
   readonly unread: boolean;
+  /**
+   * `true` once this notification was already on the list the last time the viewer
+   * opened their panel (issue #178).
+   *
+   * **Derived from one durable per-viewer watermark, not stored per notification**: the
+   * same discipline {@link unread} follows, and for a stronger reason. There is one fact
+   * — the moment `app.notification_seen_watermarks` records — and every notification's
+   * `seen` is `occurredAt <= lastSeenAt` against it, inclusive. A per-row flag would be
+   * O(history) to write on the most-repeated gesture in the product, and would have to be
+   * written from a list the client sent — silently marking seen whatever arrived between
+   * that client's read and its write.
+   *
+   * ⚠ **A different question from {@link unread}, and the two must stay independent.**
+   * Seen is "has anything happened since you last looked" and is what the bell's badge
+   * counts; unread is "have you dealt with this" and is what the panel's sections split
+   * on. All four combinations are reachable and meaningful: an unread notification the
+   * viewer has seen still renders in the panel body with the badge at zero, and a
+   * dismissed one that arrived after the last open is out of the body and out of the
+   * count. Deriving either from the other collapses a distinction the whole feature
+   * exists to keep.
+   *
+   * ⚠ **Compared against the *served* `occurredAt`**, which for a grouped notification is
+   * its opening match's. Comparing a joiner's timestamp instead would leave a group
+   * unseen whose visible time is older than the watermark — a badge counting a row the
+   * reader is looking at.
+   *
+   * `false` for a viewer who has never opened their panel: never having looked is a real
+   * state, and it is the one where the badge shows everything.
+   */
+  readonly seen: boolean;
 }
 
 /** One Notify Me notification — a closed 60-second window's worth of bulletins. */

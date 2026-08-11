@@ -27,13 +27,34 @@ interface NotificationBase {
   /**
    * `false` once the caller has dismissed it; `true` until then.
    *
-   * ⚠ **The bell badge counts these, not `list.length`.** A dismissed notification stays
-   * in the list — the panel keeps history, and a client can confirm its dismissal landed
-   * by seeing the item come back marked. Filter to `unread` for the panel body, count
-   * `unread` for the badge, and treat a disappearing item as "what it pointed at is no
-   * longer visible to you", which is a different fact.
+   * ⚠ **This drives the panel, not the badge.** A dismissed notification stays in the
+   * list — the panel keeps history, and a client can confirm its dismissal landed by
+   * seeing the item come back marked. Filter to `unread` for the panel body, and treat a
+   * disappearing item as "what it pointed at is no longer visible to you", which is a
+   * different fact. The badge counts `unread && !seen` — see {@link seen}.
    */
   readonly unread: boolean;
+  /**
+   * `true` once this notification was already on the list the last time the caller
+   * opened their notifications panel (issue #178).
+   *
+   * ⚠ **Seen and dismissed are two different acts and must not be collapsed.** Opening
+   * the panel marks everything already on it *seen*, which is what lets the badge fall
+   * to zero without the reader clearing rows one by one; **dismissing** is the deliberate
+   * `✕` that moves a row out of the panel's active section. A seen notification is still
+   * `unread: true` and still renders in the body — being looked at is not being dealt
+   * with.
+   *
+   * **Server-computed from one durable per-caller watermark**, never stored per
+   * notification: `occurredAt <= lastSeenAt`, and `false` for everybody who has never
+   * opened the panel. A notification that arrived *after* that moment is therefore
+   * `seen: false` and keeps the badge up, which is the whole point — the badge means
+   * "something happened since you last looked", not "you have unfinished business".
+   *
+   * ⚠ The boundary is inclusive. A notification stamped at the exact instant of the last
+   * open counts as seen: it was on the list the reader was shown.
+   */
+  readonly seen: boolean;
 }
 
 /**
@@ -87,4 +108,26 @@ export interface NotificationIdRequest {
 export interface NotificationDismissal {
   readonly notificationId: string;
   readonly dismissedAt: string;
+}
+
+/**
+ * What comes back from `notifications.markSeen` — the moment the caller's watermark now
+ * stands at.
+ *
+ * **`notifications.markSeen` takes no input**, the same statement `notifications.list`
+ * makes: there is exactly one person's watermark a caller may move, so there is no
+ * parameter that could name a different one. It names no notification either — the whole
+ * point of a watermark is that "everything up to here" needs no list of identifiers, and
+ * a client sending one could not describe a notification that arrived between its read
+ * and its write.
+ *
+ * ⚠ **Not idempotent, and deliberately unlike `notifications.dismiss`.** A dismissal is a
+ * fact about one notification and converges on its first timestamp; a mark-seen is "I am
+ * looking at the panel *now*", so every call advances `seenAt`. Repeating it is safe —
+ * the watermark only ever moves forward and the answer is always the moment it moved to —
+ * but it is not a replay of the first call, and nothing may treat a repeat as a no-op.
+ */
+export interface NotificationSeenMark {
+  /** ISO-8601, as every timestamp this API serves. */
+  readonly seenAt: string;
 }

@@ -43,6 +43,14 @@ const INVENTORY = [
   // `notifications.list`'s `unread` flag. Its own table rather than a column on
   // `consumer_receipts`, which is ADR-0006 infrastructure this module does not own.
   'notification_dismissals',
+  // The other half of per-recipient panel state (issue #178, decision D7): one row per
+  // person recording when they last opened the panel, which is what the bell's badge
+  // counts against. A *third* table rather than a column beside `dismissed_at`, and the
+  // reason is cardinality — a dismissal is one row per (recipient, notification) and this
+  // is one row per recipient, so a `seen_at` column there could only ever be written for
+  // notifications that had also been dismissed, collapsing the exact distinction the
+  // feature exists to keep.
+  'notification_seen_watermarks',
   // moderation and sync (L4)
   'bulletin_dismissals',
   'bulletin_reports',
@@ -69,7 +77,7 @@ describe('schema app holds exactly the tables M2 declared (m2-lane-briefs.md rat
     await testDatabase?.stop();
   });
 
-  it('matches the seventeen-name inventory as a set, and in count', async () => {
+  it('matches the eighteen-name inventory as a set, and in count', async () => {
     const { rows } = await testDatabase.client.query<{ tablename: string }>(
       `select tablename from pg_tables where schemaname = 'app' order by tablename`,
     );

@@ -45,6 +45,22 @@ Decision: **Owner wins on the feature; the PDF still wins on the shape.** D2's *
 
 Corollary: a note has no update and no take-down in this slice, so `app.notes` carries neither a `version` nor an `archived_at` column. Both arrive with the mutation that needs them (addendum §4 forbids the placeholder), and `version` specifically arrives with the first mutation ADR-0005 marks `expectedVersion: yes`.
 
+## D7 — "Seen" fires the moment the notifications panel opens, not per notification scrolled into view (2026-08-11)
+
+Conflict: [#178](https://github.com/drewdrewthis/playa-post/issues/178) says the bell badge must fall when a person opens their notifications panel, without making them dismiss each row. "Opened it" admits two readings — the panel opened, or each notification was actually scrolled onto the screen — and the ACs deliberately ask for the choice to be recorded rather than assumed.
+
+Decision: **the panel opening is the event.** One `notifications.markSeen` per opening, advancing a single per-person watermark (`app.notification_seen_watermarks.last_seen_at`); `notifications.list` then serves `seen` as `occurredAt <= last_seen_at`. Scroll-into-view would need an IntersectionObserver per row, a client-sent list of identifiers, and a rule for a row that was half on screen — for no user-visible difference at the list sizes this product produces, where the panel is a full-column takeover and opening it puts essentially the whole list in front of the reader. Addendum §24's "simplest proven implementation" resolves it, and the watermark is also the only version that cannot lie: a client sending the ids it happened to be holding would silently mark seen whatever arrived between its read and its write, whereas "everything up to now" names nothing and cannot race a read.
+
+**Seen is not dismissed, and the two states stay separate on purpose.** Seen answers "has anything happened since you last looked" and is the *only* thing the badge counts (`unread && !seen`); dismissed answers "have you dealt with this" and is the only thing that moves a row out of the panel's active section. Opening the panel therefore changes nothing on screen — every row the reader came for is exactly where it was — which is why the badge and the panel could be given one flag each rather than one flag between them. All four combinations are reachable and each means something.
+
+Corollaries, recorded so the model is deliberate rather than accidental:
+
+- **The comparison is inclusive.** A notification stamped at the exact instant of an open counts as seen: it was on the list the reader was shown, and an exclusive comparison would leave that one row holding the badge up forever, because no later open can move a watermark past a timestamp it equals.
+- **The watermark only moves forward**, enforced in the upsert rather than by the caller. Two devices with disagreeing clocks, or a retry arriving late, must never un-see notifications somebody has already been shown.
+- **`markSeen` is deliberately not idempotent**, unlike `notifications.dismiss`, which converges on its first timestamp. "I am looking now" is true of every call, and a converging watermark would freeze at the first open and never clear a badge again. Repeating it is still safe.
+- **No outbox event**, matching the dismissal decision and for a stronger version of its reason: opening a panel has no reactor, and an audit entry would durably record every time a person glanced at their own bell.
+- **A per-device watermark is a future decision, not a future default.** The primary key is `recipient_id`, so today two devices share one badge — which is the behaviour a person expects from a badge that means "since you last looked", regardless of which screen they last looked at.
+
 ---
 
 Escalation threshold for future decisions: addendum §24. Anything touching user experience, trust/privacy model, irreversible data constraints, significant operational cost, or custom infrastructure goes back to the owner.
