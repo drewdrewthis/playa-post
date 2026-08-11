@@ -116,7 +116,10 @@ export const STATUS_FOR_RESPONSE: Readonly<Record<IntroResponse, IntroRequestSta
  *
  * Derived from {@link STATUS_FOR_RESPONSE} rather than written out again, so "a request
  * the target has answered" cannot drift from "a status a response produces" — the two are
- * the same claim and a third response would otherwise need remembering in two places.
+ * the same claim and a third response would otherwise need remembering in two places. The
+ * outbox read (`postgres-intro-request.repository.ts`) builds its mask from this set, so a
+ * status a response produces can never leak to the requester merely because somebody
+ * forgot to add it to a hand-written list.
  */
 export const ANSWERED_STATUSES: ReadonlySet<IntroRequestStatus> = new Set(
   Object.values(STATUS_FOR_RESPONSE),

@@ -73,9 +73,10 @@ export interface IntroDeclined extends IntroRequestEvent {
  * is the only check that can catch it, for the reason `NotePinned`'s consumer has one.
  *
  * The three party identifiers it already carried are exactly what the connection needs;
- * no field was added for the seam. Routed to the requester as well: their introduction was
- * accepted, and that is the one outcome they are entitled to be told about — the target
- * disclosed it by connecting.
+ * no field was added for the seam. May be routed to the requester as well — that is the
+ * one outcome they are entitled to be told about, the target having disclosed it by
+ * connecting — but no consumer delivers it to them today; they learn of it only by the
+ * edge appearing on their graph.
  */
 export interface IntroAccepted extends IntroRequestEvent {
   readonly type: typeof INTRO_ACCEPTED;

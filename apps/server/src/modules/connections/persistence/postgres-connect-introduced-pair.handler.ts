@@ -101,6 +101,13 @@ export function createConnectIntroducedPairHandler(
       const pair = toIntroducedPair(event);
       const [userAId, userBId] = orderedPair(pair.requesterId, pair.targetId);
 
+      // Set the moment the receipt insert returns, so the catch below can tell a
+      // redelivery (the receipt's own unique violation — the only 23505 this transaction
+      // is allowed to swallow) from a unique violation raised by a *later* write, which
+      // must fail the delivery: swallowing one of those would mark the event processed
+      // with no connection formed and nothing owed.
+      let receiptWritten = false;
+
       try {
         await database.transaction().execute(async (transaction) => {
           await transaction
@@ -111,6 +118,7 @@ export function createConnectIntroducedPairHandler(
               processed_at: readClock(),
             })
             .execute();
+          receiptWritten = true;
 
           const inserted = await transaction
             .insertInto('app.connections')
@@ -171,7 +179,7 @@ export function createConnectIntroducedPairHandler(
             .execute();
         });
       } catch (error) {
-        if (isUniqueViolation(error)) {
+        if (!receiptWritten && isUniqueViolation(error)) {
           return;
         }
         throw error;

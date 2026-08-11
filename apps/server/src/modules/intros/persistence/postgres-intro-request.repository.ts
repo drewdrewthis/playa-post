@@ -10,6 +10,7 @@ import {
 } from '../application/visible-intro';
 import type { VisibleIntrosRepository } from '../application/visible-intros.repository';
 import {
+  ANSWERED_STATUSES,
   INTRO_DECISION,
   INTRO_REQUEST_STATUS,
   STATUS_FOR_DECISION,
@@ -416,10 +417,9 @@ export function createPostgresIntroRequestRepository(
         with ${viewerWorld(viewerId)}
         select r.id                    as intro_request_id,
                case
-                 when r.status in (
-                        ${INTRO_REQUEST_STATUS.accepted}::text,
-                        ${INTRO_REQUEST_STATUS.targetDeclined}::text
-                      )
+                 when r.status in (${sql.join(
+                   [...ANSWERED_STATUSES].map((status) => sql`${status}::text`),
+                 )})
                  then ${INTRO_REQUEST_STATUS.passedOn}::text
                  else r.status
                end                     as status,

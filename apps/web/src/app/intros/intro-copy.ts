@@ -100,14 +100,22 @@ export const INTRO_DECISION_CONFIRMATION_LINE = {
  */
 export const INTRO_RESPONSE_CONFIRMATION_LINE = {
   accept: 'Accepted — you are being connected. They will appear on your graph shortly.',
-  decline: 'Declined. Nobody is told, and nothing is connected.',
+  decline: 'Declined. Nobody is told, nothing is connected, and this introduction is closed.',
 } as const;
 
 /** The target's accept control. */
 export const INTRO_ACCEPT_LABEL = 'Accept';
 
-/** The target's decline control. */
-export const INTRO_TARGET_DECLINE_LABEL = 'Not now';
+/**
+ * The target's decline control.
+ *
+ * ⚠ **"Decline", not "Not now".** The answer is terminal-once — the row leaves the inbox,
+ * `target_declined` is final, and a second answer is refused — so a label promising
+ * deferral would be a lie told at the exact moment the reader is deciding whether to
+ * refuse. The consent argument this feature rests on requires the refusal control to mean
+ * what it says.
+ */
+export const INTRO_TARGET_DECLINE_LABEL = 'Decline';
 
 /**
  * The line above the target's two controls, before either is pressed.
