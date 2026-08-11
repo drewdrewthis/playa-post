@@ -62,8 +62,9 @@ export function SavedViewsRoute(): JSX.Element {
   });
 
   const views = saved.data?.views ?? [];
-  // A `Set` rather than the array itself: the screen asks "is this one lit" once per card,
-  // and at the saved-view cap that is 24 scans of a list the server already deduplicated.
+  // A `Set` rather than the array itself so the card's question reads as what it is —
+  // `notifyingViewIds.has(view.id)`, membership. At six elements the cost is not the
+  // argument; `.includes` would be just as fast and says less.
   const notifyingViewIds = new Set(saved.data?.notifyingViewIds ?? []);
 
   const counts = useQueries({

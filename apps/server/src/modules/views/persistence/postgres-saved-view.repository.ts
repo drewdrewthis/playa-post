@@ -226,23 +226,23 @@ export function createPostgresSavedViewRepository(
           return designatedViewIds(transaction, write.ownerId);
         }
 
-        // ⚠ The cap is checked here and not on the `notify: false` path, and only for a
-        // bell that is not already lit: `NOTIFY_ME_QUERY_LIMIT_PER_OWNER` bounds how many
-        // queries the evaluator reads per bulletin, so only a write that *adds* a row has
-        // anything to answer for. Re-lighting a lit bell is an upsert onto the row that is
-        // already there and must stay a no-op rather than becoming a refusal somebody
-        // meets by tapping twice.
+        // ⚠ **The cap counts bells, and nothing else.** `designatedViewIds` excludes the
+        // untied query `views.notifyMe.update` writes, so six means six *cards* — counting
+        // every row of this owner's instead would silently spend a bell slot on a query
+        // that is on no card, and then refuse the sixth bell with a message telling
+        // somebody to switch one off when none of the ones they can see would free it. The
+        // untied row is capped at one by the unique key and needs no count of its own.
         //
-        // Counted inside this transaction and unlocked, which is the cap's stated trade
-        // (see the constant): two taps racing each other can land one extra row.
-        const held = await transaction
-          .selectFrom('app.notify_me_queries')
-          .select('source_view_id')
-          .where('owner_id', '=', write.ownerId)
-          .execute();
+        // It is checked here and not on the `notify: false` path, and only for a bell that
+        // is not already lit: only a write that *adds* a row has anything to answer for,
+        // and re-lighting a lit bell is an upsert onto the row that is already there. That
+        // must stay a no-op rather than becoming a refusal somebody meets by tapping twice.
+        //
+        // Read inside this transaction and unlocked, which is the cap's stated trade (see
+        // the constant): two taps racing each other can land one extra row.
+        const lit = await designatedViewIds(transaction, write.ownerId);
 
-        const alreadyLit = held.some((row) => row.source_view_id === write.viewId);
-        if (!alreadyLit && held.length >= NOTIFY_ME_QUERY_LIMIT_PER_OWNER) {
+        if (!lit.includes(write.viewId) && lit.length >= NOTIFY_ME_QUERY_LIMIT_PER_OWNER) {
           throw new NotifyMeQueryLimitReachedError();
         }
 
@@ -296,13 +296,16 @@ export function createPostgresSavedViewRepository(
 /**
  * Every view this owner's bells are currently lit on.
  *
- * ⚠ **The single answer both `listFor` and `setNotify` give**, deliberately one function
- * rather than a query written at each call site: they are the two surfaces a client uses
- * to decide which cards are lit, and two spellings of "which bells are on" would be two
- * chances to forget the `owner_id` predicate or the `NOT NULL` filter.
+ * ⚠ **The single answer `listFor` and `setNotify` give, and the set the cap counts**,
+ * deliberately one function rather than a query written at each call site: they are the
+ * surfaces a client uses to decide which cards are lit, and two spellings of "which bells
+ * are on" would be two chances to forget the `owner_id` predicate or the `NOT NULL` filter
+ * — or, worse, to answer one question with a set the other was not counting.
  *
  * The untied query is excluded by `source_view_id is not null` — it belongs to no view and
  * therefore appears on no card's bell, exactly as it did when there was only one query.
+ * That exclusion is why {@link NOTIFY_ME_QUERY_LIMIT_PER_OWNER} can read this directly:
+ * the cap bounds bells, and this is the bells.
  *
  * Ordered so that two reads of unchanged state serialize identically. Nothing renders it
  * as a sequence; the order carries no meaning beyond that.

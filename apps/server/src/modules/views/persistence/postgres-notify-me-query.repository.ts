@@ -7,14 +7,8 @@ import type {
   SavedNotifyMeQuery,
 } from '../application/notify-me-query.directory';
 import { BOARD_QUERY_AST_VERSION } from '../domain/board-query-grammar';
-import {
-  NOTIFY_ME_QUERY_LIMIT_PER_OWNER,
-  type NotifyMeQuery,
-} from '../domain/notify-me-query';
-import {
-  NotifyMeQueryConflictError,
-  NotifyMeQueryLimitReachedError,
-} from '../domain/notify-me-query.errors';
+import type { NotifyMeQuery } from '../domain/notify-me-query';
+import { NotifyMeQueryConflictError } from '../domain/notify-me-query.errors';
 import { notifyMeQueryChanged, type NotifyMeQueryChanged } from '../domain/notify-me-query.events';
 import type {
   NotifyMeQueryRepository,
@@ -141,33 +135,21 @@ export function createPostgresNotifyMeQueryRepository(
 }
 
 /**
- * Insert the actor's untied query, refusing it if they are already at the cap.
+ * Insert the actor's untied query.
  *
- * Split out because the insert branch is the only one of the two that can grow the
- * owner's row count, and therefore the only one the cap has anything to say about — an
- * `UPDATE` of a row that already exists cannot take anybody past a limit they were
- * already inside.
- *
- * The count is taken inside the caller's transaction but takes no lock, which is
- * {@link NOTIFY_ME_QUERY_LIMIT_PER_OWNER}'s stated trade: two writes racing each other can
- * land one extra row, and a bound that exists to stop a list growing without limit does
- * not need to be exact.
+ * ⚠ **No cap check here, deliberately.** `NOTIFY_ME_QUERY_LIMIT_PER_OWNER` bounds the
+ * *designated* queries — the bells, which a person can add one per saved view — and this
+ * row is not one of them: `UNIQUE NULLS NOT DISTINCT (owner_id, source_view_id)` already
+ * caps it at one per person, so there is nothing here for a count to bound that the key
+ * does not. Counting all of an owner's rows instead, which is what this used to do, spent
+ * a bell slot on the untied query and then refused the seventh bell with a message
+ * ("switch one off") pointing at cards that could not free it.
  */
 async function insertUntiedQuery(
   transaction: DatabaseConnection,
   write: SaveNotifyMeQuery,
   ast: { types: string[]; text: string[] },
 ): Promise<NotifyMeQueryRow | undefined> {
-  const held = await transaction
-    .selectFrom('app.notify_me_queries')
-    .select(({ fn }) => fn.countAll<string>().as('count'))
-    .where('owner_id', '=', write.ownerId)
-    .executeTakeFirstOrThrow();
-
-  if (Number(held.count) >= NOTIFY_ME_QUERY_LIMIT_PER_OWNER) {
-    throw new NotifyMeQueryLimitReachedError();
-  }
-
   return transaction
     .insertInto('app.notify_me_queries')
     .values({
@@ -184,10 +166,15 @@ async function insertUntiedQuery(
     })
     // An untied row already existing IS the version mismatch: the caller said "I have
     // none". `do nothing` rather than `do update` so a first-save race cannot silently
-    // overwrite the query that won it. No conflict target, so any unique violation lands
-    // here — which is exactly one constraint, and the one that means "you already have
-    // an untied query".
-    .onConflict((conflict) => conflict.doNothing())
+    // overwrite the query that won it.
+    //
+    // ⚠ **The target is named rather than left open.** A targetless `DO NOTHING` absorbs
+    // *any* unique violation, so a constraint added to this table later would be swallowed
+    // here and re-surface as a `NotifyMeQueryConflictError` telling somebody their query
+    // had changed under them. Naming `(owner_id, source_view_id)` means only the one
+    // conflict that means "you already have an untied query" is handled, and anything else
+    // fails loudly.
+    .onConflict((conflict) => conflict.columns(['owner_id', 'source_view_id']).doNothing())
     .returningAll()
     .executeTakeFirst();
 }

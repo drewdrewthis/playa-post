@@ -217,7 +217,9 @@ export function createViewsRouter(dependencies: ViewsRouterDependencies) {
        * on view B clears it on view A". Lighting a second one adds a notification rather
        * than moving the one there was, and switching one off leaves the others alone.
        * Bounded per person, because the evaluator reads every switched-on query on every
-       * bulletin; a bell past the cap is refused naming the bound.
+       * bulletin; a bell past the cap is refused naming the bound. The cap counts bells and
+       * not the untied query `notifyMe.update` writes, so this is the only procedure that
+       * can raise it.
        *
        * The answer names **every** view the caller's bells are now on, so a client never
        * has to infer the rest of the screen from the one request it sent.
@@ -248,6 +250,10 @@ export function createViewsRouter(dependencies: ViewsRouterDependencies) {
        * query per person, so writing one here necessarily detached it from whichever view
        * it had been designated from; under D16 the bells are separate queries and this
        * procedure cannot reach them.
+       *
+       * ⚠ **Not capped, and never refuses with `NOTIFY_ME_QUERY_LIMIT_REACHED`.** The cap
+       * counts bells; this row is held at one per person by the unique key above, so
+       * somebody with every bell lit can still save the query they came here for.
        */
       update: authenticatedProcedure
         .input(updateNotifyMeQueryInput)

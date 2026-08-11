@@ -1,7 +1,14 @@
 import type { BoardQuery } from './board-query-grammar';
 
 /**
- * How many Notify Me queries one person may have switched on at once.
+ * How many saved views one person may have a Notify Me bell lit on at once.
+ *
+ * ⚠ **It counts the *designated* queries only.** The untied query
+ * `views.notifyMe.update` writes is not one of these and is not counted: it is held at one
+ * per person by `UNIQUE NULLS NOT DISTINCT (owner_id, source_view_id)`, so a count would
+ * bound nothing the key does not — while spending a bell slot on a query that is on no
+ * card, and making the refusal's "switch one off" point at cards that could not free it.
+ * A person's worst case is therefore **six bells plus one untied query, seven rows.**
  *
  * ⚠ **This number is decision D16's whole cost argument, and it is deliberately not
  * {@link import('./saved-view').SAVED_VIEW_LIMIT_PER_OWNER}.** D1 bounded the evaluator's
@@ -10,7 +17,8 @@ import type { BoardQuery } from './board-query-grammar';
  * read per saved query on **every** `BulletinCreated`, and it stops at a person's first
  * match — so a person whose bulletins match pays for one read and a person whose bulletins
  * match nothing pays for all of theirs, which is the common case and therefore the one to
- * bound.
+ * bound. Seven rows rather than six is the same bound: a small constant, not a growth
+ * curve.
  *
  * Six rather than 24 because the two caps have different payers. The saved-view cap bounds
  * a *per-render* fan-out somebody creates on a screen they chose to open and pays for

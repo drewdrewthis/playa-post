@@ -155,11 +155,11 @@ describe('setNotifyFailureMessage', () => {
     // would work is what the server said.
     const atCap = refusal(
       'NOTIFY_ME_QUERY_LIMIT_REACHED',
-      'You can have notifications on for up to 6 saved queries. Switch one off to add another.',
+      'You can have notifications on for up to 6 saved views. Switch one off to add another.',
     );
 
     expect(setNotifyFailureMessage(atCap, 'Rides')).toBe(
-      'You can have notifications on for up to 6 saved queries. Switch one off to add another.',
+      'You can have notifications on for up to 6 saved views. Switch one off to add another.',
     );
     expect(setNotifyFailureMessage(atCap, 'Rides')).not.toBe(NOTIFY_CONNECTION_MESSAGE);
   });

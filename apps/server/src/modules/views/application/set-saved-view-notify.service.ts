@@ -47,7 +47,8 @@ export interface SetSavedViewNotifyDependencies {
  *   is not one of this actor's — the same answer an invented ID gets (M5-AC16).
  * @throws {import('../domain/notify-me-query.errors').NotifyMeQueryLimitReachedError} when
  *   lighting this bell would take the actor past the per-owner cap that bounds what the
- *   notification evaluator reads on every bulletin.
+ *   notification evaluator reads on every bulletin. The cap counts lit **bells** only, so
+ *   the remedy it names — switch one off — always points at a card that can free the slot.
  */
 export function createSetSavedViewNotifyService(
   dependencies: SetSavedViewNotifyDependencies,

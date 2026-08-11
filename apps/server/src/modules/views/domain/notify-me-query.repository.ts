@@ -57,13 +57,16 @@ export interface NotifyMeQueryRepository {
    * has an untied query *and* their lit bells, independently, so this write touches
    * neither the bells nor the rows behind them.
    *
+   * ⚠ **Uncapped, and that is not an oversight.**
+   * {@link import('./notify-me-query').NOTIFY_ME_QUERY_LIMIT_PER_OWNER} bounds the bells,
+   * which a person adds one per saved view; this row is held at one per person by the
+   * unique key, so there is nothing for a count to bound. Somebody with every bell lit can
+   * still save the query they came here for.
+   *
    * @throws {import('./notify-me-query.errors').NotifyMeQueryConflictError} when
    *   `expectedVersion` does not match the actor's stored untied query — including the
    *   case where they have none, which is how an actor supplying somebody else's version
    *   is refused without reading that somebody's row.
-   * @throws {import('./notify-me-query.errors').NotifyMeQueryLimitReachedError} when this
-   *   write would be a new row and the actor is already at
-   *   {@link import('./notify-me-query').NOTIFY_ME_QUERY_LIMIT_PER_OWNER}.
    */
   save(write: SaveNotifyMeQuery): Promise<NotifyMeQuery>;
 }

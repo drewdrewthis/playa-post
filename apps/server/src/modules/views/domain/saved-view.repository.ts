@@ -158,8 +158,9 @@ export interface SavedViewRepository {
    *   not one of this owner's — the same answer an invented ID gets (M5-AC16).
    * @throws {import('./notify-me-query.errors').NotifyMeQueryLimitReachedError} when
    *   lighting this bell would take the owner past
-   *   {@link import('./notify-me-query').NOTIFY_ME_QUERY_LIMIT_PER_OWNER}. Only ever
-   *   raised for a bell that is not already lit: re-lighting one changes no count.
+   *   {@link import('./notify-me-query').NOTIFY_ME_QUERY_LIMIT_PER_OWNER}, which counts
+   *   **lit bells only** — never the untied query, whose slot no card could free. Only
+   *   ever raised for a bell that is not already lit: re-lighting one changes no count.
    */
   setNotify(write: SetSavedViewNotify): Promise<readonly string[]>;
 }

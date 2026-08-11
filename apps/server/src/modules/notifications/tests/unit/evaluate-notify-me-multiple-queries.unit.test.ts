@@ -128,9 +128,10 @@ describe('EvaluateNotifyMeHandler with several queries per person (#172, D16)', 
     expect(matches.asked.map((each) => each.query.text)).toEqual([['truck']]);
   });
 
-  it('still evaluates every query of a person none of whose queries match', async () => {
-    // The case the cap actually bounds. Nothing may be skipped here — a person whose third
-    // bell is the one that matches must still be found.
+  it('evaluates every query of a person whose last query is the one that matches', async () => {
+    // The case the cap actually bounds — the full fan-out is paid before anything settles.
+    // Nothing may be skipped here: a person whose third bell is the one that matches must
+    // still be found.
     const matches = fakeMatches(new Set(['shade']));
     const handler = createEvaluateNotifyMeHandler({
       notifyMeQueries: directory([

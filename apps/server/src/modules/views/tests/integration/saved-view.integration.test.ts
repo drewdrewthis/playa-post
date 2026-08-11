@@ -595,6 +595,52 @@ describe('saved views (issue #45, #172, M5-AC16, D16)', () => {
       ).resolves.toBeDefined();
     });
 
+    it('lets someone at the bell cap still save their untied query, which the cap does not count', async () => {
+      // ⚠ **The cap counts bells, and this is the assertion that says so.** Counting every
+      // row of an owner's instead — which is what the first cut did — spends a slot on a
+      // query that sits on no card, so a person with six bells lit could not use
+      // `views.notifyMe.update` at all, and the refusal they met ("switch one off") pointed
+      // at cards that could not free the slot. There is deliberately **no cap on this
+      // path**: the untied row is held at one per person by the unique key, so a count
+      // there would bound nothing the key does not.
+      const owner = await seedOnboardedUser('dusty_views_untied_cap');
+      const { save, setNotify, updateNotifyMe, list } = services();
+
+      for (let index = 0; index < NOTIFY_ME_QUERY_LIMIT_PER_OWNER; index += 1) {
+        // Sequential for the cap test's reason: counted per transaction, so a concurrent
+        // burst would be testing the race rather than the bound.
+        const view = await save.save({
+          actorId: owner,
+          name: `View ${String(index)}`,
+          sourceText: 'type:request',
+        });
+        await setNotify.set({ actorId: owner, viewId: view.id, notify: true });
+      }
+
+      const untied = await updateNotifyMe.update({ actorId: owner, sourceText: 'type:offer' });
+      expect(untied.sourceText).toBe('type:offer');
+      expect(untied.sourceViewId).toBeNull();
+
+      // Seven rows: six bells plus the one untied query. That total is the honest worst
+      // case per person, and it is what the evaluator's bound actually is.
+      expect(await notifyMeRows()).toHaveLength(NOTIFY_ME_QUERY_LIMIT_PER_OWNER + 1);
+      // The untied query lights no card, so the screen is unchanged by it.
+      expect((await list.list({ viewerId: owner })).notifyingViewIds).toHaveLength(
+        NOTIFY_ME_QUERY_LIMIT_PER_OWNER,
+      );
+
+      // ⚠ And the bell cap still bites. Without this, an implementation that had simply
+      // deleted the cap everywhere would pass every assertion above.
+      const spare = await save.save({
+        actorId: owner,
+        name: 'One too many',
+        sourceText: 'type:event',
+      });
+      await expect(
+        setNotify.set({ actorId: owner, viewId: spare.id, notify: true }),
+      ).rejects.toBeInstanceOf(NotifyMeQueryLimitReachedError);
+    });
+
     it('stops the notifications when a view a bell is on is deleted, and only that one', async () => {
       const owner = await seedOnboardedUser('dusty_views_bell_deleted');
       const { save, setNotify, remove, list } = services();

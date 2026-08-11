@@ -134,15 +134,20 @@ Feature: Notify Me — saved-query notifications
     Then the response is a structured error naming the cap
     And the views that were notifying are still notifying
 
-  @integration
+  @unit
   # @ac:172-AC1
-  # The corollary that makes several bells safe: notifications are per person, not per
-  # query. Without it a person is pushed the same bulletin once per bell they lit.
-  Scenario: A bulletin matching two of one viewer's queries notifies them once
+  # The corollary that makes several bells safe: matches are per person, not per query.
+  # Without it a person is pushed the same bulletin once per bell they lit.
+  #
+  # ⚠ @unit rather than @integration, and the wording follows the proof. This is settled
+  # at the point of evaluation — `EvaluateNotifyMeHandler` records one match per person —
+  # so it is provable without a database, and the grouped delivery downstream of it is
+  # already pinned by the two window scenarios above.
+  Scenario: A bulletin matching two of one viewer's queries is matched once
     Given a viewer with Notify Me switched on for two saved views
     And a bulletin is created that matches both of their queries
-    When the notification window flushes
-    Then exactly one notification is delivered to that viewer
+    When the bulletin is evaluated against the saved Notify Me queries
+    Then exactly one match is recorded for that viewer
 
   @integration
   # @ac:172-AC3
