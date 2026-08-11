@@ -60,12 +60,12 @@ per-module for independent module-level suites — this is deliberate duplicatio
 | `bulletin-request-lifecycle.feature` | Request create/archive, atomicity | 1 e2e, 5 integration |
 | `board-visibility-query.feature` | Board listing + restricted grammar | 2 e2e, 2 integration, 4 unit |
 | `notify-me.feature` | Single Notify Me query, grouped push, outbox | 2 e2e, 8 integration |
-| `moderation-report-dismiss.feature` | Private report + viewer-local dismissal | 2 e2e, 5 integration |
+| `moderation-report-dismiss.feature` | Private report + viewer-local dismissal; the Dismissed category and un-dismissal (#170) | 2 e2e, 15 integration |
 | `offline-replay.feature` | Mutation envelope replay, actorship precedence | 1 e2e, 2 integration |
 | `vertical-slice-e2e.feature` | Composite M2-AC1 proof + log hygiene | 1 e2e, 1 integration |
 | `bulletin-post-types.feature` | The six postable types; filterable ≠ postable (#87, M5) | 1 e2e, 3 integration |
 | `pin-a-note.feature` | Private person-to-person notes, degree-1 gated (#88, D6) | 11 integration, 7 unit |
-| **Total** | | **13 e2e, 58 integration, 17 unit — 88 scenarios** |
+| **Total** | | **13 e2e, 68 integration, 17 unit — 98 scenarios** |
 
 ## AC → scenario traceability
 
@@ -82,6 +82,7 @@ per-module for independent module-level suites — this is deliberate duplicatio
 | M2-AC9 (offline replay) | `offline-replay.feature` › "The same bulletin.create envelope submitted twice..." / "Same mutationId with a different payload is rejected" |
 | M2-AC10 (report privacy, B9) | `moderation-report-dismiss.feature` › "A reported bulletin remains visible to other eligible viewers" / "The reporter's identity never reaches the author" |
 | M2-AC11 (dismissal is viewer-local) | `moderation-report-dismiss.feature` › "Dismissing a bulletin removes it only for the dismissing viewer" |
+| Dismissed category + un-dismissal ([#170](https://github.com/drewdrewthis/playa-post/issues/170)) | `moderation-report-dismiss.feature` › the ten `@issue:170` scenarios — browsable, ordered by dismissal, reports excluded, viewer-scoped, narrowed to what is still visible, reversible, converging, report-preserving, author-invisible, and fail-closed for an unrelated actor |
 | M2-AC12 (archive lifecycle) | `bulletin-request-lifecycle.feature` › "Archived bulletin is gone for non-authors..." / "Archiving an already-archived bulletin is idempotent" |
 | M2-AC13 (grammar boundaries) | `board-visibility-query.feature` › the four grammar `@unit` scenarios |
 | M2-AC14 (narrow-only + indistinguishability, B10/B17) | `board-visibility-query.feature` › "Unauthorized and non-existent bulletin IDs are indistinguishable"; `moderation-report-dismiss.feature` › "Reporting an invisible bulletin fails like reporting a non-existent one" |

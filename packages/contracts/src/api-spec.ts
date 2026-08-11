@@ -22,6 +22,7 @@ import type {
   HiddenBulletin,
   ModerationTargetRequest,
   ReportBulletinRequest,
+  RestoredBulletin,
 } from './moderation';
 import type { Note, PinnedNote, PinNoteRequest } from './notes';
 import type {
@@ -108,9 +109,16 @@ export interface PlayaPostApi {
   'bulletins.getById': QuerySpec<BulletinIdRequest, VisibleBulletin>;
   'bulletins.listMine': QuerySpec<void, readonly Bulletin[]>;
   'bulletins.board': QuerySpec<BoardRequest, Board>;
+  /**
+   * The caller's Dismissed category — the same {@link Board} shape as `bulletins.board`,
+   * so one card renders both (#170). Takes no input: there is one dismissed list a caller
+   * may read, and no filter over it.
+   */
+  'bulletins.dismissed': QuerySpec<void, Board>;
 
   'moderation.report': MutationSpec<ReportBulletinRequest, HiddenBulletin>;
   'moderation.dismiss': MutationSpec<ModerationTargetRequest, HiddenBulletin>;
+  'moderation.undismiss': MutationSpec<ModerationTargetRequest, RestoredBulletin>;
 
   'notes.pin': MutationSpec<PinNoteRequest, PinnedNote>;
   'notes.list': QuerySpec<void, readonly Note[]>;

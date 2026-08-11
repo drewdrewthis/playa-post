@@ -51,4 +51,33 @@ export interface VisibleBulletinsRepository {
    * @returns At most {@link BOARD_PAGE_SIZE} bulletins, newest first.
    */
   findVisible(viewerId: string, query: BoardQuery): Promise<readonly VisibleBulletin[]>;
+
+  /**
+   * The subset of a named list of bulletins this viewer is authorized to see (#170).
+   *
+   * The Dismissed category's content read: `modules/moderation` says *which* bulletins
+   * the viewer dismissed, and this says which of those they may still be shown. The two
+   * halves are separate because the answer to the second question is
+   * `app.visible_bulletins` and nothing else — a dismissed bulletin whose author has
+   * since archived it, or whose author is no longer reachable, is simply absent.
+   *
+   * ⚠ **`bulletinIds` can only narrow, exactly like a board query's filter.** It is
+   * applied as a predicate *over* the authorized set, so naming an ID the viewer may not
+   * see returns nothing rather than something — B10 stated as a signature, and the reason
+   * a caller may pass identifiers that came from another module's table without that
+   * table becoming a second visibility rule.
+   *
+   * @param viewerId - The reading actor's `app.users.id`.
+   * @param bulletinIds - The candidates. An empty list answers with an empty list and
+   *   costs no round trip.
+   * @returns Only the authorized ones, in **no promised order** — the caller named the
+   *   candidates, so the caller owns what order they mean (see
+   *   {@link import('./list-dismissed-bulletins.query').ListDismissedBulletinsQuery},
+   *   which restores dismissal order). Promising one here would be a second ordering rule
+   *   for a caller to disagree with.
+   */
+  findVisibleByIds(
+    viewerId: string,
+    bulletinIds: readonly string[],
+  ): Promise<readonly VisibleBulletin[]>;
 }

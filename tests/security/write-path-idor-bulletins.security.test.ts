@@ -8,7 +8,12 @@ import { startPostgresTestDatabase, type PostgresTestDatabase } from '@playa-pos
 // None of these exist yet — legible failure at this seam until the coder writes them.
 import { createArchiveBulletinService } from '../../apps/server/src/modules/bulletins/application/archive-bulletin.service';
 import { createCreateBulletinService } from '../../apps/server/src/modules/bulletins/application/create-bulletin.service';
+import { createFindVisibleBulletinAuthorQuery } from '../../apps/server/src/modules/bulletins/application/find-visible-bulletin-author.query';
 import { createPostgresBulletinRepository } from '../../apps/server/src/modules/bulletins/persistence/postgres-bulletin.repository';
+import { createDismissBulletinService } from '../../apps/server/src/modules/moderation/application/dismiss-bulletin.service';
+import { createReportBulletinService } from '../../apps/server/src/modules/moderation/application/report-bulletin.service';
+import { createUndismissBulletinService } from '../../apps/server/src/modules/moderation/application/undismiss-bulletin.service';
+import { createPostgresModerationRepository } from '../../apps/server/src/modules/moderation/persistence/postgres-moderation.repository';
 import { createDeleteSavedViewService } from '../../apps/server/src/modules/views/application/delete-saved-view.service';
 import { createRenameSavedViewService } from '../../apps/server/src/modules/views/application/rename-saved-view.service';
 import { createSaveViewService } from '../../apps/server/src/modules/views/application/save-view.service';
@@ -22,7 +27,8 @@ import { createPostgresSavedViewRepository } from '../../apps/server/src/modules
  * ADR-0005's conflict matrix, an unrelated actor gets a structured failure with zero
  * state change and zero outbox rows."
  *
- * **This is the `bulletin.create` / `bulletin.archive` / `notifyMe.update` subset**,
+ * **This is the `bulletin.create` / `bulletin.archive` / `bulletin.undismiss` /
+ * `notifyMe.update` subset**,
  * mirroring `visibility-matrix.security.test.ts`'s own precedent for B5: the manifest
  * keeps B13 `live` with this file as `provenBy` because the row cannot be sharded
  * across two states in its schema, with the partial-coverage caveat recorded here
@@ -71,7 +77,7 @@ import { createPostgresSavedViewRepository } from '../../apps/server/src/modules
  * application-level redaction step). Duplicated from
  * `notify-me-query.integration.test.ts`'s identical scenario.
  */
-describe('B13 — write-path IDOR matrix (bulletin.archive, notifyMe.update, view.save)', () => {
+describe('B13 — write-path IDOR matrix (bulletin.archive, bulletin.undismiss, notifyMe.update, view.save)', () => {
   let testDatabase: PostgresTestDatabase;
   let database: DatabaseConnection;
 
@@ -112,6 +118,29 @@ describe('B13 — write-path IDOR matrix (bulletin.archive, notifyMe.update, vie
     return Number(rows[0]?.count ?? '0');
   }
 
+  async function seedAcceptedConnection(userAId: string, userBId: string): Promise<void> {
+    await testDatabase.client.query(
+      `insert into app.connections
+         (user_a_id, user_b_id, status, a_discloses_to_b_level, b_discloses_to_a_level, created_at)
+       values ($1, $2, 'accepted', 'full', 'full', now())`,
+      [userAId, userBId],
+    );
+  }
+
+  async function dismissalRowCount(): Promise<number> {
+    const { rows } = await testDatabase.client.query<{ count: string }>(
+      'select count(*)::text as count from app.bulletin_dismissals',
+    );
+    return Number(rows[0]?.count ?? '0');
+  }
+
+  async function reportRowCount(): Promise<number> {
+    const { rows } = await testDatabase.client.query<{ count: string }>(
+      'select count(*)::text as count from app.bulletin_reports',
+    );
+    return Number(rows[0]?.count ?? '0');
+  }
+
   describe('bulletin.archive', () => {
     it('rejects actor C with zero state change and zero outbox rows', async () => {
       const userA = await seedOnboardedUser('b13_bulletins_a');
@@ -139,6 +168,99 @@ describe('B13 — write-path IDOR matrix (bulletin.archive, notifyMe.update, vie
       );
       expect(rows[0]?.archived_at).toBeNull();
       expect(await outboxRowCount()).toBe(outboxAfterCreate);
+    });
+  });
+
+  /**
+   * `bulletin.undismiss` (#170) — the row this file gains with the Dismissed category.
+   *
+   * **Two unrelated-actor shapes, because un-dismissing has two of them.** The first is
+   * the familiar one: an actor who cannot see the bulletin at all is refused before any
+   * statement runs, exactly as `bulletin.dismiss` is. The second is the one that only
+   * exists for a *delete*, and it is the one worth the test — an actor who legitimately
+   * sees the bulletin, and therefore passes every authorization check, still must not be
+   * able to clear somebody else's dismissal. Nothing above the SQL enforces that; the
+   * `viewer_id = <actor>` predicate in the delete does, and this is what proves it is
+   * still there.
+   *
+   * A third assertion covers the boundary between the two moderation tables: an
+   * un-dismissal must not delete a report. That is not an IDOR, but it is the same class
+   * of mistake — a statement reaching a row it was not asked to reach — and the blast
+   * radius is a reporter silently losing a filed report (M2-AC10, B9).
+   */
+  describe('bulletin.undismiss', () => {
+    it('rejects an actor who cannot see the bulletin, with zero dismissal rows and zero outbox rows', async () => {
+      const userA = await seedOnboardedUser('b13_undismiss_a');
+      const actorC = await seedOnboardedUser('b13_undismiss_c');
+
+      const bulletins = createPostgresBulletinRepository({ database });
+      const created = await createCreateBulletinService({ bulletins }).create({
+        authorId: userA,
+        type: 'request',
+        title: "User A's bulletin",
+        body: 'Actor C has no relationship to this at all.',
+      });
+      const outboxAfterCreate = await outboxRowCount();
+
+      await expect(
+        createUndismissBulletinService({
+          moderation: createPostgresModerationRepository({ database }),
+          findVisibleBulletin: createFindVisibleBulletinAuthorQuery({ bulletins }),
+        }).undismiss({ actorId: actorC, bulletinId: created.id }),
+      ).rejects.toBeInstanceOf(Error);
+
+      expect(await dismissalRowCount()).toBe(0);
+      expect(await outboxRowCount()).toBe(outboxAfterCreate);
+    });
+
+    it("leaves another viewer's dismissal in place, and never touches a report", async () => {
+      const userA = await seedOnboardedUser('b13_undismiss_owner_a');
+      const viewerV = await seedOnboardedUser('b13_undismiss_owner_v');
+      const viewerW = await seedOnboardedUser('b13_undismiss_owner_w');
+      await seedAcceptedConnection(userA, viewerV);
+      await seedAcceptedConnection(userA, viewerW);
+
+      const bulletins = createPostgresBulletinRepository({ database });
+      const moderation = createPostgresModerationRepository({ database });
+      const findVisibleBulletin = createFindVisibleBulletinAuthorQuery({ bulletins });
+
+      const created = await createCreateBulletinService({ bulletins }).create({
+        authorId: userA,
+        type: 'request',
+        title: "User A's bulletin",
+        body: 'V dismisses and reports it; W tries to undo that.',
+      });
+
+      await createDismissBulletinService({ moderation, findVisibleBulletin }).dismiss({
+        actorId: viewerV,
+        bulletinId: created.id,
+      });
+      await createReportBulletinService({ moderation, findVisibleBulletin }).report({
+        actorId: viewerV,
+        bulletinId: created.id,
+        reason: 'spam',
+        detail: 'V filed this and it must survive.',
+      });
+      const outboxAfterSetup = await outboxRowCount();
+
+      // W is an eligible viewer, so this is *not* refused — it succeeds and does nothing,
+      // which is the honest outcome: W had no dismissal to withdraw. The property under
+      // test is that a successful call still cannot reach V's row.
+      await createUndismissBulletinService({ moderation, findVisibleBulletin }).undismiss({
+        actorId: viewerW,
+        bulletinId: created.id,
+      });
+
+      const { rows: dismissals } = await testDatabase.client.query<{ viewer_id: string }>(
+        'select viewer_id from app.bulletin_dismissals where bulletin_id = $1',
+        [created.id],
+      );
+      expect(dismissals.map((row) => row.viewer_id)).toEqual([viewerV]);
+
+      // The report is a different table and a different decision. Un-dismissing withdraws
+      // "not for me"; it must never withdraw "this is unwanted content".
+      expect(await reportRowCount()).toBe(1);
+      expect(await outboxRowCount()).toBe(outboxAfterSetup);
     });
   });
 

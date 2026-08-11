@@ -1,5 +1,6 @@
 import type { HiddenBulletin } from './hidden-bulletin';
 import type { ReportReason } from './report-reason';
+import type { RestoredBulletin } from './restored-bulletin';
 
 /** What recording a hide is given. */
 export interface HideBulletinWrite {
@@ -86,4 +87,43 @@ export interface ModerationRepository {
    * as a duplicate the caller has to know to ignore.
    */
   findHiddenFor(viewerId: string): Promise<ReadonlySet<string>>;
+
+  /**
+   * Remove a viewer's dismissal, putting the bulletin back on their own board (#170).
+   *
+   * Idempotent and converging in the same way {@link ModerationRepository.dismiss} is,
+   * from the other direction: un-dismissing something never dismissed is a success that
+   * changed nothing, because the state the caller asked for is the state that already
+   * holds. Erroring instead would make a replayed offline envelope — or a second tap on a
+   * card that has already gone — look like a failure.
+   *
+   * ⚠ **It deletes from `app.bulletin_dismissals` and nowhere else.** A viewer who both
+   * dismissed and reported the same bulletin still has a report, so the bulletin stays off
+   * their board: un-dismissing withdraws "not for me", never "this is unwanted content".
+   * Withdrawing a report is M5's, it is a different decision with a steward on the other
+   * end of it, and a delete here that also cleared `app.bulletin_reports` would make it
+   * happen by accident.
+   *
+   * @returns What was restored, whether or not a row was there to delete — see
+   *   {@link import('./restored-bulletin').RestoredBulletin}.
+   */
+  undismiss(write: HideBulletinWrite): Promise<RestoredBulletin>;
+
+  /**
+   * The bulletins this viewer has **dismissed**, most recently dismissed first (#170).
+   *
+   * ⚠ **Dismissals only, and `app.bulletin_reports` is not read here.** This is the one
+   * read in this module whose result a viewer can page through, and the whole reason the
+   * Dismissed category is safe to build is that reports are not in it (M2-AC10, B9). It is
+   * a separate method from {@link ModerationRepository.findHiddenFor} rather than a flag
+   * on it for exactly that reason: a boolean parameter is a thing a caller can get wrong,
+   * and getting this one wrong publishes a report list.
+   *
+   * @param limit - How many to return, from the caller's page size. This module holds no
+   *   opinion about how big a page is.
+   * @returns Bulletin IDs only. Whether the viewer may still *see* any of them is
+   *   `modules/bulletins`' question, asked through `app.visible_bulletins` — never
+   *   answered here (ADR-0002 §6).
+   */
+  findDismissedFor(viewerId: string, limit: number): Promise<readonly string[]>;
 }

@@ -1,0 +1,18 @@
+/*
+ * The board's two lists, as one row of pills (#170).
+ *
+ * Deliberately **not** part of `.board-search__chips`: that row is the type filter, it
+ * scrolls horizontally because seven type chips overflow the column, and its members all
+ * compile into a `type:` term the server's grammar parses. These two do not filter
+ * anything — they choose which server read the screen is showing — so they sit above the
+ * search field rather than inside it, and they never scroll away.
+ *
+ * The pill itself is `.board-search__chip`, borrowed rather than restyled: this is the
+ * same kind of control and a second pressed-state would be a second thing to keep in sync
+ * with the theme's tokens.
+ */
+.board-views {
+  display: flex;
+  gap: var(--pp-space-2);
+  margin-block-end: var(--pp-space-4);
+}

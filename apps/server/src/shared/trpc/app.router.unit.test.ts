@@ -58,6 +58,7 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
       getBulletin: { getById: unreachable },
       listMyBulletins: { list: unreachable },
       listBoard: { list: unreachable },
+      listDismissedBulletins: { list: unreachable },
     }),
     notes: createNotesRouter({
       pinNote: { pin: unreachable },
@@ -74,6 +75,7 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
     moderation: createModerationRouter({
       reportBulletin: { report: unreachable },
       dismissBulletin: { dismiss: unreachable },
+      undismissBulletin: { undismiss: unreachable },
     }),
     sync: createSyncRouter({ submitMutations: { submit: unreachable } }),
     views: createViewsRouter({

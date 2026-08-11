@@ -21,6 +21,7 @@ import { createGraphModule } from '../modules/graph/graph.module';
 import { createIdentityModule } from '../modules/identity/identity.module';
 import { createIntrosModule } from '../modules/intros/intros.module';
 import {
+  createDismissedBulletins,
   createHiddenBulletins,
   createModerationModule,
 } from '../modules/moderation/moderation.module';
@@ -91,7 +92,8 @@ function bulletinTargetOf(mutationType: string, payload: unknown): string {
  *
  * @param asAuthor - `true` for a mutation only the author may make (`bulletin.archive`);
  *   `false` for one any authorized viewer may make (`bulletin.report`,
- *   `bulletin.dismiss`). The service behind each still enforces its own rules — an
+ *   `bulletin.dismiss`, `bulletin.undismiss`). The service behind each still enforces its
+ *   own rules — an
  *   author reporting their own bulletin is refused by
  *   `ReportBulletinService`, not here — because this gate answers *actorship*, which
  *   ADR-0005 requires to be settled before any handler runs.
@@ -204,6 +206,10 @@ function mutationActorshipChecks(
     'bulletin.archive': requireBulletinActorship(findVisibleBulletin, true),
     'bulletin.report': requireBulletinActorship(findVisibleBulletin, false),
     'bulletin.dismiss': requireBulletinActorship(findVisibleBulletin, false),
+    // The same gate as `bulletin.dismiss`, and the symmetry is the requirement (#170):
+    // `UndismissBulletinService` asks the identical question on the direct path, so a
+    // queued un-dismissal cannot be refused for a reason the online one would not raise.
+    'bulletin.undismiss': requireBulletinActorship(findVisibleBulletin, false),
   };
 }
 
@@ -333,8 +339,16 @@ export function buildAppContainer(
   // bulletins can be built complete, so moderation can be handed the authorized read it
   // needs to decide whether an actor may moderate a bulletin at all. Nothing here is
   // lazily captured; every line only names what is already built.
+  //
+  // ⚠ Two reads, built separately and never merged (#170): `hiddenBulletins` unions
+  // reports and dismissals, because the board's exclusion does not care which one hid a
+  // bulletin; `dismissedBulletins` returns dismissals alone, because that one is
+  // browsable and a report list is not (M2-AC10, B9). They are the same object at
+  // runtime and two types at compile time, which is what keeps the browsable one
+  // unable to grow a report.
   const hiddenBulletins = createHiddenBulletins({ database });
-  const bulletins = createBulletinsModule({ database, hiddenBulletins });
+  const dismissedBulletins = createDismissedBulletins({ database });
+  const bulletins = createBulletinsModule({ database, hiddenBulletins, dismissedBulletins });
   // Notes is built beside bulletins and depends on neither it nor graph: `app.visible_notes`
   // composes `app.visible_people` in SQL, and the pin statement does the same, so the
   // wiring order between the three carries no meaning. Beside rather than inside is the

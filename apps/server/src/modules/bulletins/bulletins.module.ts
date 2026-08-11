@@ -5,6 +5,7 @@ import {
   createCreateBulletinService,
   type CreateBulletinService,
 } from './application/create-bulletin.service';
+import type { DismissedBulletinsRepository } from './application/dismissed-bulletins.repository';
 import {
   createFindVisibleBulletinAuthorQuery,
   type FindVisibleBulletinAuthor,
@@ -12,6 +13,7 @@ import {
 import { createGetBulletinQuery } from './application/get-bulletin.query';
 import type { HiddenBulletinsRepository } from './application/hidden-bulletins.repository';
 import { createListBoardQuery } from './application/list-board.query';
+import { createListDismissedBulletinsQuery } from './application/list-dismissed-bulletins.query';
 import { createListMyBulletinsQuery } from './application/list-my-bulletins.query';
 import { createPostgresBulletinRepository } from './persistence/postgres-bulletin.repository';
 import { createBulletinsRouter, type BulletinsRouter } from './transport/bulletins.router';
@@ -32,7 +34,32 @@ export interface BulletinsModuleDependencies {
    * does not have to.
    */
   readonly hiddenBulletins?: HiddenBulletinsRepository | undefined;
+  /**
+   * What each viewer has dismissed, implemented by `modules/moderation` (#170). See
+   * {@link DismissedBulletinsRepository}.
+   *
+   * ⚠ **Optional in the same way and for the same reason as {@link hiddenBulletins}, and
+   * absent means the module serves no Dismissed category at all** — `bulletins.dismissed`
+   * answers an empty page rather than pretending nothing was dismissed. A suite that is
+   * not about moderation does not have to wire it; `composition/container.ts` always does.
+   *
+   * Empty rather than an error because the shape of the answer must not depend on the
+   * wiring: a client asking for a category the deployment does not serve is asking for a
+   * list, and an empty list is a truthful one.
+   */
+  readonly dismissedBulletins?: DismissedBulletinsRepository | undefined;
 }
+
+/**
+ * Nothing dismissed, for a board built without moderation behind it.
+ *
+ * A null object rather than an `undefined` branch inside the query: the query's own logic
+ * is "these identifiers, narrowed by the authorized read", and threading an absent
+ * repository through it would put a wiring question inside a security-relevant sequence.
+ */
+const NOTHING_DISMISSED: DismissedBulletinsRepository = {
+  findDismissedFor: () => Promise.resolve([]),
+};
 
 /** What the composition root gets back: a router to mount, and one shared read. */
 export interface BulletinsModule {
@@ -100,6 +127,10 @@ export function createBulletinsModule(dependencies: BulletinsModuleDependencies)
         ...(dependencies.hiddenBulletins === undefined
           ? {}
           : { hiddenBulletins: dependencies.hiddenBulletins }),
+      }),
+      listDismissedBulletins: createListDismissedBulletinsQuery({
+        bulletins,
+        dismissedBulletins: dependencies.dismissedBulletins ?? NOTHING_DISMISSED,
       }),
     }),
     findVisibleBulletin: createFindVisibleBulletinAuthorQuery({ bulletins }),

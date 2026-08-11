@@ -30,7 +30,13 @@ export const REPORT_REASON = {
 /** One of {@link REPORT_REASON}'s values. */
 export type ReportReason = (typeof REPORT_REASON)[keyof typeof REPORT_REASON];
 
-/** Input of `moderation.dismiss` — one bulletin, and no statement about it. */
+/**
+ * Input of `moderation.dismiss` and `moderation.undismiss` — one bulletin, and no
+ * statement about it.
+ *
+ * One shape for both because they are one decision in two directions, and neither
+ * direction says anything about the bulletin the way a report does.
+ */
 export interface ModerationTargetRequest {
   readonly bulletinId: string;
 }
@@ -72,6 +78,32 @@ export interface ReportBulletinRequest {
  */
 export interface HiddenBulletin {
   readonly bulletinId: string;
-  /** When it left this viewer's board. Unchanged by a repeated report or dismissal. */
+  /**
+   * When it left this viewer's board. Unchanged by a repeated report or dismissal.
+   *
+   * ⚠ A dismissal is **not** terminal: the bulletin moves to the viewer's Dismissed
+   * category, readable at `bulletins.dismissed`, and `moderation.undismiss` brings it
+   * back (#170). A report is not reversible in v1 — withdrawal is M5 — so do not offer
+   * one control for both.
+   */
   readonly hiddenAt: string;
+}
+
+/**
+ * What comes back when a viewer un-dismisses a bulletin (#170).
+ *
+ * **One field, where {@link HiddenBulletin} has two.** There is no `restoredAt`, because
+ * un-dismissing deletes the row that held the timestamp — a moment reported here would
+ * describe when the server ran, not anything stored.
+ *
+ * ⚠ **It does not report whether a dismissal was actually there to remove.** The call
+ * converges: un-dismissing something never dismissed succeeds and changes nothing, so
+ * there is no second case for a client to render.
+ *
+ * ⚠ **A bulletin can come back un-dismissed and still not appear on the board** — if the
+ * viewer also reported it, or if it has since been archived or become unreachable. Re-read
+ * `bulletins.board` rather than assuming the card reappears.
+ */
+export interface RestoredBulletin {
+  readonly bulletinId: string;
 }

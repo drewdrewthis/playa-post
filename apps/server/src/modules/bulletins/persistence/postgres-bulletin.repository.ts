@@ -192,6 +192,37 @@ export function createPostgresBulletinRepository(
 
       return rows.map(toVisibleBulletin);
     },
+
+    async findVisibleByIds(
+      viewerId: string,
+      bulletinIds: readonly string[],
+    ): Promise<readonly VisibleBulletin[]> {
+      if (bulletinIds.length === 0) {
+        // No round trip for the common case — a viewer who has dismissed nothing. The
+        // statement below would answer the same thing; asking the database to prove that
+        // an empty array matches nothing is a connection spent on a foregone conclusion.
+        return [];
+      }
+
+      // `app.visible_bulletins` and nothing else, exactly as the two reads above. The
+      // identifiers arrive from `app.bulletin_dismissals` — another module's table — and
+      // they are a `where` over the authorized set rather than a join into it, so they
+      // can only ever remove rows the function already produced (B10). A
+      // `join app.bulletins` here, even to check `archived_at`, would be the second
+      // definition of "what may this viewer see" ADR-0002 §6 forbids.
+      //
+      // ⚠ No `order by`: the caller named the candidates and owns their order (see the
+      // port's doc comment). No `limit` either — the caller bounded the list it passed in,
+      // and a second bound here would silently truncate a page it had already sized.
+      const candidates = [...bulletinIds];
+      const { rows } = await sql<VisibleBulletinRow>`
+        select ${VISIBLE_BULLETIN_COLUMNS}
+          from app.visible_bulletins(${viewerId})
+         where bulletin_id = any(${candidates}::uuid[])
+      `.execute(database);
+
+      return rows.map(toVisibleBulletin);
+    },
   };
 }
 

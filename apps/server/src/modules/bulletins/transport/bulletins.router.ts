@@ -6,6 +6,7 @@ import type { ArchiveBulletinService } from '../application/archive-bulletin.ser
 import type { CreateBulletinService } from '../application/create-bulletin.service';
 import type { GetBulletinQuery } from '../application/get-bulletin.query';
 import type { ListBoardQuery } from '../application/list-board.query';
+import type { ListDismissedBulletinsQuery } from '../application/list-dismissed-bulletins.query';
 import type { ListMyBulletinsQuery } from '../application/list-my-bulletins.query';
 import { BulletinGoneError } from '../domain/bulletin.errors';
 
@@ -28,6 +29,7 @@ export interface BulletinsRouterDependencies {
   readonly getBulletin: GetBulletinQuery;
   readonly listMyBulletins: ListMyBulletinsQuery;
   readonly listBoard: ListBoardQuery;
+  readonly listDismissedBulletins: ListDismissedBulletinsQuery;
 }
 
 /**
@@ -78,10 +80,11 @@ async function present<T>(operation: () => Promise<T>): Promise<T> {
 /**
  * The bulletins module's tRPC surface.
  *
- * Five procedures over two reads of two different shapes, and the split is the §6a
- * rule made visible: `board` and `getById` answer with an authorized bulletin whose
- * author has been projected through `app.visible_people`, while `listMine` answers with
- * the author's own rows, which need no projection because the actor *is* the author.
+ * Six procedures over two reads of two different shapes, and the split is the §6a
+ * rule made visible: `board`, `dismissed` and `getById` answer with an authorized
+ * bulletin whose author has been projected through `app.visible_people`, while
+ * `listMine` answers with the author's own rows, which need no projection because the
+ * actor *is* the author.
  *
  * **No procedure takes an identifier for its caller.** `board` takes an optional query
  * string, `create` takes content, and the two that name a bulletin call the field
@@ -174,6 +177,34 @@ export function createBulletinsRouter(dependencies: BulletinsRouterDependencies)
           ),
         ),
       ),
+
+    /**
+     * The caller's Dismissed category — what they took off their own board, still
+     * theirs to browse and put back (#170).
+     *
+     * **The same {@link PresentedBoard} shape as `board`, and a separate procedure
+     * rather than a query term.** ADR-0007's grammar filters the authorized set; a
+     * dismissal is not a property of a bulletin but of one viewer's relationship to it,
+     * so a `dismissed:true` term would put per-viewer state into a grammar three
+     * consumers share and a saved view could then store. A second read is the honest
+     * shape: one board, one anti-board.
+     *
+     * ⚠ **Dismissals only — never what the caller reported.** Both hide a bulletin from
+     * this board, and only one of them is browsable, because a report list is the
+     * surface M2-AC10/B9 refuses to build.
+     *
+     * Takes **no input at all**, not even an empty query: there is exactly one dismissed
+     * list a caller may read, and no filter over it that anybody has asked for
+     * (ADR-0002 §5a).
+     */
+    dismissed: authenticatedProcedure.query(
+      async ({ ctx }): Promise<PresentedBoard> =>
+        present(async () =>
+          presentBoard(
+            await dependencies.listDismissedBulletins.list({ viewerId: ctx.viewerId }),
+          ),
+        ),
+    ),
   });
 }
 
