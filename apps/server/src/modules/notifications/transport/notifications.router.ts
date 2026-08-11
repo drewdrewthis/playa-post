@@ -111,9 +111,9 @@ export function createNotificationsRouter(dependencies: NotificationsRouterDepen
      *
      * **No input at all**, for two reasons rather than one. The first is `list`'s: there
      * is exactly one person's watermark a caller may move (ADR-0002 §5a). The second is
-     * the design — a client sending the notification ids it happens to be holding would
-     * mark seen whatever arrived between its read and this write, so the *only* honest
-     * claim a screen opening can make is "everything up to now".
+     * the design — the watermark claims "everything up to now", deliberately covering
+     * even what arrived since the caller's last read (decision D7's accepted
+     * consequence), so there is no identifier list to carry, and none to trust.
      *
      * Viewer-local and nothing else: it changes what `list` marks `seen` for the caller,
      * which is what their bell's badge counts. It dismisses nothing — every notification

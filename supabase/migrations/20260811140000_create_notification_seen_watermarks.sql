@@ -10,11 +10,12 @@
 -- dismissed — which is precisely the state this feature exists to distinguish.
 --
 -- ⚠ **A watermark, not a per-notification flag, and that is the whole design.** Marking
--- rows would mean the client sending the identifiers it happens to be holding, so a
--- notification that arrived between its read and its write would be silently marked seen
--- by a panel that never showed it. One timestamp per person says "everything up to here",
--- names nothing, and cannot race a read. It is also O(1) to write however long somebody's
--- history is: opening the panel is the most-repeated gesture in this product.
+-- rows would mean trusting a client-assembled identifier list and writing one row per
+-- notification. One timestamp per person says "everything up to here", names nothing,
+-- and is O(1) to write however long somebody's history is: opening the panel is the
+-- most-repeated gesture in this product. It deliberately covers even a notification
+-- delivered after the client's last read — decision D7's accepted consequence, because
+-- the panel is open and polling at the moment the mark fires.
 --
 -- ⚠ **Seen is not dismissed.** `notifications.list` serves both, and `app.notifications`
 -- is deliberately still two tables: opening the panel drops the bell's badge, the `✕`

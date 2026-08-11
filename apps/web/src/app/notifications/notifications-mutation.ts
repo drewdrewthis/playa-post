@@ -122,7 +122,6 @@ export function useMarkNotificationsSeen(): void {
     // Once per mount. The panel mounts when it opens and unmounts when it closes, so a
     // second open is a second mark — which is what makes anything that arrived in
     // between count as new.
-
   }, [mutate]);
 }
 

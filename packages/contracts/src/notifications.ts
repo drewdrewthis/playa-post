@@ -116,10 +116,12 @@ export interface NotificationDismissal {
  *
  * **`notifications.markSeen` takes no input**, the same statement `notifications.list`
  * makes: there is exactly one person's watermark a caller may move, so there is no
- * parameter that could name a different one. It names no notification either — the whole
- * point of a watermark is that "everything up to here" needs no list of identifiers, and
- * a client sending one could not describe a notification that arrived between its read
- * and its write.
+ * parameter that could name a different one. It names no notification either — one
+ * timestamp says "everything up to now" without a client-assembled identifier list to
+ * trust, and stays one write however long the history is. That deliberately covers even
+ * a notification delivered after the caller's last read (decision D7's accepted
+ * consequence): the panel is open and polling when the mark fires, so what the mark
+ * covers is what the reader is being shown.
  *
  * ⚠ **Not idempotent, and deliberately unlike `notifications.dismiss`.** A dismissal is a
  * fact about one notification and converges on its first timestamp; a mark-seen is "I am

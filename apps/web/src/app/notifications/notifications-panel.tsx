@@ -32,7 +32,7 @@ import './notifications-panel.css';
  * ever left the screen.
  *
  * ⚠ **Opening this screen clears the bell's badge and moves nothing** (issue #178).
- * `useMarkSeen` below records that the panel was open; the badge then counts only what
+ * `useMarkNotificationsSeen` below records that the panel was open; the badge then counts only what
  * arrives after. It changes **nothing on this screen** — the split above is still on
  * `unread`, so every row the reader came to deal with is exactly where it was. Being
  * looked at is not being dealt with, and the `✕` is still the only thing that moves a row

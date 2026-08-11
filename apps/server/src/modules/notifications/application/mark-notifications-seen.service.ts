@@ -7,11 +7,12 @@ import type { NotificationSeenWatermarkRepository } from '../domain/notification
  * `actorId` comes from the `Actor` resolved at the tRPC context boundary and is **never**
  * a field on a procedure input (ADR-0002:180-181, B14).
  *
- * ⚠ **No notification identifiers, deliberately.** A client sending the ids it happens to
- * be holding would silently mark seen a notification that arrived between its read and
- * its write — a panel clearing a badge for something it never showed. The watermark says
- * "everything up to now", which is the only claim the act of opening a screen actually
- * supports.
+ * ⚠ **No notification identifiers, deliberately.** The watermark claims "everything up
+ * to now" — which deliberately covers even a notification delivered after the caller's
+ * last read, something an id list would not have named. Decision D7 accepts that
+ * over-mark: the panel is open and polling when the mark fires, so what it covers is
+ * what the reader is being shown — and in exchange the write is one row however long the
+ * history is, with no client-assembled list to trust.
  */
 export interface MarkNotificationsSeenCommand {
   readonly actorId: string;
