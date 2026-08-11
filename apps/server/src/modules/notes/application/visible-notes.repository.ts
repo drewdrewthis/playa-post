@@ -46,10 +46,18 @@ export interface VisibleNotesRepository {
    *   person and never otherwise.
    * @param noteId - The caller's whole claim, and the only argument here that came from
    *   request input.
-   * @returns `null` for every refusal — no such note, somebody else's note, and a note
-   *   whose author has left this viewer's world are one answer, which is what lets the
-   *   caller raise one {@link import('../domain/note.errors').NoteGoneError} for all of
-   *   them instead of choosing between three (ADR-0002 §10, B17).
+   * @returns `null` when the note is absent **or** not this viewer's to read — the two are
+   *   one answer, which is what lets the caller raise one
+   *   {@link import('../domain/note.errors').NoteGoneError} for both instead of choosing
+   *   between them (ADR-0002 §10, B17).
+   *
+   *   ⚠ **An authorless note is a success, not a `null`.** When the author has left this
+   *   viewer's world — severed or deactivated — the LEFT JOIN in `app.visible_notes` still
+   *   returns the row and the `VisibleNote` carries no author at all; when they are merely
+   *   disclosing below `full`, it carries the card without a name. Reachability never
+   *   decided readability here: a note is addressed, so `recipient_id = viewer_id` is the
+   *   entire predicate. Collapsing either case into `null` would take a delivered note off
+   *   its recipient's board on a third party's action.
    */
   findVisibleById(viewerId: string, noteId: string): Promise<VisibleNote | null>;
 }

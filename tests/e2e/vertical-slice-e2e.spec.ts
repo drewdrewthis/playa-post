@@ -453,7 +453,7 @@ test.describe('Opening a note and answering it (pin-a-note.feature, #176)', () =
         await expect(pageB.getByTestId('compose-note-toast')).toBeVisible();
       });
 
-      await test.step('The answer lands on User A’s board as a note of its own', async () => {
+      await test.step('The answer lands on User A’s board, and B’s original still stands', async () => {
         // ⚠ The whole point of decision D14, asserted where it is observable: pinning back
         // wrote a **new note**, so it arrives as its own card on the author's board rather
         // than as anything attached to the note it answered. Nothing about A's original
@@ -461,6 +461,14 @@ test.describe('Opening a note and answering it (pin-a-note.feature, #176)', () =
         await pageA.goto('/board');
         await expect(
           pageA.locator('[data-testid^="board-note-card-"]').filter({ hasText: REPLY_BODY }),
+        ).toBeVisible({ timeout: 20_000 });
+
+        // And the other half of that sentence, asserted rather than assumed: B's board
+        // still carries the original. A fresh navigation, so what is on screen came back
+        // from the server on a new read — not from whatever the earlier read cached.
+        await pageB.goto('/board');
+        await expect(
+          pageB.locator('[data-testid^="board-note-card-"]').filter({ hasText: NOTE_BODY }),
         ).toBeVisible({ timeout: 20_000 });
       });
     } finally {

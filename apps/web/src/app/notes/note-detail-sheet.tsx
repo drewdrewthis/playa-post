@@ -202,8 +202,9 @@ export function NoteDetailSheet({
          * stale copy, and the author card it would address came out of that same copy.
          *
          * The refusal is deliberately not narrowed further. `NOTE_GONE` is one answer for
-         * three situations by design (`note.errors.ts`), so the screen cannot tell which,
-         * and a control that assumes the friendliest of the three is the screen guessing.
+         * two situations by design (`note.errors.ts`) — no such note, or somebody else's —
+         * so the screen cannot tell which, and a control that assumes the friendlier of
+         * the two is the screen guessing.
          */}
         {gone ? null : <PinBackFooter pinBack={pinBack} />}
       </section>
