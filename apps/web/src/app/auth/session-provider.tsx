@@ -8,6 +8,8 @@ export interface SessionContextValue {
   readonly accessToken: string | null;
   /** Sends a magic link. The session arrives through {@link AuthClient.onSessionChange}. */
   requestSignInLink(email: string): Promise<void>;
+  /** Verifies the one-time code the same email carries. Arrives the same way. */
+  verifySignInCode(email: string, code: string): Promise<void>;
   signOut(): Promise<void>;
   /**
    * Drop the local session because the server refused the token.
@@ -81,6 +83,11 @@ export function SessionProvider({
     [client],
   );
 
+  const verifySignInCode = useCallback(
+    (email: string, code: string) => client.verifySignInCode(email, code),
+    [client],
+  );
+
   const signOut = useCallback(async () => {
     await client.signOut();
     setSession(null);
@@ -97,10 +104,11 @@ export function SessionProvider({
       status,
       accessToken: session?.accessToken ?? null,
       requestSignInLink,
+      verifySignInCode,
       signOut,
       clearRejectedSession,
     }),
-    [status, session, requestSignInLink, signOut, clearRejectedSession],
+    [status, session, requestSignInLink, verifySignInCode, signOut, clearRejectedSession],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

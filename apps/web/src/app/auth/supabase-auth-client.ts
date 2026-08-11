@@ -16,6 +16,13 @@ export interface AuthClient {
   currentSession(): Promise<Session | null>;
   /** Send a magic link. Delivery is the issuer's job; this returns once it is queued. */
   requestSignInLink(email: string): Promise<void>;
+  /**
+   * Verify the one-time code the same email carries (issue #179). A magic link opens
+   * the system browser, which never hands a session to an installed PWA; the code is
+   * the same credential over a channel the PWA can complete itself. Success arrives
+   * the same way a magic-link click's would: through {@link onSessionChange}.
+   */
+  verifySignInCode(email: string, code: string): Promise<void>;
   signOut(): Promise<void>;
   /** Fires on every session change, including a silent token refresh. */
   onSessionChange(listener: (session: Session | null) => void): () => void;
@@ -73,6 +80,14 @@ export function createSupabaseAuthClient(): AuthClient {
       }
     },
 
+    async verifySignInCode(email: string, code: string): Promise<void> {
+      const { error } = await client.auth.verifyOtp({ email, token: code, type: 'email' });
+
+      if (error !== null) {
+        throw error;
+      }
+    },
+
     async signOut(): Promise<void> {
       await client.auth.signOut();
     },
@@ -94,6 +109,7 @@ function unconfiguredAuthClient(): AuthClient {
   return {
     currentSession: () => Promise.resolve(null),
     requestSignInLink: () => Promise.reject(new AuthNotConfiguredError()),
+    verifySignInCode: () => Promise.reject(new AuthNotConfiguredError()),
     signOut: () => Promise.resolve(),
     onSessionChange: () => () => undefined,
   };
