@@ -63,3 +63,44 @@ export class NoteRecipientUnreachableError extends ApplicationError {
     this.name = 'NoteRecipientUnreachableError';
   }
 }
+
+/**
+ * The named note is not there for you (#176, decision D14).
+ *
+ * **One answer for two situations** — no such note, and a note addressed to somebody
+ * else — and the uniformity *is* the security property, exactly as it is for
+ * {@link import('../../bulletins/domain/bulletin.errors').BulletinGoneError}. `notes.pin`
+ * refuses a stranger identically to a UUID naming nobody; a read that answered "that note
+ * exists, it is simply not yours" would give back through the front door the existence
+ * oracle the write path spent its design closing (ADR-0002 §10, B17).
+ *
+ * ⚠ Neither case is distinguishable *here*, and that is deliberate: `app.visible_notes`
+ * gates on `recipient_id = viewer_id` and returns nothing at all for either, so this class
+ * is raised without ever learning which it was. There is no branch that could grow a
+ * distinguishing message because there is no information to distinguish with.
+ *
+ * ⚠ **An author who has left your world is NOT one of these cases.** A note is addressed,
+ * and `recipient_id = viewer_id` is the whole authorization; the author join in
+ * `app.visible_notes` is LEFT precisely so that a severed connection or a deactivated
+ * author takes away the author CARD and never the MESSAGE. That read **succeeds** — the
+ * projection omits `author`, and a `limited` author keeps the card while losing the name
+ * (`tests/integration/read-a-note.integration.test.ts` proves both). Raising this error
+ * there would delete a delivered note off somebody's board because a third party changed
+ * a setting — the one thing `persistence/sql/visible-notes.sql` is written to prevent.
+ *
+ * ⚠ It is **not** a lifecycle state. Notes have no unpin, no archive, and no take-down
+ * (see {@link import('./note').Note}); "gone" here means *not yours to read*, never
+ * *withdrawn*. A note its recipient can see once, they can see always — nothing in this
+ * product removes one.
+ *
+ * ⚠ The message must never grow a detail. "That note was for someone else" or an echoed
+ * author handle each turn this error back into the oracle it exists to close.
+ */
+export class NoteGoneError extends ApplicationError {
+  static readonly code = 'NOTE_GONE';
+
+  constructor() {
+    super(NoteGoneError.code, 'That note is not available.');
+    this.name = 'NoteGoneError';
+  }
+}

@@ -34,7 +34,9 @@ non-authors but retained for the author" and "Archiving an already-archived bull
 | `@unit` | Pure logic — domain policies, parsers, generators, invariants — no I/O | Collaborators |
 
 Rule followed throughout: exactly one tag per scenario, one invariant per scenario, scenarios are
-independent, no cross-level duplication of the same invariant.
+independent, no cross-level duplication of the same invariant. Three scenarios in
+`request-an-intro.feature` carry `@unit @integration` and are the only exceptions; the counts below
+name them rather than let the totals absorb them.
 
 For M2 files, `@e2e` scenarios are reserved for the addendum §21 list, restricted to the rows M2
 actually exercises:
@@ -64,8 +66,15 @@ per-module for independent module-level suites — this is deliberate duplicatio
 | `offline-replay.feature` | Mutation envelope replay, actorship precedence | 1 e2e, 2 integration |
 | `vertical-slice-e2e.feature` | Composite M2-AC1 proof + log hygiene | 1 e2e, 1 integration |
 | `bulletin-post-types.feature` | The six postable types; filterable ≠ postable (#87, M5) | 1 e2e, 3 integration |
-| `pin-a-note.feature` | Private person-to-person notes, degree-1 gated (#88, D6) | 11 integration, 7 unit |
-| **Total** | | **13 e2e, 68 integration, 17 unit — 98 scenarios** |
+| `pin-a-note.feature` | Private person-to-person notes, degree-1 gated (#88, D6); the expanded view and answering one (#176, D14) | 1 e2e, 16 integration, 9 unit |
+| `request-an-intro.feature` | One-hop introductions: eligibility, the pass-on, and the target's answer (#89, #166, #175, D11, D12) | 25 integration, 4 unit |
+| **Total** | | **14 e2e, 98 integration, 23 unit — 132 scenarios** |
+
+The three numbers sum to 135, not 132, and the gap is not an arithmetic slip: three scenarios in
+`request-an-intro.feature` (lines 172, 182, 259) carry `@unit @integration` together, so each is
+counted at both levels and once in the total. They are the standing exception to the one-tag rule
+above, and they are counted here rather than quietly rounded away — a total that disagrees with its
+own columns invites exactly the drift the last recount found.
 
 ## AC → scenario traceability
 

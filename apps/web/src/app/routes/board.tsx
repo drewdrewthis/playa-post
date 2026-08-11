@@ -23,9 +23,19 @@ import { describeHideFailure } from '../moderation/hide-failure';
 import { ReportAbuseSheet } from '../moderation/report-abuse-sheet';
 import { buildBoardItems, channelState, describeBoardList } from '../notes/note-board-items';
 import { NoteCard } from '../notes/note-card';
+import { NoteDetailSheet } from '../notes/note-detail-sheet';
 import { useOffline } from '../offline/offline-provider';
 import { forgetBoardCard, queueMutation } from '../offline/pending-mutations';
 import { saveViewFailureMessage, seedSavedViewName } from '../views/saved-view-list';
+
+import {
+  bulletinSheet,
+  bulletinSheetId,
+  noteSheet,
+  noteSheetId,
+  NO_SHEET,
+  type OpenSheet,
+} from './board-open-sheet';
 
 import '../bulletins/board-views.css';
 import '../moderation/hide-failure-notice.css';
@@ -123,9 +133,15 @@ export function BoardRoute(): JSX.Element {
     setSearch(queryState.search);
     setFilter(queryState.filter);
   }, [urlQuery]);
-  const [openBulletinId, setOpenBulletinId] = useState<string | null>(null);
   /*
-   * The card being reported, held separately from `openBulletinId`. Reporting hides the
+   * One sheet at a time, and the type is what enforces it — see `board-open-sheet.ts` for
+   * why this is not two `useState`s with a comment promising they stay in step. A note's
+   * sheet arrived with #176 (decision D14) and raised the count from one to two, which is
+   * the point at which "clear the other one" stopped being reliably done.
+   */
+  const [openSheet, setOpenSheet] = useState<OpenSheet>(NO_SHEET);
+  /*
+   * The card being reported, held separately from `openSheet`. Reporting hides the
    * bulletin the moment it succeeds, so it leaves `visible` and `openCard` becomes null
    * — and a sheet keyed off the open card would unmount mid-send, taking the reporter's
    * typed account with it. Holding the card is also what lets the sheet quote a title
@@ -308,8 +324,9 @@ export function BoardRoute(): JSX.Element {
     await syncRunner.drain();
   }
 
+  // One close for both sheets: there is one thing raised, so there is one way to lower it.
   const closeSheet = useCallback(() => {
-    setOpenBulletinId(null);
+    setOpenSheet(NO_SHEET);
   }, []);
 
   /**
@@ -444,8 +461,17 @@ export function BoardRoute(): JSX.Element {
   // not on the board by definition, so searching `visible` there would close the sheet the
   // moment it opened.
   const openCard =
-    (showingDismissed ? dismissedCards : visible).find((card) => card.id === openBulletinId) ??
-    null;
+    (showingDismissed ? dismissedCards : visible).find(
+      (card) => card.id === bulletinSheetId(openSheet),
+    ) ?? null;
+  /*
+   * Looked up in the notes read rather than held as an object, for the reason `openCard`
+   * is: a note that has left the list — a `notes.list` refetch that no longer carries it —
+   * closes its own sheet instead of describing something that is no longer there. The
+   * sheet re-reads `notes.getById` regardless, so this is the fallback copy and never the
+   * authority.
+   */
+  const openNote = (notes.data ?? []).find((note) => note.id === noteSheetId(openSheet)) ?? null;
 
   return (
     <section className="screen" data-testid="board">
@@ -472,7 +498,7 @@ export function BoardRoute(): JSX.Element {
           type="button"
           aria-pressed={!showingDismissed}
           onClick={() => {
-            setOpenBulletinId(null);
+            closeSheet();
             undismiss.reset();
             setSearchParams(
               (previous) => {
@@ -494,7 +520,7 @@ export function BoardRoute(): JSX.Element {
           type="button"
           aria-pressed={showingDismissed}
           onClick={() => {
-            setOpenBulletinId(null);
+            closeSheet();
             hide.reset();
             setSearchParams(
               (previous) => {
@@ -569,7 +595,7 @@ export function BoardRoute(): JSX.Element {
                     card={card}
                     now={now}
                     onOpen={(opened) => {
-                      setOpenBulletinId(opened.id);
+                      setOpenSheet(bulletinSheet(opened.id));
                     }}
                   />
                 </li>
@@ -684,15 +710,21 @@ export function BoardRoute(): JSX.Element {
                   {items.map((item) => (
                     <li key={item.key}>
                       {item.kind === 'note' ? (
-                        /* No `onOpen`: a note carries its whole text on the card and there is
-                           no `notes.getById` to open — see `notes/note-card.tsx`. */
-                        <NoteCard note={item.note} now={now} />
+                        /* A note opens too, since #176 — onto `notes.getById` and the way
+                           to answer it (decision D14, `notes/note-detail-sheet.tsx`). */
+                        <NoteCard
+                          note={item.note}
+                          now={now}
+                          onOpen={(opened) => {
+                            setOpenSheet(noteSheet(opened.id));
+                          }}
+                        />
                       ) : (
                         <BulletinCard
                           card={item.card}
                           now={now}
                           onOpen={(opened) => {
-                            setOpenBulletinId(opened.id);
+                            setOpenSheet(bulletinSheet(opened.id));
                           }}
                         />
                       )}
@@ -743,6 +775,17 @@ export function BoardRoute(): JSX.Element {
                 },
               })}
         />
+      )}
+
+      {/*
+       * The expanded view of a note (#176, decision D14). A sibling of the bulletin sheet
+       * rather than a branch inside it: the two share a layer and nothing else — no type
+       * badge, no location, no expiry, no archive, dismiss or report — because a note is
+       * not a bulletin and the sheet that reads one may not quietly become the sheet that
+       * reads both.
+       */}
+      {openNote === null ? null : (
+        <NoteDetailSheet note={openNote} now={now} onClose={closeSheet} />
       )}
 
       {reporting === null ? null : (

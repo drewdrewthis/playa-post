@@ -135,7 +135,7 @@
     {
       "id": "B17",
       "title": "Unauthorized is indistinguishable from non-existent",
-      "assertion": "Unauthorized and non-existent produce identical status, error code, and byte-identical bodies across single-entity fetch, `from:` resolution, intro-connector resolution, and report/dismiss of an invisible bulletin.",
+      "assertion": "Unauthorized and non-existent produce identical status, error code, and byte-identical bodies across single-entity fetch, `from:` resolution, intro-connector resolution, and report/dismiss of an invisible bulletin. Single-entity fetch is proven on both surfaces that have one: bulletins.getById (M2-AC14) and notes.getById (#176, decision D14). The note case carries a third input the bulletin case has no analogue for — the note's own author, who is refused byte-identically to a stranger because app.visible_notes gates on recipient_id = viewer_id, so a read that answered the author differently would turn the private channel's only fetch into the delivery receipt PDF §6 denies it. `from:` resolution and intro-connector resolution remain owed to M5, the same partial-coverage discipline B5's and B13's rows record.",
       "status": "live",
       "provenBy": "tests/security/bulletin-indistinguishability.security.test.ts"
     },

@@ -44,6 +44,13 @@ import { mintInviteViaYouScreen } from './support/mint-invite';
  * | `bulletin-report-button` | inside `bulletin-detail-sheet` | Privately report this bulletin (alternative to dismiss, step 10 accepts either) |
  * | `bulletin-archive-button` | inside `bulletin-detail-sheet`, author only | Archive the bulletin |
  * | `offline-pending-badge` | app shell | Visible while a mutation is queued/pending/inflight per the offline store (ADR-0005:105-107); hidden once synced |
+ * | `board-note-card-<noteId>` | board | One note's card, interleaved into the board by time (#88) |
+ * | `note-open-button-<noteId>` | inside a `board-note-card-*` | The note card's tap target. A note became a tap target with #176/decision D14 — before that it opened nothing. Suffixed like its parent card, so a board carrying many notes has many distinguishable ones |
+ * | `note-detail-sheet` | board | The expanded view one card's `note-open-button-*` opens (#176) |
+ * | `note-detail-pin-back-link` | inside `note-detail-sheet` | Answer the note — routes to the composer with its author preselected. Absent when the author has left the viewer's world, or is further away than one hop |
+ * | `person-sheet-pin-note-link` | person sheet | The composer's other entrance, used here only to put a note on a board to open |
+ * | `compose-note` | `/board/new?noteTo=…` | The note composer, which is where both pin entrances land |
+ * | `compose-note-body-input` · `compose-note-submit-button` · `compose-note-toast` | compose-note | Write it, pin it, and the confirmation that it landed |
  *
  * `getByRole('slider', { name: 'Trust' })` — the person sheet's trust control, not a
  * `data-testid`: a slider's accessible name is exactly what a resilient selector
@@ -342,6 +349,127 @@ test.describe('The Dismissed category, end to end (moderation-report-dismiss.fea
 
         await pageB.getByTestId('board-view-board').click();
         await expect(pageB.getByTestId(`board-bulletin-card-${bulletinId}`)).toBeVisible();
+      });
+    } finally {
+      await contextA.close();
+      await contextB.close();
+    }
+  });
+});
+
+/**
+ * The expanded view of a note, and answering one (#176, decision D14).
+ *
+ * ⚠ **Last in this file, deliberately, and the reason is cleanup.** `global-setup.ts` boots
+ * one database for the whole `pnpm test:e2e` run, nothing truncates it between spec files,
+ * and spec files run alphabetically in a single worker — so whatever a file leaves behind
+ * belongs to every file that sorts after it. **A pinned note has no take-down at all**:
+ * decision D6's corollary gives `app.notes` neither an `archived_at` nor a delete, and D14
+ * revisited that and kept it, so the two notes this suite pins genuinely cannot be removed.
+ * Only `welcome.spec.ts` and `you-screen.spec.ts` sort after this file and neither reads a
+ * board, and within this file the two describes above run first — so the notes land where
+ * nothing later looks at them. Moving this describe up, or this file's name down the
+ * alphabet, breaks that and nothing will say so.
+ *
+ * ⚠ **The pin-back control is what this suite exists for, and it is the *only* entrance it
+ * proves.** `notification-seen-badge.spec.ts` already walks the person sheet's entrance to
+ * the same composer; that walk appears here only to put a note on a board worth opening.
+ */
+test.describe('Opening a note and answering it (pin-a-note.feature, #176)', () => {
+  /** Distinctive enough to find on a board every other spec has posted to. */
+  const NOTE_BODY = 'The good coffee is in the blue bin by the shade structure.';
+  const REPLY_BODY = 'Found it — leaving you the last of the oat milk.';
+
+  test('A note opens into its expanded view, and can be pinned back from there', async ({
+    browser,
+  }) => {
+    const contextA = await browser.newContext();
+    const contextB = await browser.newContext();
+    const pageA = await contextA.newPage();
+    const pageB = await contextB.newPage();
+
+    try {
+      await test.step('User A pins a note to User B’s board', async () => {
+        await bootstrapSession(pageA, requireEnv('E2E_USER_A_ACCESS_TOKEN'));
+
+        // Through the graph rather than by building the URL: `pinNoteHref` composes
+        // `/board/new?noteTo=<id>` out of an identifier this spec never sees, so walking
+        // there is also what proves the recipient the server writes to is the one the
+        // reader clicked.
+        await pageA.goto('/graph');
+        await expect(pageA.getByTestId('graph-home')).toBeVisible({ timeout: 20_000 });
+        await pageA.getByTestId(`graph-connection-node-${requireEnv('E2E_USER_B_HANDLE')}`).click();
+        await pageA.getByTestId('person-sheet-pin-note-link').click();
+
+        await expect(pageA.getByTestId('compose-note')).toBeVisible();
+        await pageA.getByTestId('compose-note-body-input').fill(NOTE_BODY);
+        await pageA.getByTestId('compose-note-submit-button').click();
+        // The composer's own "it worked", raised only once the queued write has settled —
+        // which is what makes this a wait for the delivery rather than for the click.
+        await expect(pageA.getByTestId('compose-note-toast')).toBeVisible();
+      });
+
+      await test.step('User B taps the note and reads it in full', async () => {
+        await bootstrapSession(pageB, requireEnv('E2E_USER_B_ACCESS_TOKEN'));
+        await pageB.goto('/board');
+
+        // By content rather than by list position: this board carries everything every
+        // other spec has posted, and notes interleave with bulletins by time.
+        const card = pageB
+          .locator('[data-testid^="board-note-card-"]')
+          .filter({ hasText: NOTE_BODY });
+        await expect(card).toBeVisible({ timeout: 20_000 });
+
+        await card.locator('[data-testid^="note-open-button-"]').click();
+
+        const sheet = pageB.getByTestId('note-detail-sheet');
+        await expect(sheet).toBeVisible();
+        await expect(sheet).toContainText(NOTE_BODY);
+
+        // Same evidence contract as `E2E_SHEET_SCREENSHOT_PATH` above: only a local
+        // evidence run sets the env var, and it photographs the open note sheet with
+        // the pin-back control showing. A normal run writes nothing.
+        const noteShotPath = process.env['E2E_NOTE_SHEET_SCREENSHOT_PATH'];
+        if (noteShotPath !== undefined && noteShotPath !== '') {
+          await expect(sheet.getByTestId('note-detail-pin-back-link')).toBeVisible();
+          await pageB.screenshot({ path: noteShotPath, animations: 'disabled' });
+        }
+      });
+
+      await test.step('The expanded view offers to pin one back, addressed to its author', async () => {
+        // A is B's direct connection, so the control is offered. What decides that is the
+        // *degree*, re-read at open time — a card alone is not a reachable person
+        // (`note-pin-back.ts`).
+        const pinBack = pageB
+          .getByTestId('note-detail-sheet')
+          .getByTestId('note-detail-pin-back-link');
+        await expect(pinBack).toBeVisible();
+
+        await pinBack.click();
+        await expect(pageB.getByTestId('compose-note')).toBeVisible();
+
+        await pageB.getByTestId('compose-note-body-input').fill(REPLY_BODY);
+        await pageB.getByTestId('compose-note-submit-button').click();
+        await expect(pageB.getByTestId('compose-note-toast')).toBeVisible();
+      });
+
+      await test.step('The answer lands on User A’s board, and B’s original still stands', async () => {
+        // ⚠ The whole point of decision D14, asserted where it is observable: pinning back
+        // wrote a **new note**, so it arrives as its own card on the author's board rather
+        // than as anything attached to the note it answered. Nothing about A's original
+        // note changed — there is no lifecycle for it to have moved through.
+        await pageA.goto('/board');
+        await expect(
+          pageA.locator('[data-testid^="board-note-card-"]').filter({ hasText: REPLY_BODY }),
+        ).toBeVisible({ timeout: 20_000 });
+
+        // And the other half of that sentence, asserted rather than assumed: B's board
+        // still carries the original. A fresh navigation, so what is on screen came back
+        // from the server on a new read — not from whatever the earlier read cached.
+        await pageB.goto('/board');
+        await expect(
+          pageB.locator('[data-testid^="board-note-card-"]').filter({ hasText: NOTE_BODY }),
+        ).toBeVisible({ timeout: 20_000 });
       });
     } finally {
       await contextA.close();

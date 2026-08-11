@@ -22,23 +22,29 @@ Feature: Pin a note — the private channel between two people who are already c
   # sheet, and is left to it rather than half-built here so there is one decision about
   # where that surface lives instead of two.
   #
-  # There is no scenario for the author reading a note back, because there is nothing to
-  # read: notes are recipient-only (D6), `app.visible_notes` gates on
-  # `recipient_id = viewer_id`, and `notes.list` takes no argument. The author sees no
-  # trace of what they sent — no sent list, no receipt, no read state. "A note is left on
-  # somebody else's board" is the whole model, and the first scenario asserts the author's
-  # own list is empty as the positive statement of it.
+  # The author still cannot read a note back, and since #176 that is *asserted* rather
+  # than merely unimplemented. Notes are recipient-only (D6), `app.visible_notes` gates on
+  # `recipient_id = viewer_id`, and `notes.list` takes no argument — but `notes.getById`
+  # does take one, so "the author has no way to fetch what they sent" became a claim that
+  # needed proving instead of a procedure that did not exist. It is proved below, in the
+  # same scenario as the stranger's refusal and with the same bytes. There is still no
+  # sent list, no receipt, and no read state.
   #
-  # No @e2e scenario. The browser surface exists (compose sheet, board card, the detail
-  # sheet's degree-gated control) but a Playwright walk of it needs two *connected*
-  # users, and `tests/e2e/global-setup.ts` onboards two who are not — connecting them is
-  # the vertical-slice spec's own multi-step flow. The web behaviour below is proved at
-  # `@unit` instead, which is where it lives: `apps/web`'s unit project runs in
-  # `environment: 'node'` with no component harness, so every decision this feature makes
-  # is in a pure module beside the component that renders it.
+  # Issue #176 and decision D14 added the expanded view. A note card opens, `notes.getById`
+  # backs it, and the control it carries is "pin a note back" — which is a NEW note
+  # addressed to the author, through this same feature's `pin` and this same degree-1
+  # gate. It is not an operation on the note being read: D14 revisited the no-lifecycle
+  # decision and deliberately kept it, so there is still no unpin, no archive, no edit, no
+  # version and no ordering, and #176 shipped no migration.
+  #
+  # The @e2e scenario arrived with #176. It could not exist for #88 because a Playwright
+  # walk needs two *connected* users and `tests/e2e/global-setup.ts` onboarded two who
+  # were not; it now connects A—B and B—C for #89's sake, which is what unblocked this.
+  # The web decisions below are still proved at `@unit`, which is where they live.
   #
   # The `@integration` scenarios are in
-  # `modules/notes/tests/integration/pin-a-note.integration.test.ts`.
+  # `modules/notes/tests/integration/pin-a-note.integration.test.ts` (#88) and
+  # `modules/notes/tests/integration/read-a-note.integration.test.ts` (#176).
 
   @integration
   # @issue:88
@@ -202,3 +208,80 @@ Feature: Pin a note — the private channel between two people who are already c
     When the two are compared
     Then every queued type has exactly one route
     And note.pin is routed through sync.submitMutations rather than replayed directly
+
+  # ─── The expanded view, and answering a note (issue #176, decision D14) ───
+
+  @integration
+  # @issue:176
+  Scenario: The recipient opens one of their own notes in full
+    Given user A has pinned a note to user B
+    When user B fetches that note by its id
+    Then it carries the same body and the same author card their note list carries
+    And nothing in it is present that the list withheld
+
+  @integration
+  # @issue:176
+  Scenario: A note names nobody, belongs to somebody else, or was written by you — one answer
+    Given user A has pinned a note to user B
+    And user C is connected to user B but not to user A
+    When user C fetches that note by its id
+    And user C fetches an id naming no note
+    And user A fetches the note they pinned themselves
+    Then all three are refused with NOTE_GONE
+    And the three refusals are byte-identical
+
+  @integration
+  # @issue:176
+  Scenario: A malformed note id is refused without reaching the database
+    When a caller fetches a note by an id that is not a UUID
+    Then it is refused as a bad request rather than as a driver-level failure
+    And a well-formed id naming no note is still refused as NOTE_GONE
+
+  @integration
+  # @issue:176
+  Scenario: An opened note outlives the connection that carried it
+    Given user A has pinned a note to user B
+    And the connection between them is severed
+    When user B fetches that note by its id
+    Then the note is still returned in full
+    And it carries no author card and no trace of user A's identifier
+
+  # The partial absence, as distinct from the total one above: there is still somebody
+  # there to describe, and §6a is re-evaluated on this read rather than inherited from
+  # whatever the list disclosed when the card was drawn.
+  @integration
+  # @issue:176
+  Scenario: An author who discloses only limited is opened with no name
+    Given user A has pinned a note to user B
+    And user A discloses only their presence to user B
+    When user B fetches that note by its id
+    Then the note is returned in full and still carries user A's card
+    And the card carries no display name and no handle
+
+  @unit
+  # @issue:176
+  Scenario: The expanded view offers to pin back only when there is somebody to address
+    Given a note on the viewer's board and the viewer's own graph
+    When the sheet decides what to offer
+    Then an author who is still a direct connection gets the pin-back control
+    And an author further away than one hop gets the distance and no control
+    And an author with no card at all gets nothing, and no recipient derived from anywhere
+    And a graph read that has not landed is its own silence, never a claim the author is out of reach
+
+  @unit
+  # @issue:176
+  Scenario: The expanded view reads the server's copy and falls back to the card's
+    Given a note card the viewer has tapped
+    When the sheet fetches that note by its id
+    Then the server's copy replaces the card's once it lands
+    And a read that failed leaves the card's copy on screen and claims nothing about the note
+    And NOTE_GONE says the copy is stale without taking it away
+
+  @e2e
+  # @issue:176
+  Scenario: A note opens into its expanded view, and can be pinned back from there
+    Given user A has pinned a note to user B's board
+    When user B taps the note and follows the pin-back control
+    And user B writes and pins an answer
+    Then the answer lands on user A's board as a note of its own
+    And nothing about the note it answered has changed

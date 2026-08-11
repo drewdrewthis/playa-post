@@ -32,4 +32,32 @@ export interface VisibleNotesRepository {
    *   there is only ever your own.
    */
   listFor(viewerId: string): Promise<readonly VisibleNote[]>;
+
+  /**
+   * One note, if this viewer is the person it was addressed to (#176, decision D14).
+   *
+   * The expanded view's read. It composes the same `app.visible_notes` the list does and
+   * adds an id predicate over it — so a note this function can return is a note
+   * {@link listFor} would already have returned, and there is no second answer to "which
+   * notes may this person read" for the two reads to disagree about.
+   *
+   * @param viewerId - The reading actor's `app.users.id`. It is the whole authorization,
+   *   exactly as in {@link listFor}: the note is returned when it was addressed to this
+   *   person and never otherwise.
+   * @param noteId - The caller's whole claim, and the only argument here that came from
+   *   request input.
+   * @returns `null` when the note is absent **or** not this viewer's to read — the two are
+   *   one answer, which is what lets the caller raise one
+   *   {@link import('../domain/note.errors').NoteGoneError} for both instead of choosing
+   *   between them (ADR-0002 §10, B17).
+   *
+   *   ⚠ **An authorless note is a success, not a `null`.** When the author has left this
+   *   viewer's world — severed or deactivated — the LEFT JOIN in `app.visible_notes` still
+   *   returns the row and the `VisibleNote` carries no author at all; when they are merely
+   *   disclosing below `full`, it carries the card without a name. Reachability never
+   *   decided readability here: a note is addressed, so `recipient_id = viewer_id` is the
+   *   entire predicate. Collapsing either case into `null` would take a delivered note off
+   *   its recipient's board on a third party's action.
+   */
+  findVisibleById(viewerId: string, noteId: string): Promise<VisibleNote | null>;
 }

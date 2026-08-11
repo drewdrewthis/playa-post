@@ -14,11 +14,21 @@ import './note-card.css';
  * (`design/Playa Post.dc.html:726-729`): dashed, tinted, tilted half a degree off true,
  * carrying a PRIVATE pill.
  *
- * **The body is here, and there is no sheet behind it.** Every other card on this board
- * is a headline that opens into `bulletins.getById`; a note has no title to be a headline
- * and there is deliberately no `notes.getById` to open — `notes.router.ts` explains why
- * the module has exactly two procedures. A tap would raise a sheet whose entire contents
- * were already on the card, so the card is not a tap target.
+ * **The card opens (#176, decision D14).** It used to be the one row on this board that
+ * was not a tap target, on the reasoning that a note carries its whole text already and a
+ * sheet would repeat it. D14 reversed that: the expanded view exists to *answer* the note,
+ * not to re-read it — `note-detail-sheet.tsx` carries the pin-back control, and
+ * `notes.getById` re-checks the note against this viewer at the moment they open it. The
+ * body stays on the card regardless, because a note has no title to be a headline with.
+ *
+ * The whole card is one button rather than a `<div>` with a click handler, for the reason
+ * `BulletinCard` gives: opening has to work from a keyboard, and a button is the element
+ * that already does. Its accessible name is the card's own content — for a note that is
+ * the note itself, which is exactly what somebody needs to hear before deciding to open it.
+ *
+ * ⚠ Everything inside the button is a `<span>`, deliberately. A `<p>` inside a `<button>`
+ * is invalid HTML and browsers reparent it, which breaks the card's own layout;
+ * `note-card.css` gives the two text spans their block display back.
  *
  * ⚠ The author renders through {@link PersonIdentity}, which is where §6a's "no derived
  * placeholder" rule lives — and only when there is an author card to render at all. An
@@ -29,6 +39,7 @@ import './note-card.css';
 export function NoteCard({
   note,
   now,
+  onOpen,
 }: {
   readonly note: Note;
   /**
@@ -36,29 +47,39 @@ export function NoteCard({
    * on one render agrees — the same contract `BulletinCard` takes.
    */
   readonly now: Date;
+  readonly onOpen: (note: Note) => void;
 }): JSX.Element {
   const age = relativeTime(note.createdAt, now);
   const author = noteAuthorCard(note);
 
   return (
     <article className="note-card" data-testid={`board-note-card-${note.id}`}>
-      <div className="note-card__header">
-        <span className="note-card__type">Note</span>
+      <button
+        className="note-card__open"
+        data-testid={`note-open-button-${note.id}`}
+        type="button"
+        onClick={() => {
+          onOpen(note);
+        }}
+      >
+        <span className="note-card__header">
+          <span className="note-card__type">Note</span>
 
-        {/* The comp's pill slot. For a note it always says the same thing, because a note
-            is always the same thing. */}
-        <span className="note-card__private">Private</span>
+          {/* The comp's pill slot. For a note it always says the same thing, because a
+              note is always the same thing. */}
+          <span className="note-card__private">Private</span>
 
-        {age === null ? null : <span className="note-card__time">{age}</span>}
-      </div>
+          {age === null ? null : <span className="note-card__time">{age}</span>}
+        </span>
 
-      <p className="note-card__body">{note.body}</p>
+        <span className="note-card__body">{note.body}</span>
 
-      {author === null ? null : (
-        <p className="note-card__author">
-          <PersonIdentity identity={author} />
-        </p>
-      )}
+        {author === null ? null : (
+          <span className="note-card__author">
+            <PersonIdentity identity={author} />
+          </span>
+        )}
+      </button>
     </article>
   );
 }

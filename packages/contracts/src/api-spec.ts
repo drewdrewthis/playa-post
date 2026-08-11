@@ -24,7 +24,7 @@ import type {
   ReportBulletinRequest,
   RestoredBulletin,
 } from './moderation';
-import type { Note, PinnedNote, PinNoteRequest } from './notes';
+import type { Note, NoteIdRequest, PinnedNote, PinNoteRequest } from './notes';
 import type {
   GroupedNotification,
   NotificationDismissal,
@@ -122,6 +122,13 @@ export interface PlayaPostApi {
 
   'notes.pin': MutationSpec<PinNoteRequest, PinnedNote>;
   'notes.list': QuerySpec<void, readonly Note[]>;
+  /**
+   * One note in full, for the expanded view (#176, decision D14).
+   *
+   * Answers the same {@link Note} a row of `notes.list` is: the sheet shows more of the
+   * note, never more about it. `NOTE_GONE` covers both "not yours" and "no such note".
+   */
+  'notes.getById': QuerySpec<NoteIdRequest, Note>;
 
   'intros.viaCandidates': QuerySpec<IntroViaCandidatesRequest, readonly IntroPerson[]>;
   'intros.request': MutationSpec<RequestIntroRequest, IntroRequestReceipt>;
