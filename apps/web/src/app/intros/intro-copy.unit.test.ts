@@ -6,11 +6,15 @@ import {
   askViaLabel,
   INTRO_CONSENT_LINE,
   INTRO_NOT_PASSED_ON_LINE,
+  INTRO_VIA_NOTE_LINE,
+  INTRO_VOUCHED_LINE,
   introPendingLabel,
   introPersonName,
   introRefusalMessage,
   introSheetTitle,
+  PASS_ON_WITH_NOTE_LABEL,
   requestIntroLabel,
+  viaNoteLabel,
 } from './intro-copy';
 
 /*
@@ -58,6 +62,30 @@ describe('the sentences an intro surface says', () => {
 
     expect(introPendingLabel('Lena')).toBe('Intro pending via Lena');
     expect(introPendingLabel(null)).toBe('Intro pending');
+
+    expect(viaNoteLabel('Kiki')).toBe('Add your own note for Kiki');
+    expect(viaNoteLabel(null)).toBe('Add your own note for them');
+  });
+
+  /*
+   * ⚠ The requirement has to be readable before the submit is pressed (#175). A via who
+   * meets "you have to add your own message" as a dead button reads it as a bug in the
+   * app rather than as something being asked of them.
+   */
+  it('tells a via the note is required, and that the target will read it', () => {
+    expect(INTRO_VIA_NOTE_LINE).toContain('required');
+    expect(INTRO_VIA_NOTE_LINE).toContain('they will read it');
+    expect(PASS_ON_WITH_NOTE_LABEL).toBe('Pass on with your note');
+  });
+
+  /*
+   * The target's row carries two notes by two people, and this is the sentence that keeps
+   * the second one attributed. It has to name an action rather than a feeling: "passed it
+   * on" is what happened, and anything warmer would put the app's opinion in the via's
+   * mouth alongside their own words.
+   */
+  it('attributes the via’s half of an introduction to the via', () => {
+    expect(INTRO_VOUCHED_LINE).toBe('passed it on:');
   });
 
   /*
@@ -98,6 +126,15 @@ describe('introRefusalMessage', () => {
 
   it('tells a writer their own note was refused, which discloses nothing', () => {
     expect(introRefusalMessage('INTRO_CONTENT_INVALID')).toContain('Shorten it');
+  });
+
+  /*
+   * Reachable only from a client that got the wire shape wrong — the decline control
+   * sends no note, and `DecideIntroRequest`'s union will not let it — so this says what
+   * happened rather than apologising for it. There is nothing the reader can do.
+   */
+  it('states plainly that declining sends no note', () => {
+    expect(introRefusalMessage('INTRO_DECLINE_CARRIES_NO_NOTE')).toBe('Declining sends no note.');
   });
 
   // A dropped connection carries no application code, and must not be rendered as a

@@ -2,7 +2,7 @@
 
 - **Status:** proposed
 - **Date:** 2026-08-11
-- **Drivers:** issue #89; ADR-0002 §6 (one composition point), §6a (one person-projection
+- **Drivers:** issues #89 and #175 (D8, the amendment); ADR-0002 §6 (one composition point), §6a (one person-projection
   rule), §10 (no user-existence oracle), B11 (person lifecycle fails closed);
   ADR-0004:75-77 (compose `app.visible_people`, never re-derive reachability);
   ADR-0012 (the §6a projection's export); decision D6 and PDF §6 (fixed-recipient
@@ -135,7 +135,8 @@ requester's own self-projection, where the function's `case when person_id = vie
 
 Every other card on every other intros surface is projected from the *reader's* own world
 in the ordinary way: a via sees the requester and the target as their own settings disclose
-them.
+them — **except the via's own card on a target-role row, which D8 extends this same
+inversion to.**
 
 The UI obligation this creates is stated in `packages/contracts/src/intros.ts` and belongs
 to the sheet: **it must say so before send.**
@@ -147,10 +148,15 @@ degree 3+, absent, deactivated, self, hidden by reach, a via who is not shared, 
 already has an open ask, "not yours to decide", "already decided", and "no longer
 eligible". Serializing them yields exactly one element, asserted as a `Set`.
 
-`INTRO_CONTENT_INVALID` (`BAD_REQUEST`) is the only other answer, and
-`request-intro.service.ts` raises it **before** the repository is called. Reversed, a
+`INTRO_CONTENT_INVALID` (`BAD_REQUEST`) is the other answer — since D8, on both write
+paths — and both services raise it **before** the repository is called. Reversed, a
 caller could probe reachability by sending deliberate rubbish and reading which refusal
 came back — the oracle §10 forbids, reopened by an ordering nobody would think to look at.
+
+D8 adds exactly one more, `INTRO_DECLINE_CARRIES_NO_NOTE` (`BAD_REQUEST`), and it is safe
+beside the two above for the same reason: it is a statement about the caller's own
+submission, decided before the row is looked for, so it can never be the answer to "may I
+decide this request".
 
 `intros.viaCandidates` never refuses at all: an unreachable, deactivated or invented
 `targetUserId` returns an **empty list**.
@@ -159,7 +165,8 @@ came back — the oracle §10 forbids, reopened by an ordering nobody would thin
 
 `intros.listInbox` returns rows where `via_id = actor and status = 'requested'` (role
 `via`, carrying both other parties and the note) unioned with rows where `target_id = actor
-and status = 'passed_on'` (role `target`, carrying the requester and the note). **No other
+and status = 'passed_on'` (role `target`, carrying the requester and the note — and, since
+D8, the via and the via's own note). **No other
 combination is ever returned**, and there is no parameter that could add one — which is
 what makes a declined request invisible to its target by construction rather than by a
 filter somebody could widen.
@@ -170,6 +177,52 @@ filter somebody could widen.
 service for `sync.submitMutations` to register. Eligibility is time-varying, so a queued
 ask could drain into a graph where it is no longer true, and ADR-0005's conflict matrix
 defines no resolution for that. This is the same call `notifications.dismiss` makes.
+
+### D8 — Passing on requires the via's own note, and passing on is consent to be named as the via (issue #175)
+
+`intros.decide` takes a **discriminated union on `decision`**: `pass_on` requires the via's
+own note, `decline` refuses one. The target then reads two notes by two people, each under
+its own author's card. Product decision D11 records the owner directive behind it ("you
+have to add your own message") and the reasoning; this section records what it changes in
+the model above.
+
+**A pass-on is a vouch, not a relay**, which is why the note is required rather than
+offered. An intro passed on with nothing added is a mutual connection's name attached to a
+stranger's ask, with no way for the target to tell whether that person actually thought it
+was a good idea — the exact state the one-hop design exists to prevent.
+
+**The via's card on a target-role row extends D4's inversion one person.** It is projected
+from `app.visible_people(via_id, 0, 1)` — the via's own self-projection — rather than from
+the target's world, so a via who later severs their connection to the target is still named
+beside the words they wrote. The alternative leaves an unattributed vouch on the row, which
+is worse than no vouch. Everything D4 says about the mechanism holds unchanged: still
+`app.visible_people`, still projected on every read, so a via who deactivates takes their
+card away and leaves the introduction — and the note — behind.
+
+This widens D4's consequence rather than adding a second one: **two** cards on that one row
+are now disclosed by consent rather than by the reader's settings, and it remains the only
+place in the system where that happens.
+
+**A decline carries no note, and one sent with a decline is refused rather than stripped.**
+The requester is told only that it was not passed on, so text written on a decline has no
+reader at all — accepting the field and discarding it silently would let its writer believe
+otherwise. Zod strips unknown keys by default, so the decline arm is a `strictObject` and
+`INTRO_DECLINE_CARRIES_NO_NOTE` is its own code rather than a second meaning for
+`INTRO_CONTENT_INVALID`, whose message ("empty or too long") would be false here.
+
+**The requirement is split between the database and the domain, and the halves say
+different things.** `app.intro_requests.via_note` carries `check (via_note is null or
+status = 'passed_on')` — an *implication*, deliberately not the biconditional
+`intro_requests_decided_at` uses beside it. "Only a passed-on request may carry a via note"
+holds forever; "every passed-on request carries one" does not, because rows passed on
+before the migration have none and migrations are forward-only. `validateViaNote` in
+`domain/intro-note.policy.ts` states the present-tense half — required on every new pass-on
+— and is the **one** function that branches on the decision, so `decide-intro.service.ts`
+stays branch-free per D3's reasoning.
+
+**Neither note reaches the requester.** `intros.listOutbox`, the decide receipt, and every
+outbox payload stay note-free, and for the via's note that is a stronger rule than D4's
+rather than the same one: the via wrote those words *to* the target, *about* the requester.
 
 ## Alternatives considered
 
@@ -215,18 +268,22 @@ re-ask control** — honest without exposing the via's rationale.
   first-degree set and run at `max_depth` 2 and 1, so the cost is small — but it is two
   recursive CTEs on a sheet open, and is the first thing to measure if the intro sheet ever
   feels slow.
-- The target-role card is the **only** place in the system where a person is disclosed to
-  somebody their own visibility setting excludes. It is narrow (one row, one reader, only
-  after the via acted) and it is projected rather than asserted, but it is a real widening
-  of §6a's effect and any future person-disclosure surface must argue for itself
-  separately rather than cite this one.
+- The target-role cards are the **only** place in the system where a person is disclosed to
+  somebody their own visibility setting excludes — the requester's since #89, and the via's
+  since D8. It is narrow (one row, one reader, only after the via acted) and it is
+  projected rather than asserted, but it is a real widening of §6a's effect and any future
+  person-disclosure surface must argue for itself separately rather than cite this one.
+- **The vouch is written for one reader and stored beside the ask it answers.** `via_note`
+  is on the same row as `note`, so a future read that forgot which is which would attribute
+  a via's words to the requester. The two are separate wire fields with separate cards for
+  that reason, and no read but the target's inbox carries either.
 - `EXPECTED_PROCEDURE_COUNT` moves 29 → 34, and the contracts spec gains five keys.
 
 ## Verification
 
 | # | Claim | Evidence |
 |---|---|---|
-| 1 | The table carries the §4 backstop, exactly one policy, `app_rw`-only grants, all three CHECKs, and the partial open-per-pair index | `modules/intros/tests/integration/intro-requests-migration.integration.test.ts` |
+| 1 | The table carries the §4 backstop, exactly one policy, `app_rw`-only grants, all four CHECKs (D8 adds `intro_requests_via_note`, an implication rather than an equality), and the partial open-per-pair index | `modules/intros/tests/integration/intro-requests-migration.integration.test.ts` |
 | 2 | The function is `SECURITY INVOKER`, `search_path = ''`, `STABLE`, and byte-identical to its checked-in source in exactly one migration | same suite |
 | 3 | Eligibility composes `app.visible_people` on both sides and names neither `app.connections` nor `app.users` | `intro-via-candidates-sql-composition.unit.test.ts`; `tests/fitness/sql-table-ownership.fitness.test.ts`'s intros block, with **no** allowlist entry |
 | 4 | Nine ineligible shapes each return an empty set rather than an error | `intro-via-candidates.integration.test.ts` |
@@ -238,3 +295,6 @@ re-ask control** — honest without exposing the via's rationale.
 | 10 | Contract and router agree | `tests/fitness/contracts-api-parity.fitness.test.ts` at `EXPECTED_PROCEDURE_COUNT` 34 |
 | 11 | No procedure accepts a viewer identifier | `tests/fitness/viewer-id-provenance.fitness.test.ts`, walking the registered intros router |
 | 12 | The web surface states the consent before send | `intro-copy.ts`'s `INTRO_CONSENT_LINE`, rendered by `intro-sheet.tsx` above the note field; `intro-sheet.unit.test.tsx` asserts it on screen before the send is pressable |
+| 13 | A pass-on requires a note and a decline refuses one, at the wire and in the domain | `decide-intro.input.unit.test.ts` (the union, and the decline arm's `strictObject` refusing rather than stripping); `intro-note.policy.unit.test.ts`'s `validateViaNote` block; `request-an-intro.integration.test.ts`'s #175 scenarios, which write the ill-typed shapes past the compiler with `as never` |
+| 14 | The target reads both notes, each attributed, and the via's card survives a severed connection but not a deactivation | `request-an-intro.integration.test.ts` — the AC9 scenario plus "names the via from their own self-projection" and "leaves the vouch standing, unattributed"; `intro-inbox.unit.test.tsx` renders the two notes under two cards |
+| 15 | Neither note reaches the requester's record, an outbox payload, or a log line | same suite — **two** distinctive phrases, one per author, so a check that dropped one and kept the other cannot pass |

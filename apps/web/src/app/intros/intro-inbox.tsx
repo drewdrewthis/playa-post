@@ -1,11 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type JSX } from 'react';
+import { useEffect, useId, useRef, useState, type JSX } from 'react';
 
 import {
   INTRO_DECISION,
   INTRO_INBOX_ROLE,
   type DecideIntroRequest,
-  type IntroDecision,
   type IntroInboxRow,
 } from '@playa-post/contracts';
 
@@ -13,7 +12,16 @@ import { useApi } from '../api/api-provider';
 import { applicationErrorCode } from '../api/client';
 import { PersonIdentity, type DisclosableIdentity } from '../people/person-identity';
 
-import { INTRO_DECISION_CONFIRMATION_LINE, introRefusalMessage } from './intro-copy';
+import {
+  INTRO_DECISION_CONFIRMATION_LINE,
+  INTRO_VIA_NOTE_LINE,
+  INTRO_VOUCHED_LINE,
+  introPersonName,
+  introRefusalMessage,
+  PASS_ON_WITH_NOTE_LABEL,
+  viaNoteLabel,
+} from './intro-copy';
+import { INTRO_NOTE_MAX_LENGTH, inspectIntroNote, introNoteOverBy } from './intro-note-draft';
 import { INTRO_INBOX_QUERY_KEY } from './intro-query-keys';
 
 import './intro-inbox.css';
@@ -42,10 +50,12 @@ const WITHHELD: DisclosableIdentity = { disclosure: 'topology_only' };
  * It lives on `/graph` because an intro *is* graph-shaped — it is a request to add an
  * edge — and because there is no inbox screen to add it to.
  *
- * ⚠ **Branch on `role`.** A `via` row is an ask awaiting this viewer's decision and names
- * both other parties; a `target` row is an introduction already made *to* them and names
- * the requester only. Rendering Pass on / Decline on a target row would offer an action
- * the server refuses.
+ * ⚠ **The `role` branch is structural here, not a conditional inside one component.** A
+ * `via` row is an ask awaiting this viewer's decision, names both other parties, and owns
+ * a draft note of its own; a `target` row is an introduction already made *to* them,
+ * names the two people who made it, and has nothing to submit. Rendering Pass on /
+ * Decline on a target row would offer an action the server refuses, so the two shapes do
+ * not share a component that could grow a path between them.
  *
  * Renders nothing at all when there is nothing waiting — including while the read is in
  * flight. An empty state here would put "no intros" on a screen whose subject is the
@@ -107,52 +117,125 @@ export function IntroInbox(): JSX.Element | null {
       )}
 
       <ul className="intro-inbox__list">
-        {rows.map((row) => (
-          <IntroInboxItem
-            key={row.id}
-            row={row}
-            deciding={decide.isPending}
-            onDecide={(decision) => {
-              decide.mutate({ introRequestId: row.id, decision });
-            }}
-          />
-        ))}
+        {rows.map((row) =>
+          row.role === INTRO_INBOX_ROLE.target ? (
+            <IntroductionMade key={row.id} row={row} />
+          ) : (
+            <IntroAsk
+              key={row.id}
+              row={row}
+              deciding={decide.isPending}
+              onDecide={(command) => {
+                decide.mutate(command);
+              }}
+            />
+          ),
+        )}
       </ul>
     </section>
   );
 }
 
 /**
- * One row, in whichever of its two shapes the `role` names.
+ * An introduction that has already been made to this viewer.
  *
- * The note is rendered whole in both. It is the whole of what the via is being asked to
- * judge and the whole of what the target is eventually shown — a truncated one would ask
- * somebody to decide on half a sentence.
+ * ⚠ **Two notes by two people, each under its own author's card** (#175). The requester
+ * asked; the via agreed and said why. Running them together — or letting the via's words
+ * sit under the requester's name — would attribute a vouch to the person being vouched
+ * for, which is the one misreading this screen must not permit.
  *
- * @param deciding - true while any decision on this list is in flight; both controls go
+ * The via's half is absent on an introduction passed on before #175 required a note, and
+ * the requester's half then stands alone. There is no placeholder for the missing one: an
+ * empty quote attributed to somebody is worse than a note they never wrote.
+ */
+function IntroductionMade({ row }: { readonly row: IntroInboxRow }): JSX.Element {
+  return (
+    <li className="intro-inbox__item" data-testid="intro-inbox-target-row">
+      <p className="intro-inbox__lede">
+        <PersonIdentity identity={row.requester ?? WITHHELD} /> asked to be introduced to you.
+      </p>
+
+      <p className="intro-inbox__note" data-testid="intro-inbox-requester-note">
+        {row.note}
+      </p>
+
+      {row.viaNote === undefined ? null : (
+        <>
+          <p className="intro-inbox__lede">
+            <PersonIdentity identity={row.via ?? WITHHELD} /> {INTRO_VOUCHED_LINE}
+          </p>
+
+          <p className="intro-inbox__note" data-testid="intro-inbox-via-note">
+            {row.viaNote}
+          </p>
+        </>
+      )}
+    </li>
+  );
+}
+
+/**
+ * An ask waiting on this viewer's decision.
+ *
+ * The requester's note is rendered whole. It is the whole of what the via is being asked
+ * to judge, and a truncated one would ask somebody to decide on half a sentence.
+ *
+ * ⚠ **Pass on opens a required note field; it does not decide anything** (#175). The
+ * decision and the note are one submission, because they are one fact — the server writes
+ * them in a single statement — and a control that passed an intro on and *then* asked for
+ * words would leave a vouch that could fail after the introduction was already made.
+ *
+ * Decline stays exactly where it was, with no field beside it and none possible: the wire
+ * carries no reason for a decline, because the via's rationale is theirs.
+ *
+ * @param deciding - true while any decision on this list is in flight; every control goes
  *   down together, because two decisions racing on one screen is a way to decide the
  *   wrong request.
  */
-function IntroInboxItem({
+function IntroAsk({
   row,
   deciding,
   onDecide,
 }: {
   readonly row: IntroInboxRow;
   readonly deciding: boolean;
-  readonly onDecide: (decision: IntroDecision) => void;
+  readonly onDecide: (command: DecideIntroRequest) => void;
 }): JSX.Element {
-  if (row.role === INTRO_INBOX_ROLE.target) {
-    return (
-      <li className="intro-inbox__item" data-testid="intro-inbox-target-row">
-        <p className="intro-inbox__lede">
-          <PersonIdentity identity={row.requester ?? WITHHELD} /> asked to be introduced to
-          you.
-        </p>
+  const lineId = useId();
+  const lengthId = useId();
+  const noteRef = useRef<HTMLTextAreaElement>(null);
 
-        <p className="intro-inbox__note">{row.note}</p>
-      </li>
-    );
+  const [passingOn, setPassingOn] = useState(false);
+  const [note, setNote] = useState('');
+
+  /*
+   * Focus follows the field into existence. Without this, pressing Pass on leaves a
+   * keyboard or screen-reader user on a button whose label just changed, with a required
+   * field they were never told about somewhere above it.
+   */
+  useEffect(() => {
+    if (passingOn) {
+      noteRef.current?.focus();
+    }
+  }, [passingOn]);
+
+  const issues = inspectIntroNote(note);
+  const over = issues.note === 'too-long';
+  const sendable = issues.sendable && !deciding;
+  const describedBy = over ? `${lineId} ${lengthId}` : lineId;
+
+  function passOn(): void {
+    if (!sendable) {
+      return;
+    }
+
+    // Trimmed here as well as on the server, so what the via sees in the field and what
+    // the target reads are the same words — the server's trim is the rule, not this one.
+    onDecide({
+      introRequestId: row.id,
+      decision: INTRO_DECISION.passOn,
+      note: note.trim(),
+    });
   }
 
   return (
@@ -164,23 +247,84 @@ function IntroInboxItem({
 
       <p className="intro-inbox__note">{row.note}</p>
 
+      {passingOn ? (
+        <div className="intro-inbox__compose">
+          <p className="intro-inbox__standing" id={lineId}>
+            {INTRO_VIA_NOTE_LINE}
+          </p>
+
+          <label className="intro-inbox__field">
+            <span className="intro-inbox__label">
+              {viaNoteLabel(introPersonName(row.target))}
+            </span>
+
+            <textarea
+              className="form__input form__input--prose intro-inbox__note-input"
+              data-testid="intro-via-note-input"
+              ref={noteRef}
+              rows={3}
+              /* No hard `maxLength`: truncating mid-sentence loses what somebody wrote.
+                 The line below says it instead, and the server refuses it. */
+              value={note}
+              placeholder="Why should they meet? They’ll read this."
+              aria-describedby={describedBy}
+              aria-invalid={over}
+              onChange={(event) => {
+                setNote(event.target.value);
+              }}
+            />
+          </label>
+
+          {over ? (
+            <p className="form__error" id={lengthId}>
+              {INTRO_NOTE_MAX_LENGTH} characters at most — {introNoteOverBy(note)} over.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="intro-inbox__actions">
-        <button
-          className="button button--primary"
-          data-testid="intro-pass-on-button"
-          type="button"
-          disabled={deciding}
-          onClick={() => {
-            onDecide(INTRO_DECISION.passOn);
-          }}
-        >
-          Pass on
-        </button>
+        {passingOn ? (
+          /*
+           * ⚠ `aria-disabled`, unlike the two controls beside it, and the difference is
+           * `report-abuse-sheet.tsx`'s rule rather than a style choice: this one is off
+           * because a field on screen needs filling in, so it stays focusable and
+           * announced with the reason attached. A real `disabled` would drop it out of
+           * the tab order and a screen-reader user would pass the thing they came to
+           * press without ever hearing why it did nothing.
+           */
+          <button
+            className="button button--primary"
+            data-testid="intro-pass-on-submit-button"
+            type="button"
+            aria-disabled={!sendable}
+            aria-describedby={describedBy}
+            onClick={passOn}
+          >
+            {PASS_ON_WITH_NOTE_LABEL}
+          </button>
+        ) : (
+          <button
+            className="button button--primary"
+            data-testid="intro-pass-on-button"
+            type="button"
+            /* A real `disabled`: the only reason this is off is a decision already in
+               flight, which is a moment to wait out rather than something to fix. */
+            disabled={deciding}
+            onClick={() => {
+              setPassingOn(true);
+            }}
+          >
+            Pass on
+          </button>
+        )}
 
         {/*
          * ⚠ Declining sends no reason, and there is no field here to write one in. The
          * wire carries none because the via's rationale is theirs, and the requester is
          * told only that it was not passed on — which is what makes declining safe to do.
+         * `DecideIntroRequest`'s decline branch has no `note`, so this is a rule the
+         * compiler holds rather than one this file remembers.
          */}
         <button
           className="button"
@@ -188,7 +332,7 @@ function IntroInboxItem({
           type="button"
           disabled={deciding}
           onClick={() => {
-            onDecide(INTRO_DECISION.decline);
+            onDecide({ introRequestId: row.id, decision: INTRO_DECISION.decline });
           }}
         >
           Decline

@@ -10,11 +10,12 @@ all. Nothing here needs `pnpm db:start`.
 
 | Directory | Suite | Feature-file scenarios |
 |---|---|---|
-| `integration/` | `intro-requests-migration.integration.test.ts` | `app.intro_requests`' and `app.intro_via_candidates`' catalog shape — RLS backstop and exactly one policy, table and EXECUTE grants (both halves), `SECURITY INVOKER`, `SET search_path = ''`, `STABLE`, the verbatim-migration pairing, the three CHECKs, the partial open-per-pair index, and the no-tsvector fact |
+| `integration/` | `intro-requests-migration.integration.test.ts` | `app.intro_requests`' and `app.intro_via_candidates`' catalog shape — RLS backstop and exactly one policy, table and EXECUTE grants (both halves), `SECURITY INVOKER`, `SET search_path = ''`, `STABLE`, the verbatim-migration pairing, the four CHECKs, the partial open-per-pair index, and the no-tsvector and no-index facts about both note columns |
 | `integration/` | `intro-via-candidates.integration.test.ts` | the eligibility set itself — the eligible A—B—C shape, several shared vias, §6a projection of a `limited` via, and nine ineligible shapes that must each be an **empty set rather than an error** |
-| `integration/` | `request-an-intro.integration.test.ts` | `request-an-intro.feature` — the fifteen `@integration` scenarios: lifecycle, the seven-way refusal matrix, the open-per-pair rule and both concurrency races, decide authorization, lapsed eligibility, the two privacy invariants, the consent inversion, content-before-eligibility ordering, outbox atomicity and minimisation, and the requester's own record |
-| `unit/` | `intro-note.policy.unit.test.ts` | `request-an-intro.feature` › "The intro note is trimmed, bounded, and never empty" |
-| `unit/` | `intro-request.events.unit.test.ts` | the three event builders carry four identifiers and never the note, take their timestamps from the committed row, and refuse to describe an undecided row as decided |
+| `integration/` | `request-an-intro.integration.test.ts` | `request-an-intro.feature` — every `@integration` scenario: lifecycle, the seven-way refusal matrix, the open-per-pair rule and both concurrency races, decide authorization, lapsed eligibility, the two privacy invariants, both consent inversions, content-before-eligibility ordering, outbox atomicity and minimisation, the requester's own record, and #175's required via note |
+| `unit/` | `intro-note.policy.unit.test.ts` | `request-an-intro.feature` › "The intro note is trimmed, bounded, and never empty", and #175's "Passing an intro on requires a note of the via's own" / "A decline carries no note" — `validateViaNote` is the one function that branches on the decision |
+| `unit/` | `decide-intro.input.unit.test.ts` | the wire half of #175: a discriminated union on `decision`, whose decline arm is a `strictObject` so a note there is **refused rather than stripped**, and `decideIntroCommandFields` omitting the key entirely rather than passing `undefined` |
+| `unit/` | `intro-request.events.unit.test.ts` | the three event builders carry four identifiers and never either note, take their timestamps from the committed row, and refuse to describe an undecided row as decided |
 | `unit/` | `intro-via-candidates-sql-composition.unit.test.ts` | the checked-in `persistence/sql/intro-via-candidates.sql` composes `app.visible_people` on **both** sides, joins neither `app.connections` nor `app.users`, gates the target at degree 2 and the candidate at degree 1, and inner-joins the two sides |
 
 **Three assertion shapes carry most of the weight, and none of them is "an error was
@@ -32,6 +33,7 @@ thrown":**
 |---|---|
 | A declined request is invisible to its target **forever** | "A declined request is invisible to its target forever" — every intros read for the target deep-equals the control's, with a control-of-the-control asserting the control is not itself empty everywhere |
 | Asking **is** consent to be seen | "Asking is consent to be seen" — the requester sets their own reach to first degree, the suite proves `app.visible_people(target)` does not contain them, and the target is still shown their card after the pass-on. The card comes from `app.visible_people(requester, 0, 1)` — the requester's own self-projection — so §6a's "no direct join to `app.users` for a person card" holds even here |
+| Passing on **is** consent to be named as the via (#175) | "names the via from their own self-projection, not from the target's world" — the via and target are severed *after* the introduction, the suite proves `app.visible_people(target)` no longer contains the via, and the vouch is still signed. The alternative leaves an unattributed note on the row, which is worse than no note |
 
 **Two claims are asserted over storage or capture rather than over a response**, because
 both are about something that outlives the request:
@@ -40,6 +42,12 @@ both are about something that outlives the request:
 |---|---|
 | A note's text never reaches `app.outbox_events` | "Events ride the same transaction and carry no note" — asserted over the serialized whole rows, not just the payloads |
 | A note's text never reaches a log line | the same scenario's log capture, which first writes a deliberate probe line through the same logger and asserts the capture saw it. A capture that received nothing satisfies "no line contains the note" forever while proving nothing |
+
+⚠ **Two distinctive phrases since #175, one per note.** The row now carries the requester's
+ask *and* the via's vouch, written by two people, so every "the text never reaches here"
+assertion names both. A single-phrase version of those checks goes green against an outbox
+payload or a log line that dropped one note and kept the other — and the via's is the one a
+notification consumer would most want to quote.
 
 **Outbox atomicity is proved by a forced failure, not by inspection.** A `CHECK
 (event_type not like 'Intro%')` is added to `app.outbox_events` for the duration of one

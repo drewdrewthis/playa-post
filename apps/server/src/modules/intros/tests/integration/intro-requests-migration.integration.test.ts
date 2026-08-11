@@ -220,6 +220,109 @@ describe('app.intro_requests and app.intro_via_candidates — issue #89', () => 
       await expect(insertIntroRequest(requester, viaTwo, target)).resolves.toBeUndefined();
     });
 
+    describe('via_note (issue #175)', () => {
+      /** Insert with an explicit `via_note`, so the CHECK is the only thing that can refuse. */
+      async function insertWithViaNote(
+        requesterId: string,
+        viaId: string,
+        targetId: string,
+        status: string,
+        viaNote: string | null,
+      ): Promise<void> {
+        await database.client.query(
+          `insert into app.intro_requests
+             (requester_id, via_id, target_id, note, via_note, status, created_at, decided_at)
+           values ($1, $2, $3, 'why we should meet', $4, $5, now(), $6)`,
+          [
+            requesterId,
+            viaId,
+            targetId,
+            viaNote,
+            status,
+            status === 'requested' ? null : new Date().toISOString(),
+          ],
+        );
+      }
+
+      it('exists as a nullable text column', async () => {
+        const { rows } = await database.client.query<{
+          data_type: string;
+          is_nullable: string;
+        }>(
+          `select a.atttypid::pg_catalog.regtype::text as data_type,
+                  case when a.attnotnull then 'NO' else 'YES' end as is_nullable
+             from pg_catalog.pg_attribute a
+             join pg_catalog.pg_class c on c.oid = a.attrelid
+             join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = 'app' and c.relname = 'intro_requests' and a.attname = 'via_note'`,
+        );
+
+        // Nullable, because three legitimate situations produce no via note: the request
+        // is open, it was declined, or it was passed on before #175 asked for one.
+        expect(rows[0]?.data_type).toBe('text');
+        expect(rows[0]?.is_nullable).toBe('YES');
+      });
+
+      it('refuses a via note on a request that was not passed on', async () => {
+        const [requester, via, target] = await seedUsers(3);
+        if (requester === undefined || via === undefined || target === undefined) {
+          throw new Error('seedUsers returned too few rows');
+        }
+
+        // A note attached to a decline has no reader — the requester is told only that it
+        // was not passed on — and one on an open request describes a decision nobody has
+        // made. The domain refuses both; this is the backstop that would still refuse
+        // them if a second writer ever appeared.
+        await expect(
+          insertWithViaNote(requester, via, target, 'declined', 'not for you'),
+        ).rejects.toThrow(/intro_requests_via_note/);
+        await expect(
+          insertWithViaNote(requester, via, target, 'requested', 'too early'),
+        ).rejects.toThrow(/intro_requests_via_note/);
+      });
+
+      it('allows a passed-on request with a via note, and one without', async () => {
+        const [requester, via, target, other] = await seedUsers(4);
+        if (
+          requester === undefined ||
+          via === undefined ||
+          target === undefined ||
+          other === undefined
+        ) {
+          throw new Error('seedUsers returned too few rows');
+        }
+
+        await expect(
+          insertWithViaNote(requester, via, target, 'passed_on', 'they should meet'),
+        ).resolves.toBeUndefined();
+
+        // ⚠ **An implication, not the equality `intro_requests_decided_at` uses.** Rows
+        // passed on before this column existed carry no note and must stay valid forever
+        // — migrations are forward-only, so a biconditional here would have refused to
+        // apply against any database with history in it. "Every *new* pass-on has one" is
+        // the domain's claim (`intro-note.policy.ts`), asserted in the feature suite.
+        await expect(
+          insertWithViaNote(requester, via, other, 'passed_on', null),
+        ).resolves.toBeUndefined();
+      });
+
+      it('is not part of any index — a vouch is no more searchable than the ask', async () => {
+        // The structural half of the same rule `note` is held to. There is no query
+        // grammar over intro requests and there must be no index that could grow one.
+        const { rows } = await database.client.query<{ count: string }>(
+          `select count(*)::text as count
+             from pg_catalog.pg_index i
+             join pg_catalog.pg_class c on c.oid = i.indrelid
+             join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+             join pg_catalog.pg_attribute a
+               on a.attrelid = c.oid and a.attnum = any (i.indkey)
+            where n.nspname = 'app' and c.relname = 'intro_requests'
+              and a.attname = 'via_note'`,
+        );
+        expect(rows[0]?.count).toBe('0');
+      });
+    });
+
     it('carries no tsvector column — an intro request is never searchable', async () => {
       // The structural half of "an intro note must never become a people search". There
       // is no query grammar over intro requests and there must be no index that could

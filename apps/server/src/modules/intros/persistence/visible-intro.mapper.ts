@@ -40,6 +40,8 @@ export interface IntroInboxRow {
   readonly intro_request_id: string;
   readonly inbox_role: string;
   readonly note: string;
+  /** Always `null` on a `via` row: nobody has passed it on yet. */
+  readonly via_note: string | null;
   readonly created_at: Date;
   readonly requester_user_id: string | null;
   readonly requester_disclosure: string | null;
@@ -50,6 +52,11 @@ export interface IntroInboxRow {
   readonly target_disclosure: string | null;
   readonly target_display_name: string | null;
   readonly target_handle: string | null;
+  /** Always `null` on a `via` row: the via is the reader. */
+  readonly via_user_id: string | null;
+  readonly via_disclosure: string | null;
+  readonly via_display_name: string | null;
+  readonly via_handle: string | null;
 }
 
 /** One row of the requester's own outbox read. */
@@ -135,9 +142,14 @@ function toIntroRequestStatus(stored: string): IntroRequestStatus {
 /**
  * Translate one projected row into the {@link VisibleIntroInboxRow} read model.
  *
- * Both cards are omitted rather than nulled when absent, so a serialized row from a
- * reader who may not be told who a party is carries no `requester`/`target` key at all
- * and there is nothing for a client to render a placeholder into.
+ * All three cards are omitted rather than nulled when absent, so a serialized row from a
+ * reader who may not be told who a party is carries no `requester`/`via`/`target` key at
+ * all and there is nothing for a client to render a placeholder into.
+ *
+ * ⚠ `viaNote` is omitted the same way, and the pairing matters: a target row can hold a
+ * via note whose author's card is gone (the via deactivated after passing it on). The
+ * note stays — it was written and delivered — and it renders under the withheld
+ * treatment, never under a name reconstructed from the identifier.
  */
 export function toVisibleIntroInboxRow(row: IntroInboxRow): VisibleIntroInboxRow {
   const requester = toIntroPerson({
@@ -145,6 +157,12 @@ export function toVisibleIntroInboxRow(row: IntroInboxRow): VisibleIntroInboxRow
     disclosure: row.requester_disclosure,
     display_name: row.requester_display_name,
     handle: row.requester_handle,
+  });
+  const via = toIntroPerson({
+    user_id: row.via_user_id,
+    disclosure: row.via_disclosure,
+    display_name: row.via_display_name,
+    handle: row.via_handle,
   });
   const target = toIntroPerson({
     user_id: row.target_user_id,
@@ -157,8 +175,10 @@ export function toVisibleIntroInboxRow(row: IntroInboxRow): VisibleIntroInboxRow
     id: row.intro_request_id,
     role: toIntroInboxRole(row.inbox_role),
     note: row.note,
+    ...(row.via_note === null ? {} : { viaNote: row.via_note }),
     createdAt: row.created_at,
     ...(requester === undefined ? {} : { requester }),
+    ...(via === undefined ? {} : { via }),
     ...(target === undefined ? {} : { target }),
   };
 }

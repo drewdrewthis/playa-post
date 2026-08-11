@@ -23,6 +23,14 @@ import {
  */
 describe('intro request events (issue #89, ADR-0006)', () => {
   const DISTINCTIVE_PHRASE = 'obsidian-marigold-thunderhead';
+  /*
+   * A second phrase, because the two notes have two authors and only one of them is on an
+   * open row (issue #175). Asserting the requester's absence alone would go green on an
+   * `IntroPassedOn` that quoted the via's vouch — which is the one event a notification
+   * consumer would most like to put in a push body, and therefore the one this has to
+   * catch.
+   */
+  const DISTINCTIVE_VIA_PHRASE = 'cinnabar-lantern-switchback';
 
   const open: IntroRequest = {
     id: '11111111-1111-4111-8111-111111111111',
@@ -38,6 +46,7 @@ describe('intro request events (issue #89, ADR-0006)', () => {
   const passedOn: IntroRequest = {
     ...open,
     status: INTRO_REQUEST_STATUS.passedOn,
+    viaNote: `Worth an hour of yours — the ${DISTINCTIVE_VIA_PHRASE}.`,
     decidedAt,
   };
   const declined: IntroRequest = {
@@ -101,6 +110,23 @@ describe('intro request events (issue #89, ADR-0006)', () => {
     it('never carries the note, on either decision', () => {
       expect(JSON.stringify(introDecided(passedOn))).not.toContain(DISTINCTIVE_PHRASE);
       expect(JSON.stringify(introDecided(declined))).not.toContain(DISTINCTIVE_PHRASE);
+    });
+
+    it('never carries the via’s own note either (#175)', () => {
+      // ⚠ Same assertion shape and the same reason: an outbox row is durable and widely
+      // read, so a consumer re-reads the vouch through this module's authorized target
+      // read or it does not get it at all. A `context` object added later cannot smuggle
+      // it back in, because this is measured over the serialized whole.
+      expect(JSON.stringify(introDecided(passedOn))).not.toContain(DISTINCTIVE_VIA_PHRASE);
+    });
+
+    it('builds the identical payload whether or not the row carries a via note', () => {
+      // The vouch changes what the target reads and changes nothing a consumer routes
+      // on — so the event for a row with one is byte-for-byte the event for a row
+      // without, which is the strongest form of "the payload does not depend on it".
+      const { viaNote: _viaNote, ...withoutViaNote } = passedOn;
+
+      expect(introDecided(passedOn)).toEqual(introDecided(withoutViaNote));
     });
 
     it('refuses to build an event for a row that carries no decision', () => {

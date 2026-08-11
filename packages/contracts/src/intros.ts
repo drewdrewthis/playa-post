@@ -111,19 +111,50 @@ export interface RequestIntroRequest {
   readonly note: string;
 }
 
-/** `intros.decide` input. The actor is always the via — there is no field for it. */
-export interface DecideIntroRequest {
-  readonly introRequestId: string;
-  readonly decision: IntroDecision;
-}
+/**
+ * `intros.decide` input. The actor is always the via — there is no field for it.
+ *
+ * ⚠ **A union, not one object with an optional note**, because the two decisions take
+ * different fields (#175).
+ *
+ * Passing an introduction on means **adding a note of your own**: the target reads the
+ * requester's reason for asking and your reason for agreeing, each under its author's
+ * card. It is required — a pass-on with nothing added comes back as
+ * `INTRO_CONTENT_INVALID`, exactly as an empty note on `intros.request` does.
+ *
+ * ⚠ **A decline carries none, and sending one is refused** with
+ * `INTRO_DECLINE_CARRIES_NO_NOTE` rather than quietly dropped. The requester is told only
+ * that it was not passed on — no reason, no re-ask control (see
+ * {@link INTRO_REQUEST_STATUS}) — so text written on a decline has no reader, and a field
+ * the server discarded in silence would let its writer believe otherwise.
+ */
+export type DecideIntroRequest =
+  | {
+      readonly introRequestId: string;
+      readonly decision: typeof INTRO_DECISION.passOn;
+      /**
+       * Why you are willing to make this introduction. Required, at most 4000 characters
+       * after trimming, and never empty.
+       *
+       * ⚠ The target reads it; **the requester never does**, on any read. It is a vouch
+       * written to one of the two people, and echoing it to the other would be the reason
+       * nobody writes an honest one twice.
+       */
+      readonly note: string;
+    }
+  | {
+      readonly introRequestId: string;
+      readonly decision: typeof INTRO_DECISION.decline;
+    };
 
 /**
  * An intro request as the party who just changed it sees one — `intros.request`'s and
  * `intros.decide`'s answer.
  *
- * ⚠ It carries **no `note`**: you wrote it, or you are the via who is reading it on your
- * inbox row. Echoing it here would persist a second copy of it wherever you store
- * mutation results.
+ * ⚠ It carries **no note of either kind**: the requester's, because you wrote it or you
+ * are the via reading it on your own inbox row; and the via's, because you just wrote
+ * that one. Echoing either here would persist a second copy wherever you store mutation
+ * results.
  */
 export interface IntroRequestReceipt {
   readonly id: string;
@@ -148,7 +179,12 @@ export interface IntroRequestReceipt {
  * one.** The absence is total: this response is byte-for-byte what somebody nobody has
  * ever asked about receives. Do not infer anything from an empty list.
  *
- * Both cards are optional, because a request outlives the relationship that carried it —
+ * ⚠ **A `target` row carries two notes by two different people** (#175), and each must be
+ * rendered under its own author's card: `note` is the requester's ask, `viaNote` is the
+ * via's vouch. Running them together, or attributing both to the requester, puts words in
+ * somebody's mouth.
+ *
+ * Every card is optional, because a request outlives the relationship that carried it —
  * see {@link IntroPerson} for what an absent one means.
  */
 export interface IntroInboxRow {
@@ -156,9 +192,25 @@ export interface IntroInboxRow {
   readonly role: IntroInboxRole;
   /** Why the requester wants the introduction. */
   readonly note: string;
+  /**
+   * What the via said when they passed it on.
+   *
+   * `target` rows only, and **absent even there** on an introduction passed on before
+   * #175 required one — render the requester's half alone in that case, never an empty
+   * quote attributed to the via.
+   */
+  readonly viaNote?: string;
   /** ISO-8601, newest first. */
   readonly createdAt: string;
   readonly requester?: IntroPerson;
+  /**
+   * Who passed it on — the author of {@link IntroInboxRow.viaNote}.
+   *
+   * Present on a `target` row only; on a `via` row the via is you. Absent when they can
+   * no longer be described, in which case the note still renders, under the withheld
+   * treatment and never under a name filled in from your own graph.
+   */
+  readonly via?: IntroPerson;
   /** Present on a `via` row only. On a `target` row the target is you. */
   readonly target?: IntroPerson;
 }
@@ -172,6 +224,10 @@ export interface IntroInboxRow {
  *
  * ⚠ No `note` (you wrote it) and no reason on a `declined` row (see
  * {@link INTRO_REQUEST_STATUS}).
+ *
+ * ⚠ **And no `viaNote` on a `passed_on` row.** The via wrote that one to the person you
+ * asked to meet, about you. `INTRO_PASSED_ON_LINE` — "they have your note now" — is the
+ * whole of what this side is told.
  */
 export interface IntroOutboxRow {
   readonly id: string;

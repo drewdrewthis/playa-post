@@ -69,16 +69,24 @@ export interface PresentedIntroRequest {
  * the requester only. A client that rendered a decide control on a `target` row would be
  * offering an action the server refuses.
  *
- * ⚠ Both cards are **optional**, because the request outlives the relationship that
+ * ⚠ All three cards are **optional**, because the request outlives the relationship that
  * carried it — see {@link VisibleIntroInboxRow}. An absent card means render no name at
  * all, never a reconstructed one.
+ *
+ * ⚠ A `target` row carries **two** notes and each belongs to a different person: `note`
+ * is the requester's and `viaNote` is the via's vouch (#175). They are separate fields
+ * rather than one joined string precisely so a client cannot render them under one name.
  */
 export interface PresentedIntroInboxRow {
   readonly id: string;
   readonly role: IntroInboxRole;
   readonly note: string;
+  /** The via's own note. `target` rows only, and absent on a pass-on that predates #175. */
+  readonly viaNote?: string;
   readonly createdAt: string;
   readonly requester?: PresentedIntroPerson;
+  /** Who passed it on. `target` rows only — on a `via` row the via is the reader. */
+  readonly via?: PresentedIntroPerson;
   readonly target?: PresentedIntroPerson;
 }
 
@@ -145,8 +153,10 @@ export function presentIntroInboxRow(row: VisibleIntroInboxRow): PresentedIntroI
     id: row.id,
     role: row.role,
     note: row.note,
+    ...(row.viaNote === undefined ? {} : { viaNote: row.viaNote }),
     createdAt: row.createdAt.toISOString(),
     ...(row.requester === undefined ? {} : { requester: presentPerson(row.requester) }),
+    ...(row.via === undefined ? {} : { via: presentPerson(row.via) }),
     ...(row.target === undefined ? {} : { target: presentPerson(row.target) }),
   };
 }

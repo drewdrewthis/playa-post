@@ -94,6 +94,18 @@ export interface IntroRequest {
   readonly targetId: string;
   /** Already trimmed and bounded by `intro-note.policy.ts`. */
   readonly note: string;
+  /**
+   * What the **via** said when they passed it on (issue #175). Already trimmed and
+   * bounded by the same policy that bounds {@link IntroRequest.note}.
+   *
+   * ⚠ **Absent, not empty**, and three different situations produce the absence: the
+   * request is still open, the via declined — a decline carries no note at all — or the
+   * pass-on predates #175 requiring one. `via_note is null or status = 'passed_on'` is a
+   * database CHECK, deliberately an implication rather than the equality
+   * `decided_at` gets, because the third case is a row that already exists and must stay
+   * valid. The requirement on every *new* pass-on lives in `intro-note.policy.ts`.
+   */
+  readonly viaNote?: string;
   readonly status: IntroRequestStatus;
   readonly createdAt: Date;
   /**
