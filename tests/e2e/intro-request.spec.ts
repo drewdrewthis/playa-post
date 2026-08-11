@@ -17,6 +17,10 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
  * the ask: walk 1 from the person sheet on `/graph` (issue #85's entry), walk 2 from
  * the bulletin detail sheet (AC27's named entry).
  *
+ * Issue #175 gave walk 2 its second half: **passing an intro on requires a note of the
+ * via's own**, so B's decision is now two presses and C's row carries two notes by two
+ * people. Walk 1's decline is untouched — a decline carries no note and never will.
+ *
  * ⚠ One browser context lives at a time. Three concurrent contexts each pulling the
  * whole Vite dev module graph starved Chromium into `ERR_INSUFFICIENT_RESOURCES`
  * (blank pages that never mount). The journey is strictly sequential anyway, so each
@@ -174,18 +178,29 @@ test.describe('asking for an intro through a shared connection', () => {
       });
     });
 
-    await test.step('walk 2 — B passes it on', async () => {
+    await test.step('walk 2 — B passes it on, with a note of their own', async () => {
       await withUser(browser, userBAccessToken, async (pageB) => {
         await pageB.goto('/graph');
         await expect(pageB.getByTestId('graph-home')).toBeVisible({ timeout: 20_000 });
         const viaRow = pageB.getByTestId('intro-inbox-via-row');
         await expect(viaRow).toBeVisible({ timeout: 15_000 });
+
+        // ⚠ Pass on opens the field; it does not decide (#175, decision D11). The row is
+        // still here afterwards, which is the browser-level proof that the first press
+        // sent nothing — the walk below only works because the second press does.
         await viaRow.getByTestId('intro-pass-on-button').click();
+        await expect(viaRow.getByTestId('intro-via-note-input')).toBeVisible();
+        await expect(pageB.getByTestId('intro-inbox-via-row')).toHaveCount(1);
+
+        await viaRow
+          .getByTestId('intro-via-note-input')
+          .fill('A fixes bikes and C needs one fixed. Worth ten minutes.');
+        await viaRow.getByTestId('intro-pass-on-submit-button').click();
         await expect(pageB.getByTestId('intro-inbox-via-row')).toHaveCount(0);
       });
     });
 
-    await test.step('walk 2 — C now sees who asked, and the note', async () => {
+    await test.step('walk 2 — C reads both notes, each under its own author', async () => {
       await withUser(browser, userCAccessToken, async (pageC) => {
         await pageC.goto('/graph');
         await expect(pageC.getByTestId('graph-home')).toBeVisible({ timeout: 20_000 });
@@ -195,7 +210,16 @@ test.describe('asking for an intro through a shared connection', () => {
         // target reads the requester's name and note even where A's own visibility
         // setting would otherwise withhold them.
         await expect(targetRow).toContainText('User A');
-        await expect(targetRow).toContainText('I have that wheel — intro us?');
+        await expect(targetRow.getByTestId('intro-inbox-requester-note')).toContainText(
+          'I have that wheel — intro us?',
+        );
+        // ⚠ And the second half (#175): the via's vouch, under the via's own name.
+        // Passing an intro on is consent to be named as its via, so B is on the row
+        // beside the words B wrote.
+        await expect(targetRow).toContainText('User B');
+        await expect(targetRow.getByTestId('intro-inbox-via-note')).toContainText(
+          'A fixes bikes and C needs one fixed.',
+        );
       });
     });
   });

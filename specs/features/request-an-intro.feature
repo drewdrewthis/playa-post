@@ -18,6 +18,14 @@ Feature: Request an intro — asking a mutual connection to introduce you
   # requester's own `visible_to_distance` would hide them from somebody two hops away. The
   # sheet says so before send.
   #
+  # ⚠ Issue #175 gives the pass-on a third: **the via must add a note of their own**
+  # (owner: "you have to add your own message", decision D11). A pass-on is a vouch rather
+  # than a forward, so the target reads two notes by two people, each under its own
+  # author's card — and passing one on is therefore consent to be *named* as its via, the
+  # same inversion the requester's own card rests on. A decline still carries nothing, and
+  # a note attached to one is refused rather than dropped: the requester is told only that
+  # it was not passed on, so there is no reader for it.
+  #
   # Its own aggregate, never a note subtype (decision recorded in
   # `modules/intros/domain/intro-request.ts`): a note has two parties and no lifecycle;
   # this has three parties, three states, and a second actor who decides. What is reused
@@ -149,6 +157,40 @@ Feature: Request an intro — asking a mutual connection to introduce you
     When user A asks user B for an introduction and user B passes it on
     Then user C is shown user A's identity and the note
     And user A deactivating afterwards removes the card and leaves the introduction
+
+  @unit @integration
+  # @issue:175
+  Scenario: Passing an intro on requires a note of the via's own
+    Given user A has an open intro request to user C through user B
+    When user B passes it on with a note of their own
+    Then the note is stored on the same row, trimmed, by the same statement as the decision
+    And user C reads both notes, each under its own author's card
+    And a pass-on carrying no note, a whitespace-only one, or one over 4000 characters is refused
+    And the request is still requested, with no decision and no via note
+
+  @unit @integration
+  # @issue:175
+  Scenario: A decline carries no note
+    Given user A has an open intro request to user C through user B
+    When user B attempts to decline it with a note attached
+    Then the attempt is refused rather than the note being silently dropped
+    And an ordinary decline succeeds and stores no via note
+
+  @integration
+  # @issue:175
+  Scenario: The via's note is for the target and nobody else
+    Given user B has passed on user A's request to user C with a note of their own
+    Then user A's own record carries the status and neither note
+    And user B cannot read their own note back on any intros read
+    And no outbox payload and no captured log line contains it
+
+  @integration
+  # @issue:175
+  Scenario: Passing an intro on is consent to be named as its via
+    Given user B has passed on user A's request to user C with a note of their own
+    When user B and user C are no longer connected
+    Then user C still reads the note with user B's own self-projected card beside it
+    And user B deactivating instead leaves the note standing with no card at all
 
   @unit @integration
   # @issue:89

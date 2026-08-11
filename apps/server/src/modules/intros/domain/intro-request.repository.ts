@@ -28,6 +28,15 @@ export interface IntroDecisionWrite {
    */
   readonly actorId: string;
   readonly decision: IntroDecision;
+  /**
+   * The via's own note, already through
+   * {@link import('./intro-note.policy').validateViaNote} — present for a `pass_on`,
+   * **absent** for a `decline`.
+   *
+   * Absent rather than empty, so the column it lands in is null and the table's
+   * `via_note is null or status = 'passed_on'` CHECK has something true to enforce.
+   */
+  readonly viaNote?: string;
   readonly decidedAt: Date;
 }
 
@@ -78,6 +87,11 @@ export interface IntroRequestRepository {
    * with the ordinary error and the target learns nothing. Declining discloses nothing
    * to anybody, so it stays available for as long as the request is open: a via must
    * always be able to say no.
+   *
+   * ⚠ The via's note rides this same statement rather than a second write, for the reason
+   * the event does: "passed on" and "here is what I said about it" are one fact, and a
+   * row that reached `passed_on` while a follow-up note write failed would be an
+   * introduction the target reads unvouched.
    *
    * @throws {import('./intro-request.errors').IntroUnavailableError} when the statement
    *   updated no row — "no such request", "not yours", "already decided", and "no longer

@@ -9,7 +9,7 @@ import type { ListIntroViaCandidatesQuery } from '../application/list-intro-via-
 import type { RequestIntroService } from '../application/request-intro.service';
 import { IntroUnavailableError } from '../domain/intro-request.errors';
 
-import { decideIntroInput } from './decide-intro.input';
+import { decideIntroCommandFields, decideIntroInput } from './decide-intro.input';
 import {
   presentIntroInboxRow,
   presentIntroOutboxRow,
@@ -173,12 +173,21 @@ export function createIntrosRouter(dependencies: IntrosRouterDependencies) {
     ),
 
     /**
-     * Pass an introduction on, or decline it.
+     * Pass an introduction on **with a note of your own**, or decline it.
      *
      * Only the named via may. Anybody else — the requester, the target, a stranger — gets
      * the same 404 `INTRO_UNAVAILABLE` a request that never existed does, and so does a
      * request already decided. A `pass_on` whose eligibility has lapsed since the ask is
      * refused identically; `decline` is not, because a via must always be able to say no.
+     *
+     * A `pass_on` with no note is 400 `INTRO_CONTENT_INVALID` (#175) — the caller's own
+     * submission being malformed, safe to distinguish from `INTRO_UNAVAILABLE` for the
+     * reason `request`'s content refusal is: it can never be the answer to "may I decide
+     * this request", because the note is checked before the row is looked for. A `decline`
+     * carrying a note never reaches this service over tRPC: the input's strict decline arm
+     * refuses the unknown key as a plain zod `BAD_REQUEST` with no application code.
+     * `INTRO_DECLINE_CARRIES_NO_NOTE` is the domain's backstop for callers that reach the
+     * service another way (`intro-request.errors.ts`).
      */
     decide: authenticatedProcedure
       .input(decideIntroInput)
@@ -186,9 +195,8 @@ export function createIntrosRouter(dependencies: IntrosRouterDependencies) {
         present(async () =>
           presentIntroRequest(
             await dependencies.decideIntro.decide({
-              introRequestId: input.introRequestId,
               actorId: ctx.actor.userId,
-              decision: input.decision,
+              ...decideIntroCommandFields(input),
             }),
           ),
         ),

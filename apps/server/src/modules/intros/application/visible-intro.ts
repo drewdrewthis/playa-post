@@ -28,7 +28,9 @@ export type IntroInboxRole = (typeof INTRO_INBOX_ROLE)[keyof typeof INTRO_INBOX_
  * to decide; the target needs it because it is the whole of what the introduction says.
  * The requester's own `intros.listOutbox` does *not* carry it — they wrote it, and
  * echoing it back would put a second copy somewhere with no gate on it, which is the
- * copy `modules/notes` refuses for the same reason.
+ * copy `modules/notes` refuses for the same reason. `viaNote` is held to the identical
+ * rule from the other direction: the target reads it, and the via who wrote it does not
+ * get it back on any read.
  *
  * ⚠ **Every person card is optional**, for the reason a note's author card is: the
  * request outlives the relationship that carried it. A via whose connection to the
@@ -41,9 +43,27 @@ export interface VisibleIntroInboxRow {
   readonly id: string;
   readonly role: IntroInboxRole;
   readonly note: string;
+  /**
+   * What the **via** said when they passed it on (issue #175).
+   *
+   * Present only on a `target` row, and absent even there when the pass-on predates #175
+   * requiring one. On a `via` row it is always absent: the row is an ask still waiting on
+   * a decision, so there is no such note yet — and the via would be reading their own
+   * words back at themselves if there were.
+   */
+  readonly viaNote?: string;
   readonly createdAt: Date;
   /** Who asked. Absent when the reader may not be told who they are. */
   readonly requester?: IntroPerson;
+  /**
+   * Who passed it on, so the note above it has an author.
+   *
+   * Present only on a `target` row, for the mirror of {@link VisibleIntroInboxRow.target}'s
+   * reason: on a `via` row the via is the reader. Absent when the projection can no longer
+   * describe them — a via who has since deactivated leaves the introduction standing and
+   * takes their card with them, exactly as a deactivated requester does.
+   */
+  readonly via?: IntroPerson;
   /**
    * Who they want to meet.
    *

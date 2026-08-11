@@ -48,7 +48,7 @@ export interface PostgresIntroRequestRepositoryDependencies {
  * {@link import('./intro-request.mapper').IntroRequestRow} to be right about only one of.
  */
 const INTRO_REQUEST_COLUMNS = sql`
-  id, requester_id, via_id, target_id, note, status, created_at, decided_at
+  id, requester_id, via_id, target_id, note, via_note, status, created_at, decided_at
 `;
 
 /**
@@ -195,9 +195,16 @@ export function createPostgresIntroRequestRepository(
         // request that never existed does. `status = 'requested'` is the concurrency
         // control: two simultaneous decides block on the row, the loser re-evaluates
         // against the committed status, matches nothing, and is refused.
+        //
+        // ⚠ `via_note` is written by the same statement and never by a second one. The
+        // note and the decision it belongs to are one fact, and `??  null` is what makes
+        // "a decline carries no note" true in the column rather than only in the policy
+        // that produced the value — the table's `via_note is null or status =
+        // 'passed_on'` CHECK is then a backstop with something to check.
         const { rows } = await sql<IntroRequestRow>`
           update app.intro_requests as request
              set status = ${STATUS_FOR_DECISION[write.decision]}::text,
+                 via_note = ${write.viaNote ?? null}::text,
                  decided_at = ${write.decidedAt}::timestamptz
            where request.id = ${write.introRequestId}::uuid
              and request.via_id = ${write.actorId}::uuid
@@ -250,11 +257,22 @@ export function createPostgresIntroRequestRepository(
       // second-degree stranger is still shown here, at their own `full` self-disclosure.
       // It is still `app.visible_people`, so §6a's "no direct join to app.users for a
       // person card" holds, and a deactivated requester still drops out (ADR-0002 B11).
+      //
+      // ⚠ **The via's card on a target row is the same inversion, for the same reason**
+      // (#175): choosing to pass an introduction on is choosing to be seen by the target
+      // as its via. It has to be — the via now has a note of their own on that row, and a
+      // vouch nobody can attribute is worse than no vouch. Their own self-projection is
+      // what makes that survive the relationship: a via who later severs their connection
+      // to the target is still named beside the words they wrote, where the target's own
+      // world would have quietly dropped them and left an unsigned note behind.
       const { rows } = await sql<IntroInboxRow>`
         with ${viewerWorld(viewerId)}
         select r.id                              as intro_request_id,
                ${INTRO_INBOX_ROLE.via}::text     as inbox_role,
                r.note                            as note,
+               -- Nothing has been passed on yet, so there is no via note to carry — and
+               -- the via is the reader, so a card for them could only ever say "you".
+               null::text                        as via_note,
                r.created_at                      as created_at,
                requester_person.user_id          as requester_user_id,
                requester_person.disclosure       as requester_disclosure,
@@ -263,7 +281,11 @@ export function createPostgresIntroRequestRepository(
                target_person.user_id             as target_user_id,
                target_person.disclosure          as target_disclosure,
                target_person.display_name        as target_display_name,
-               target_person.handle              as target_handle
+               target_person.handle              as target_handle,
+               null::uuid                        as via_user_id,
+               null::text                        as via_disclosure,
+               null::text                        as via_display_name,
+               null::text                        as via_handle
           from app.intro_requests r
           left join viewer_world requester_person on requester_person.user_id = r.requester_id
           left join viewer_world target_person on target_person.user_id = r.target_id
@@ -273,6 +295,7 @@ export function createPostgresIntroRequestRepository(
         select r.id,
                ${INTRO_INBOX_ROLE.target}::text,
                r.note,
+               r.via_note,
                r.created_at,
                consenting.user_id,
                consenting.disclosure,
@@ -282,12 +305,20 @@ export function createPostgresIntroRequestRepository(
                null::uuid,
                null::text,
                null::text,
-               null::text
+               null::text,
+               vouching.user_id,
+               vouching.disclosure,
+               vouching.display_name,
+               vouching.handle
           from app.intro_requests r
           left join lateral (
             select p.user_id, p.disclosure, p.display_name, p.handle
               from app.visible_people(r.requester_id, 0, 1) p
           ) consenting on true
+          left join lateral (
+            select p.user_id, p.disclosure, p.display_name, p.handle
+              from app.visible_people(r.via_id, 0, 1) p
+          ) vouching on true
          where r.target_id = ${viewerId}::uuid
            and r.status = ${INTRO_REQUEST_STATUS.passedOn}::text
          order by created_at desc, intro_request_id desc
@@ -300,6 +331,12 @@ export function createPostgresIntroRequestRepository(
       // Every status, unlike the inbox — this is the requester's own record of what they
       // asked. It carries no `note`: they wrote it, and a second copy of it living on a
       // read nothing gates would be the copy `modules/notes` refuses for the same reason.
+      //
+      // ⚠ And it carries no `via_note` either, which is a stronger rule than the first
+      // one rather than the same one repeated. The via wrote those words *to the target*,
+      // about the requester; showing them here would turn a vouch into something the
+      // person being vouched for reads over the writer's shoulder, and no via would write
+      // an honest one twice.
       const { rows } = await sql<IntroOutboxRow>`
         with ${viewerWorld(viewerId)}
         select r.id                    as intro_request_id,
@@ -345,11 +382,13 @@ async function appendOutboxEvent(
       occurred_at: event.occurredAt,
       actor_id: event.actorId,
       aggregate_id: event.introRequestId,
-      // ⚠ Identifiers and routing data only — **never `note`**. A consumer re-reads it
-      // through this module's authorized reads if it needs it, which is also what stops a
-      // delivery carrying text the current visibility rules have since withdrawn
-      // (ADR-0006, PDF §6), and what keeps intro text out of any log line that dumps an
-      // outbox row (M2-AC16).
+      // ⚠ Identifiers and routing data only — **never `note`, and never `via_note`**. A
+      // consumer re-reads either through this module's authorized reads if it needs it,
+      // which is also what stops a delivery carrying text the current visibility rules
+      // have since withdrawn (ADR-0006, PDF §6), and what keeps intro text out of any log
+      // line that dumps an outbox row (M2-AC16). `IntroPassedOn` is the event most likely
+      // to grow one — a notification consumer would love to quote the vouch — and it is
+      // exactly the one that must not.
       //
       // ⚠ **An `IntroDeclined` row names the target and no consumer may tell them.** The
       // fact happened and the audit trail is entitled to it; the delivery is what must

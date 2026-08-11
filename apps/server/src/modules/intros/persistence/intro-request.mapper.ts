@@ -44,6 +44,11 @@ function toIntroRequestStatus(stored: string): IntroRequestStatus {
  * ⚠ `decidedAt` is **omitted, not null**, while the request is open. The database CHECK
  * `(status = 'requested') = (decided_at is null)` guarantees the two agree, and an
  * absent key is what `exactOptionalPropertyTypes` lets the compiler keep honest.
+ *
+ * `viaNote` is omitted on the same principle but for a weaker guarantee: its CHECK is an
+ * implication rather than an equality, so a `passed_on` row genuinely may hold no via
+ * note — one passed on before #175 asked for one. The absent key says "there is no such
+ * note", which is true in every one of the three cases that produce it.
  */
 export function toIntroRequest(row: IntroRequestRow): IntroRequest {
   return {
@@ -52,6 +57,7 @@ export function toIntroRequest(row: IntroRequestRow): IntroRequest {
     viaId: row.via_id,
     targetId: row.target_id,
     note: row.note,
+    ...(row.via_note === null ? {} : { viaNote: row.via_note }),
     status: toIntroRequestStatus(row.status),
     createdAt: row.created_at,
     ...(row.decided_at === null ? {} : { decidedAt: row.decided_at }),

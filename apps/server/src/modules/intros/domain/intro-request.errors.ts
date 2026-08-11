@@ -30,6 +30,33 @@ export class IntroContentInvalidError extends ApplicationError {
 }
 
 /**
+ * A note was attached to a decline, and a decline carries none (issue #175).
+ *
+ * Its own class rather than a second meaning for {@link IntroContentInvalidError}: the
+ * text may be perfectly well-formed, and answering "your note is empty or too long" to
+ * somebody whose note is neither would be a refusal that tells them nothing about what to
+ * change. One error, one meaning, the rule `tests/README.md` states.
+ *
+ * ⚠ **The absence is the requester's protection, not an omission.** A declining via's
+ * rationale is theirs; the requester is told only that it was not passed on, with no
+ * reason and no re-ask control (`INTRO_NOT_PASSED_ON_LINE`). A field the server quietly
+ * dropped would be worse than one it refuses, because the writer would believe it was
+ * kept — so the wire schema refuses it too (`decide-intro.input.ts`) and this is the
+ * backstop for any caller that reaches the service another way.
+ */
+export class IntroDeclineCarriesNoNoteError extends ApplicationError {
+  static readonly code = 'INTRO_DECLINE_CARRIES_NO_NOTE';
+
+  constructor() {
+    super(
+      IntroDeclineCarriesNoNoteError.code,
+      'Declining an introduction carries no note.',
+    );
+    this.name = 'IntroDeclineCarriesNoNoteError';
+  }
+}
+
+/**
  * There is no intro here for this actor to make or to decide.
  *
  * **One answer for every refusal**, and the uniformity *is* the security property

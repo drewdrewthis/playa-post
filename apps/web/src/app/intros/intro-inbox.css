@@ -82,9 +82,60 @@
   color: var(--pp-sub);
 }
 
+/*
+ * The via's own note, revealed by Pass on (issue #175). Not a sheet: the ask it belongs
+ * to has to stay on screen while the words are written, because they are a reply to it.
+ */
+.intro-inbox__compose,
+.intro-inbox__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+}
+
+/* Why a note is being asked for, in the same voice the sheet's consent line uses. */
+.intro-inbox__standing {
+  margin: 0;
+  font-weight: 500;
+  font-size: var(--pp-text-xs);
+  line-height: 1.55;
+  color: var(--pp-sub);
+}
+
+/** The comp's small caps label, matching the intro sheet's above its own box. */
+.intro-inbox__label {
+  margin: 0;
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-faint);
+}
+
+/*
+ * Two classes, deliberately: `.form__input--prose` in `screens.css` already carries the
+ * comp's serif face, size, and line height, and this only adds what this row asks on top
+ * of it. A single-class selector would lose to any `.form__input--*` rule there, because
+ * this file is bundled first — the specificity rule `intro-sheet.css` states in full.
+ */
+.intro-inbox .intro-inbox__note-input {
+  resize: none;
+  min-height: 4.5rem;
+}
+
 .intro-inbox__actions {
   display: flex;
   gap: var(--pp-space-2);
+}
+
+/*
+ * `aria-disabled`, not `:disabled` — `intro-inbox.tsx` records why the submit stays
+ * focusable. The dimming has to key off the attribute that is actually set, or a control
+ * that does nothing looks exactly like one that works.
+ */
+.intro-inbox__actions .button[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .intro-inbox__actions .button {

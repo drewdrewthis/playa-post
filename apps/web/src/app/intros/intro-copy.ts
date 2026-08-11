@@ -92,6 +92,42 @@ export const INTRO_CONSENT_LINE =
   'Asking is consent to be seen. If it is passed on, they see who you are and read your note — even if your own visibility setting would otherwise hide you from them.';
 
 /**
+ * The label on the via's own note field, naming who will read it.
+ *
+ * "for {name}" rather than "about {name}": the note goes *to* the target, and a via who
+ * thinks they are annotating the requester for the app's benefit writes a different — and
+ * more careless — sentence than one who knows the person they are vouching to will read
+ * it word for word.
+ */
+export function viaNoteLabel(targetName: string | null): string {
+  return targetName === null ? 'Add your own note for them' : `Add your own note for ${targetName}`;
+}
+
+/**
+ * The line above that field.
+ *
+ * ⚠ **It says the note is required before the button says so.** The rule is the product
+ * decision behind #175 — passing an intro on is a vouch, not a forward — and a person who
+ * meets it first as a disabled submit reads it as a bug in the app rather than as a thing
+ * being asked of them.
+ */
+export const INTRO_VIA_NOTE_LINE =
+  'Passing this on means putting your name to it, so a note of your own is required. Say why you think they should meet — they will read it beside the note you were sent.';
+
+/** The via's submit, once the note field is open. */
+export const PASS_ON_WITH_NOTE_LABEL = 'Pass on with your note';
+
+/**
+ * What follows the via's card, above their half of an introduction.
+ *
+ * Its own lede rather than a clause hung off the requester's, because the two notes have
+ * two authors and this line is what makes the second one attributable. It names the act
+ * and nothing else: anything warmer would put the app's opinion in the via's mouth
+ * alongside the words they actually wrote.
+ */
+export const INTRO_VOUCHED_LINE = 'passed it on:';
+
+/**
  * The no-candidates state.
  *
  * `intros.viaCandidates` answers an empty list for every reason at once — nobody shared,
@@ -102,7 +138,7 @@ export const INTRO_NO_CANDIDATES_LINE =
   'Nobody you both know can make this introduction right now.';
 
 /**
- * The two server codes these surfaces can actually provoke, in words.
+ * The three server codes these surfaces can actually provoke, in words.
  *
  * ⚠ `INTRO_UNAVAILABLE` is rendered as the server's own flat sentence and **never
  * elaborated**. It comes back identically for a target at the wrong distance, a via who
@@ -114,6 +150,12 @@ export const INTRO_NO_CANDIDATES_LINE =
 const REFUSAL_MESSAGE: Readonly<Record<string, string>> = {
   INTRO_UNAVAILABLE: 'That introduction is not available.',
   INTRO_CONTENT_INVALID: 'The server refused this note’s text. Shorten it and ask again.',
+  /*
+   * Reachable only from a client that got the wire shape wrong — the decline control
+   * sends no note and `DecideIntroRequest`'s union will not let it — so this is a
+   * developer's mistake surfacing where a user can see it. It says what happened rather
+   * than apologising, because there is nothing for the reader to do about it.
+   */
 };
 
 /**

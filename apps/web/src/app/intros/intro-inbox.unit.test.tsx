@@ -8,21 +8,30 @@ import {
   createFakeApi,
   mountWithApi,
   requireElement,
+  setFieldValue,
   type FakeApi,
   type MountedTree,
 } from '../testing/mount-with-api';
 
 import { IntroInbox } from './intro-inbox';
+import { INTRO_NOTE_MAX_LENGTH } from './intro-note-draft';
 
 /**
- * The via's inbox at the top of `/graph` (issue #89).
+ * The via's inbox at the top of `/graph` (issues #89 and #175).
  *
  * ⚠ jsdom, by the per-file pragma above: the `unit` project runs in `node`.
+ *
+ * Two shapes, and #175 gave each of them a rule the other must not acquire: a `via` row's
+ * Pass on opens a **required** note field and submits the decision and the note together,
+ * while a `target` row renders **two** notes under **two** authors' cards and offers no
+ * control at all.
  */
 
 const LENA: IntroPerson = { userId: 'lena-id', disclosure: 'full', displayName: 'Lena' };
 const KIKI: IntroPerson = { userId: 'kiki-id', disclosure: 'full', displayName: 'Kiki' };
+const BRAM: IntroPerson = { userId: 'bram-id', disclosure: 'full', displayName: 'Bram' };
 const WITHHELD_REQUESTER: IntroPerson = { userId: 'ghost-4b21', disclosure: 'topology_only' };
+const WITHHELD_VIA: IntroPerson = { userId: 'ghost-9c07', disclosure: 'topology_only' };
 
 const VIA_ROW: IntroInboxRow = {
   id: 'request-1',
@@ -37,8 +46,10 @@ const TARGET_ROW: IntroInboxRow = {
   id: 'request-2',
   role: 'target',
   note: 'I heard you fix bikes.',
+  viaNote: 'She rebuilt my whole drivetrain in a dust storm.',
   createdAt: '2026-08-10T10:00:00.000Z',
   requester: LENA,
+  via: BRAM,
 };
 
 let tree: MountedTree | null = null;
@@ -75,6 +86,26 @@ function mounted(): MountedTree {
   return tree;
 }
 
+/** Press a control by test id, and let the render that follows land. */
+async function press(testId: string): Promise<void> {
+  await mounted().run(() => {
+    requireElement(mounted().container, `[data-testid="${testId}"]`).click();
+  });
+}
+
+/** Write the via's own note into the field Pass on reveals (#175). */
+async function writeViaNote(text: string): Promise<void> {
+  await mounted().run(() => {
+    setFieldValue(
+      requireElement<HTMLTextAreaElement>(
+        mounted().container,
+        '[data-testid="intro-via-note-input"]',
+      ),
+      text,
+    );
+  });
+}
+
 describe('the intro inbox', () => {
   /*
    * The graph screen's subject is the network. An empty state here would put "no intros"
@@ -99,18 +130,55 @@ describe('the intro inbox', () => {
       expect(row.querySelector('[data-testid="intro-decline-button"]')).not.toBeNull();
     });
 
-    it('passes it on as the via, naming the request and the decision', async () => {
+    /*
+     * ⚠ **Pass on opens a field; it does not decide anything** (#175). The decision and
+     * the via's note are one submission because the server writes them in one statement —
+     * a control that passed the intro on and *then* asked for words would leave a vouch
+     * that could fail after the introduction was already made.
+     */
+    it('opens a required note field rather than deciding anything', async () => {
       const api = await mountInbox([VIA_ROW]);
 
-      await mounted().run(() => {
-        requireElement(mounted().container, '[data-testid="intro-pass-on-button"]').click();
-      });
+      await press('intro-pass-on-button');
+
+      expect(api.calls.filter((call) => call.kind === 'mutate')).toEqual([]);
+
+      const container = mounted().container;
+      const field = requireElement<HTMLTextAreaElement>(
+        container,
+        '[data-testid="intro-via-note-input"]',
+      );
+
+      // Focus follows the field into existence: without it a keyboard or screen-reader
+      // user is left on a button whose label just changed, with a required field they
+      // were never told about somewhere above it.
+      expect(document.activeElement).toBe(field);
+      // The label names who will read it — "for Kiki", because the note goes *to* the
+      // target and a via who thinks they are annotating the app writes a worse sentence.
+      expect(container.textContent).toContain('Add your own note for Kiki');
+      expect(
+        requireElement(container, '[data-testid="intro-pass-on-submit-button"]').getAttribute(
+          'aria-disabled',
+        ),
+      ).toBe('true');
+    });
+
+    it('passes it on with the note, trimmed, once one is written', async () => {
+      const api = await mountInbox([VIA_ROW]);
+
+      await press('intro-pass-on-button');
+      await writeViaNote('  They should meet at the tea camp.  ');
+      await press('intro-pass-on-submit-button');
 
       expect(api.calls.filter((call) => call.kind === 'mutate')).toEqual([
         {
           kind: 'mutate',
           path: 'intros.decide',
-          input: { introRequestId: 'request-1', decision: 'pass_on' },
+          input: {
+            introRequestId: 'request-1',
+            decision: 'pass_on',
+            note: 'They should meet at the tea camp.',
+          },
         },
       ]);
 
@@ -125,6 +193,57 @@ describe('the intro inbox', () => {
       expect(confirmation.getAttribute('role')).toBe('status');
     });
 
+    it('will not submit a whitespace-only note, and says why in the field’s description', async () => {
+      const api = await mountInbox([VIA_ROW]);
+
+      await press('intro-pass-on-button');
+      await writeViaNote('   ');
+      await press('intro-pass-on-submit-button');
+
+      // The click is guarded rather than the button being `disabled`: it stays focusable
+      // and announced, so a screen-reader user hears the reason instead of tabbing past
+      // the control they came to press (`report-abuse-sheet.tsx`'s rule).
+      expect(api.calls.filter((call) => call.kind === 'mutate')).toEqual([]);
+
+      const container = mounted().container;
+      const submit = requireElement(container, '[data-testid="intro-pass-on-submit-button"]');
+
+      expect(submit.getAttribute('aria-disabled')).toBe('true');
+      expect(submit.hasAttribute('disabled')).toBe(false);
+
+      // Resolved by walking ids rather than with a `#id` selector: `useId` produces ids
+      // containing characters CSS treats as syntax, and `aria-describedby` is a
+      // space-separated list — so a selector would be both invalid and incomplete.
+      const describedBy = (submit.getAttribute('aria-describedby') ?? '').split(' ');
+      const description = allElements(container, '[id]')
+        .filter((element) => describedBy.includes(element.id))
+        .map((element) => element.textContent)
+        .join(' ');
+
+      expect(description).toContain('a note of your own is required');
+    });
+
+    it('marks an over-long note invalid and refuses to send it', async () => {
+      const api = await mountInbox([VIA_ROW]);
+
+      await press('intro-pass-on-button');
+      await writeViaNote('x'.repeat(INTRO_NOTE_MAX_LENGTH + 12));
+      await press('intro-pass-on-submit-button');
+
+      expect(api.calls.filter((call) => call.kind === 'mutate')).toEqual([]);
+
+      const container = mounted().container;
+
+      expect(
+        requireElement(container, '[data-testid="intro-via-note-input"]').getAttribute(
+          'aria-invalid',
+        ),
+      ).toBe('true');
+      // The over-by count, so the writer knows how much to cut rather than only that it
+      // is too much. Measured after trimming, exactly as the server measures it.
+      expect(container.textContent).toContain('12 over');
+    });
+
     /*
      * ⚠ Declining sends no reason, because the wire carries none — the via's rationale is
      * theirs, and a field for it would turn a private judgement into something the
@@ -133,9 +252,7 @@ describe('the intro inbox', () => {
     it('declines with the decision and nothing else', async () => {
       const api = await mountInbox([VIA_ROW]);
 
-      await mounted().run(() => {
-        requireElement(mounted().container, '[data-testid="intro-decline-button"]').click();
-      });
+      await press('intro-decline-button');
 
       expect(api.calls.filter((call) => call.kind === 'mutate')).toEqual([
         {
@@ -149,6 +266,26 @@ describe('the intro inbox', () => {
         requireElement(mounted().container, '[data-testid="intro-inbox-confirmation"]')
           .textContent,
       ).toBe('Declined.');
+    });
+
+    it('offers no note field beside Decline, even with the pass-on form open', async () => {
+      const api = await mountInbox([VIA_ROW]);
+
+      // ⚠ Opening the pass-on form must not turn the decline into a "decline with a
+      // reason". The wire's strict decline shape refuses a note on a decline because the
+      // requester is told only that it was not passed on — so whatever is in the field,
+      // declining sends the decision alone.
+      await press('intro-pass-on-button');
+      await writeViaNote('Not for you, sorry.');
+      await press('intro-decline-button');
+
+      expect(api.calls.filter((call) => call.kind === 'mutate')).toEqual([
+        {
+          kind: 'mutate',
+          path: 'intros.decide',
+          input: { introRequestId: 'request-1', decision: 'decline' },
+        },
+      ]);
     });
 
     // An absent card is what the wire sends when the request outlived the relationship
@@ -182,6 +319,58 @@ describe('the intro inbox', () => {
       expect(row.querySelector('[data-testid="intro-decline-button"]')).toBeNull();
     });
 
+    /*
+     * ⚠ **Two notes by two people, each under its own author's card** (#175). Attributing
+     * the via's vouch to the requester would put words in the mouth of the person being
+     * vouched for — which is the one misreading this screen must not permit — so the
+     * notes are two elements with two ledes rather than one joined paragraph.
+     */
+    it('renders both notes, each under its own author', async () => {
+      await mountInbox([TARGET_ROW]);
+
+      const row = requireElement(mounted().container, '[data-testid="intro-inbox-target-row"]');
+      const requesterNote = requireElement(row, '[data-testid="intro-inbox-requester-note"]');
+      const viaNote = requireElement(row, '[data-testid="intro-inbox-via-note"]');
+
+      expect(requesterNote.textContent).toBe('I heard you fix bikes.');
+      expect(viaNote.textContent).toBe('She rebuilt my whole drivetrain in a dust storm.');
+      expect(requesterNote).not.toBe(viaNote);
+
+      // Both names present, and the via's sentence says what they did with it.
+      expect(row.textContent).toContain('Bram');
+      expect(row.textContent).toContain('Bram passed it on:');
+    });
+
+    it('renders the requester’s half alone when the pass-on predates the requirement', async () => {
+      // An introduction passed on before #175 asked for a note carries none, and there is
+      // no placeholder for it: an empty quote attributed to somebody is worse than a note
+      // they never wrote.
+      const { viaNote: _viaNote, ...beforeTheRule } = TARGET_ROW;
+
+      await mountInbox([beforeTheRule]);
+
+      const row = requireElement(mounted().container, '[data-testid="intro-inbox-target-row"]');
+
+      expect(row.querySelector('[data-testid="intro-inbox-requester-note"]')).not.toBeNull();
+      expect(row.querySelector('[data-testid="intro-inbox-via-note"]')).toBeNull();
+      expect(row.textContent).not.toContain('passed it on:');
+    });
+
+    it('keeps the vouch and drops the name when the via is withheld', async () => {
+      // The card is projected on every read, so a via who deactivated after passing it on
+      // arrives withheld — and the words stay, because they were written and delivered.
+      await mountInbox([{ ...TARGET_ROW, via: WITHHELD_VIA }]);
+
+      const container = mounted().container;
+      const row = requireElement(container, '[data-testid="intro-inbox-target-row"]');
+
+      expect(
+        requireElement(row, '[data-testid="intro-inbox-via-note"]').textContent,
+      ).toBe('She rebuilt my whole drivetrain in a dust storm.');
+      expect(row.textContent).toContain('Private connection');
+      expect(container.innerHTML).not.toContain(WITHHELD_VIA.userId);
+    });
+
     it('sits beside an ask without borrowing its controls', async () => {
       await mountInbox([VIA_ROW, TARGET_ROW]);
 
@@ -200,9 +389,9 @@ describe('the intro inbox', () => {
       });
     });
 
-    await mounted().run(() => {
-      requireElement(mounted().container, '[data-testid="intro-pass-on-button"]').click();
-    });
+    await press('intro-pass-on-button');
+    await writeViaNote('They should meet at the tea camp.');
+    await press('intro-pass-on-submit-button');
 
     expect(
       requireElement(mounted().container, '[data-testid="intro-inbox-error"]').textContent,

@@ -125,6 +125,10 @@ export interface AppIntroRequests {
   status: string;
   target_id: string;
   via_id: string;
+  /**
+   * What the via said when they passed the introduction on (issue #175). Null while the request is open, null on a decline — a decline carries no note, so there is nothing the requester could read a rationale out of — and null on a pass-on made before this column existed. Held to exactly the treatment app.intro_requests.note is held to: deliberately NOT indexed and NOT part of any tsvector, and never written to a log line or an outbox payload (ADR-0006).
+   */
+  via_note: string | null;
 }
 
 export interface AppInvitations {

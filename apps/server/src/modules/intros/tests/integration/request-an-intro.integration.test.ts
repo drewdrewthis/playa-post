@@ -41,8 +41,12 @@ import { createIntrosModule, type IntrosModule } from '../../intros.module';
  *    target must not be able to tell "declined" from "never asked", and the honest way to
  *    say that is `toEqual` against somebody for whom nothing ever happened — not an
  *    absent-field check, which goes green the day a field is renamed.
+ *
+ * Issue #175 added the fourth shape rather than a fourth suite: **two distinctive
+ * phrases**, one per note, so every "the text never reaches here" assertion has to hold
+ * for the via's vouch as well as the requester's ask.
  */
-describe('request an intro (request-an-intro.feature, #89)', () => {
+describe('request an intro (request-an-intro.feature, #89 and #175)', () => {
   let testDatabase: PostgresTestDatabase;
   let database: DatabaseConnection;
   let signingKey: SupabaseSigningKeyPair;
@@ -50,6 +54,27 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
   /** Distinctive enough that finding it anywhere is evidence rather than coincidence. */
   const DISTINCTIVE_PHRASE = 'obsidian-marigold-thunderhead';
   const NOTE = `We should talk about the ${DISTINCTIVE_PHRASE}.`;
+
+  /**
+   * The via's own note and its own phrase (issue #175).
+   *
+   * ⚠ **Two phrases, because the row now carries two notes by two people.** Every
+   * "the note never reaches here" assertion has to name both: an outbox payload or a log
+   * line that dropped the requester's ask and kept the via's vouch would satisfy the
+   * one-phrase version of those checks forever.
+   */
+  const DISTINCTIVE_VIA_PHRASE = 'cinnabar-lantern-switchback';
+  const VIA_NOTE = `Worth an hour of yours — the ${DISTINCTIVE_VIA_PHRASE}.`;
+
+  /**
+   * A pass-on, with the note #175 requires on it.
+   *
+   * A helper rather than an inline literal at fifteen call sites, and `as const` is
+   * load-bearing: `intros.decide` takes a discriminated union, so outside an argument
+   * position `decision` widens to `string` and the object matches neither arm.
+   */
+  const passOn = (introRequestId: string) =>
+    ({ introRequestId, decision: 'pass_on', note: VIA_NOTE }) as const;
 
   beforeAll(async () => {
     testDatabase = await startPostgresTestDatabase();
@@ -135,13 +160,14 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
     readonly via_id: string;
     readonly target_id: string;
     readonly note: string;
+    readonly via_note: string | null;
     readonly status: string;
     readonly decided_at: Date | null;
   }
 
   async function introRequestRows(): Promise<readonly StoredIntroRequest[]> {
     const { rows } = await testDatabase.client.query<StoredIntroRequest>(
-      `select id, requester_id, via_id, target_id, note, status, decided_at
+      `select id, requester_id, via_id, target_id, note, via_note, status, decided_at
          from app.intro_requests order by created_at, id`,
     );
     return rows;
@@ -290,6 +316,9 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
       // Trimmed, because the policy's return value is what gets stored — a caller that
       // used its own input instead would leave the trim as advice.
       expect(stored[0]?.note).toBe(NOTE);
+      // Nobody has passed anything on, so there is no via note — and the table's
+      // `via_note is null or status = 'passed_on'` CHECK says there cannot be one.
+      expect(stored[0]?.via_note).toBeNull();
       expect(stored[0]?.status).toBe('requested');
       expect(stored[0]?.decided_at).toBeNull();
 
@@ -301,6 +330,10 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
       expect(forBruno[0]?.requester?.displayName).toBe(alice.handle);
       // A `via` row names both other parties — the via is judging a pairing, not a person.
       expect(forBruno[0]?.target?.userId).toBe(cleo.userId);
+      // ⚠ And it names neither the via nor a via note: this row is an ask still waiting
+      // on them, so a card here could only say "you" and there is no vouch to carry yet.
+      expect(Object.keys(forBruno[0] ?? {})).not.toContain('via');
+      expect(Object.keys(forBruno[0] ?? {})).not.toContain('viaNote');
 
       // ⚠ The target sees nothing at all before the via acts, and their answer is
       // byte-for-byte the answer of somebody in the same position nobody asked about.
@@ -516,7 +549,7 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
         const caller = await callerFor(impostor.authUserId);
         refusals.push(
           await refusalOf(
-            async () => caller.intros.decide({ introRequestId: created.id, decision: 'pass_on' }),
+            async () => caller.intros.decide(passOn(created.id)),
             `${impostor.handle} deciding somebody else's request`,
           ),
         );
@@ -527,7 +560,7 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
       refusals.push(
         await refusalOf(
           async () =>
-            callerBruno.intros.decide({ introRequestId: randomUUID(), decision: 'pass_on' }),
+            callerBruno.intros.decide(passOn(randomUUID())),
           'deciding a request that does not exist',
         ),
       );
@@ -556,17 +589,24 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
         viaUserId: bruno.userId,
         note: NOTE,
       });
-      const decided = await callerBruno.intros.decide({
-        introRequestId: created.id,
-        decision: 'pass_on',
-      });
+      const decided = await callerBruno.intros.decide(passOn(created.id));
       expect(decided.status).toBe('passed_on');
       expect(decided.decidedAt).toBeDefined();
+      // ⚠ The receipt is the acting via's own view of the row and carries **neither**
+      // note: they wrote one of them a second ago, and the other is the requester's.
+      expect(JSON.stringify(decided)).not.toContain(DISTINCTIVE_VIA_PHRASE);
+      expect(JSON.stringify(decided)).not.toContain(DISTINCTIVE_PHRASE);
 
-      for (const decision of ['pass_on', 'decline'] as const) {
-        await expect(
-          callerBruno.intros.decide({ introRequestId: created.id, decision }),
-        ).rejects.toMatchObject({
+      // Both directions, spelled as two whole commands rather than one loop over a
+      // `decision` variable: `intros.decide` takes a discriminated union now, so the two
+      // decisions genuinely do not have one shape to iterate over.
+      const secondAttempts = [
+        passOn(created.id),
+        { introRequestId: created.id, decision: 'decline' },
+      ] as const;
+
+      for (const second of secondAttempts) {
+        await expect(callerBruno.intros.decide(second)).rejects.toMatchObject({
           code: 'NOT_FOUND',
           cause: expect.objectContaining({ code: 'INTRO_UNAVAILABLE' }),
         });
@@ -595,7 +635,7 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
       // concurrency control: the loser blocks on the row, re-evaluates against the
       // committed status, matches nothing, and is refused.
       const outcomes = await Promise.allSettled([
-        callerBruno.intros.decide({ introRequestId: created.id, decision: 'pass_on' }),
+        callerBruno.intros.decide(passOn(created.id)),
         callerBruno.intros.decide({ introRequestId: created.id, decision: 'decline' }),
       ]);
 
@@ -628,7 +668,7 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
       await sever(bruno.userId, cleo.userId);
 
       await expect(
-        callerBruno.intros.decide({ introRequestId: created.id, decision: 'pass_on' }),
+        callerBruno.intros.decide(passOn(created.id)),
       ).rejects.toMatchObject({
         code: 'NOT_FOUND',
         cause: expect.objectContaining({ code: 'INTRO_UNAVAILABLE' }),
@@ -666,7 +706,7 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
       await setReach(cleo.userId, 'first');
 
       await expect(
-        callerBruno.intros.decide({ introRequestId: created.id, decision: 'pass_on' }),
+        callerBruno.intros.decide(passOn(created.id)),
       ).rejects.toMatchObject({
         cause: expect.objectContaining({ code: 'INTRO_UNAVAILABLE' }),
       });
@@ -735,7 +775,7 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
       expect(await callerBruno.intros.listInbox()).toHaveLength(1);
       expect(await callerCleo.intros.listInbox()).toEqual(await callerCass.intros.listInbox());
 
-      await callerBruno.intros.decide({ introRequestId: created.id, decision: 'pass_on' });
+      await callerBruno.intros.decide(passOn(created.id));
 
       const forCleo = await callerCleo.intros.listInbox();
       expect(forCleo).toHaveLength(1);
@@ -743,6 +783,13 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
       expect(forCleo[0]?.note).toBe(NOTE);
       expect(forCleo[0]?.requester?.userId).toBe(alice.userId);
       expect(forCleo[0]?.requester?.displayName).toBe(alice.handle);
+      // ⚠ **Two notes, two authors, both attributed** (#175). The vouch arrives with the
+      // via's own card beside it, because a note the target cannot attribute is worse
+      // than no note — and because the whole point of the requirement is that somebody
+      // they know put their name to it.
+      expect(forCleo[0]?.viaNote).toBe(VIA_NOTE);
+      expect(forCleo[0]?.via?.userId).toBe(bruno.userId);
+      expect(forCleo[0]?.via?.displayName).toBe(bruno.handle);
       // ⚠ No `target` key at all: the target is the reader, so the field could only ever
       // say "you". Absent rather than null, so a client has nothing to render into.
       expect(Object.keys(forCleo[0] ?? {})).not.toContain('target');
@@ -769,7 +816,7 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
         viaUserId: bruno.userId,
         note: NOTE,
       });
-      await callerBruno.intros.decide({ introRequestId: created.id, decision: 'pass_on' });
+      await callerBruno.intros.decide(passOn(created.id));
 
       // dana stands beside cleo — same via, same degree, no involvement. A completed
       // introduction between three of their neighbours must be invisible to them.
@@ -807,7 +854,7 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
         viaUserId: bruno.userId,
         note: NOTE,
       });
-      await callerBruno.intros.decide({ introRequestId: created.id, decision: 'pass_on' });
+      await callerBruno.intros.decide(passOn(created.id));
 
       // ⚠ **The request is the consent.** alice chose to be introduced, so alice's own
       // card is what the target is shown — projected from `app.visible_people(alice,0,1)`,
@@ -832,7 +879,7 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
         viaUserId: bruno.userId,
         note: NOTE,
       });
-      await callerBruno.intros.decide({ introRequestId: created.id, decision: 'pass_on' });
+      await callerBruno.intros.decide(passOn(created.id));
       await deactivate(alice.userId);
 
       // Consent is not a snapshot either. The introduction stays — it was made, and the
@@ -844,6 +891,220 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
       expect(forCleo[0]?.note).toBe(NOTE);
       expect(forCleo[0]?.requester).toBeUndefined();
       expect(JSON.stringify(forCleo[0])).not.toContain(alice.userId);
+    });
+  });
+
+  describe('Scenario: Passing an intro on requires a note of the via’s own (@integration, #175)', () => {
+    /*
+     * ⚠ Two tests below hand `intros.decide` a shape the contract's union makes
+     * unrepresentable, through an `as never` cast, and the cast is the point rather than
+     * a workaround. A typed client cannot send a pass-on with no note or a decline
+     * carrying one — that is exactly what the union buys — so handing the server what
+     * TypeScript would have stopped is the only way to prove the *wire schema* refuses
+     * them. Without it the schema could be deleted and every test here would stay green.
+     */
+
+    it('stores the via’s note on the row and hands it only to the target', async () => {
+      const { alice, bruno, cleo } = await seedSymmetricWorld();
+      const { callerFor } = makeCallers();
+      const callerAlice = await callerFor(alice.authUserId);
+      const callerBruno = await callerFor(bruno.authUserId);
+
+      const created = await callerAlice.intros.request({
+        targetUserId: cleo.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      await callerBruno.intros.decide({
+        introRequestId: created.id,
+        decision: 'pass_on',
+        // Padded, because the trim is the policy's return value and the caller has to
+        // store *that* — otherwise the trim is advice and the target reads the padding.
+        note: `   ${VIA_NOTE}   `,
+      });
+
+      const stored = await introRequestRows();
+      expect(stored).toHaveLength(1);
+      expect(stored[0]?.status).toBe('passed_on');
+      expect(stored[0]?.via_note).toBe(VIA_NOTE);
+      // One row carries both notes and they stay distinguishable: a via note appended to
+      // the requester's would be two people's words under one name.
+      expect(stored[0]?.note).toBe(NOTE);
+
+      // ⚠ The via cannot read their own vouch back on any intros read. It was written to
+      // one person, and a second copy on a surface they can refresh is the copy this
+      // module refuses everywhere else.
+      const backToBruno = JSON.stringify([
+        await callerBruno.intros.listInbox(),
+        await callerBruno.intros.listOutbox(),
+      ]);
+      expect(backToBruno).not.toContain(DISTINCTIVE_VIA_PHRASE);
+    });
+
+    it('refuses a pass-on carrying no note at all, leaving the request open', async () => {
+      const { alice, bruno, cleo } = await seedSymmetricWorld();
+      const { callerFor } = makeCallers();
+      const callerAlice = await callerFor(alice.authUserId);
+      const callerBruno = await callerFor(bruno.authUserId);
+
+      const created = await callerAlice.intros.request({
+        targetUserId: cleo.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+
+      const refusal = await refusalOf(
+        async () =>
+          callerBruno.intros.decide({ introRequestId: created.id, decision: 'pass_on' } as never),
+        'passing an intro on with no note',
+      );
+      expect(refusal.code).toBe('BAD_REQUEST');
+
+      // ⚠ Refused **and nothing written**: the request is still the via's to decide, and
+      // a row that reached `passed_on` while the note write failed would be an
+      // introduction the target reads unvouched.
+      const stored = await introRequestRows();
+      expect(stored[0]?.status).toBe('requested');
+      expect(stored[0]?.decided_at).toBeNull();
+      expect(stored[0]?.via_note).toBeNull();
+      // Only the `IntroRequested` row from the ask itself.
+      expect(await outboxRows()).toHaveLength(1);
+    });
+
+    it('refuses a whitespace-only and an over-long via note with the content code', async () => {
+      const { alice, bruno, cleo } = await seedSymmetricWorld();
+      const { callerFor } = makeCallers();
+      const callerAlice = await callerFor(alice.authUserId);
+      const callerBruno = await callerFor(bruno.authUserId);
+
+      const created = await callerAlice.intros.request({
+        targetUserId: cleo.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+
+      // Both are well-formed strings on the wire and refused by the domain, which is why
+      // they come back as the stable `INTRO_CONTENT_INVALID` rather than a generic
+      // `BAD_REQUEST` — a client puts that message beside the textarea.
+      for (const note of ['   ', 'x'.repeat(INTRO_NOTE_MAX_LENGTH + 1)]) {
+        await expect(
+          callerBruno.intros.decide({ introRequestId: created.id, decision: 'pass_on', note }),
+        ).rejects.toMatchObject({
+          code: 'BAD_REQUEST',
+          cause: expect.objectContaining({ code: 'INTRO_CONTENT_INVALID' }),
+        });
+      }
+
+      expect((await introRequestRows())[0]?.status).toBe('requested');
+      expect(await outboxRows()).toHaveLength(1);
+
+      // The control that keeps the two refusals honest: one character is enough, so the
+      // rule under test is the bound rather than a decide path that refuses everything.
+      await expect(
+        callerBruno.intros.decide({ introRequestId: created.id, decision: 'pass_on', note: 'x' }),
+      ).resolves.toMatchObject({ status: 'passed_on' });
+    });
+
+    it('refuses a decline that carries a note, and stores none on an ordinary one', async () => {
+      const { alice, bruno, cleo } = await seedSymmetricWorld();
+      const { callerFor } = makeCallers();
+      const callerAlice = await callerFor(alice.authUserId);
+      const callerBruno = await callerFor(bruno.authUserId);
+
+      const created = await callerAlice.intros.request({
+        targetUserId: cleo.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+
+      // ⚠ **Refused, not silently dropped.** A decline's rationale has no reader — the
+      // requester is told only that it was not passed on — so accepting the field and
+      // discarding it would let its writer believe otherwise.
+      const refusal = await refusalOf(
+        async () =>
+          callerBruno.intros.decide({
+            introRequestId: created.id,
+            decision: 'decline',
+            note: VIA_NOTE,
+          } as never),
+        'declining with a note',
+      );
+      expect(refusal.code).toBe('BAD_REQUEST');
+      expect((await introRequestRows())[0]?.status).toBe('requested');
+
+      const declined = await callerBruno.intros.decide({
+        introRequestId: created.id,
+        decision: 'decline',
+      });
+      expect(declined.status).toBe('declined');
+
+      const stored = await introRequestRows();
+      expect(stored[0]?.via_note).toBeNull();
+      // And the phrase reaches neither the stored row nor any event.
+      expect(JSON.stringify(await outboxRows())).not.toContain(DISTINCTIVE_VIA_PHRASE);
+    });
+
+    it('leaves the vouch standing, unattributed, when the via deactivates afterwards', async () => {
+      const { alice, bruno, cleo } = await seedSymmetricWorld();
+      const { callerFor } = makeCallers();
+      const callerAlice = await callerFor(alice.authUserId);
+      const callerBruno = await callerFor(bruno.authUserId);
+      const callerCleo = await callerFor(cleo.authUserId);
+
+      const created = await callerAlice.intros.request({
+        targetUserId: cleo.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      await callerBruno.intros.decide(passOn(created.id));
+      await deactivate(bruno.userId);
+
+      // The card is projected on every read (ADR-0002 B11), so it goes when the person
+      // does — and the words stay, because they were written and delivered. The client
+      // renders them under the withheld treatment; what must never happen is a name
+      // reconstructed from the identifier, so the identifier is not there either.
+      const forCleo = await callerCleo.intros.listInbox();
+      expect(forCleo).toHaveLength(1);
+      expect(forCleo[0]?.viaNote).toBe(VIA_NOTE);
+      expect(forCleo[0]?.via).toBeUndefined();
+      expect(JSON.stringify(forCleo[0])).not.toContain(bruno.userId);
+    });
+
+    it('names the via from their own self-projection, not from the target’s world', async () => {
+      const { alice, bruno, cleo } = await seedSymmetricWorld();
+      const { callerFor } = makeCallers();
+      const callerAlice = await callerFor(alice.authUserId);
+      const callerBruno = await callerFor(bruno.authUserId);
+      const callerCleo = await callerFor(cleo.authUserId);
+
+      const created = await callerAlice.intros.request({
+        targetUserId: cleo.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      await callerBruno.intros.decide(passOn(created.id));
+
+      // The via and the target part company after the introduction is made. `app.
+      // visible_people(target)` no longer contains the via at all — and the vouch is
+      // still signed, because choosing to pass an intro on is choosing to be seen by the
+      // target as its via. The same consent inversion the requester's card rests on.
+      await sever(bruno.userId, cleo.userId);
+      const gone = await testDatabase.client.query(
+        `select 1 from app.visible_people($1) where user_id = $2`,
+        [cleo.userId, bruno.userId],
+      );
+      expect(
+        gone.rowCount,
+        'the scenario is only meaningful once the target cannot otherwise see the via',
+      ).toBe(0);
+
+      const forCleo = await callerCleo.intros.listInbox();
+      expect(forCleo[0]?.viaNote).toBe(VIA_NOTE);
+      expect(forCleo[0]?.via?.userId).toBe(bruno.userId);
+      // Their own `full` self-disclosure, projected through `app.visible_people` — never
+      // a join to `app.users` (ADR-0002 §6a).
+      expect(forCleo[0]?.via?.disclosure).toBe('full');
+      expect(forCleo[0]?.via?.displayName).toBe(bruno.handle);
     });
   });
 
@@ -900,7 +1161,7 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
         viaUserId: bruno.userId,
         note: NOTE,
       });
-      await callerBruno.intros.decide({ introRequestId: toCleo.id, decision: 'pass_on' });
+      await callerBruno.intros.decide(passOn(toCleo.id));
 
       const toCass = await callerAlice.intros.request({
         targetUserId: cass.userId,
@@ -940,6 +1201,11 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
       // read; a consumer re-reads the note through this module's authorized reads or it
       // does not get it at all (M2-AC16, PDF §6).
       expect(JSON.stringify(events)).not.toContain(DISTINCTIVE_PHRASE);
+      // ⚠ **And the via's vouch, which is the one a consumer would most want** (#175):
+      // "someone you know passed an intro on and said this" is exactly the push body
+      // nobody may build, because the outbox outlives the visibility state that allowed
+      // it. The row carries the identifiers; the words stay behind the authorized read.
+      expect(JSON.stringify(events)).not.toContain(DISTINCTIVE_VIA_PHRASE);
     });
 
     it('leaves neither the row nor the event when the event write fails', async () => {
@@ -1000,7 +1266,7 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
         viaUserId: bruno.userId,
         note: NOTE,
       });
-      await callerBruno.intros.decide({ introRequestId: toCleo.id, decision: 'pass_on' });
+      await callerBruno.intros.decide(passOn(toCleo.id));
 
       const toCass = await callerAlice.intros.request({
         targetUserId: cass.userId,
@@ -1017,6 +1283,9 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
       expect(lines.some((line) => line.includes('log capture probe'))).toBe(true);
 
       expect(lines.join('\n')).not.toContain(DISTINCTIVE_PHRASE);
+      // Both notes, for the reason the two phrases exist: a logger that redacted the ask
+      // and printed the vouch would pass the single-phrase version of this forever.
+      expect(lines.join('\n')).not.toContain(DISTINCTIVE_VIA_PHRASE);
     });
   });
 
@@ -1032,7 +1301,7 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
         viaUserId: bruno.userId,
         note: NOTE,
       });
-      await callerBruno.intros.decide({ introRequestId: toCleo.id, decision: 'pass_on' });
+      await callerBruno.intros.decide(passOn(toCleo.id));
 
       const toCass = await callerAlice.intros.request({
         targetUserId: cass.userId,
@@ -1067,6 +1336,13 @@ describe('request an intro (request-an-intro.feature, #89)', () => {
         // is not owed the second.
         expect(JSON.stringify(row)).not.toContain(DISTINCTIVE_PHRASE);
         expect(Object.keys(row)).not.toContain('note');
+        // ⚠ **And no via note on the passed-on row** (#175), which is a stronger rule
+        // than the one above rather than the same one twice: the via wrote those words to
+        // the target, *about* the requester. Showing them here would turn a vouch into
+        // something the person being vouched for reads over the writer's shoulder, and
+        // nobody writes an honest one twice.
+        expect(JSON.stringify(row)).not.toContain(DISTINCTIVE_VIA_PHRASE);
+        expect(Object.keys(row)).not.toContain('viaNote');
       }
 
       const open = outbox.find((row) => row.status === 'requested');
