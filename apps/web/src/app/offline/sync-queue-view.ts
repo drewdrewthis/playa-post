@@ -48,7 +48,7 @@ const TONE: Record<PendingMutationState, QueueTone> = {
  */
 const NOUN: Record<string, string> = {
   'bulletin.create': 'Bulletin',
-  'bulletin.archive': 'Archived bulletin',
+  'bulletin.archive': 'Removed bulletin',
   'note.pin': 'Note',
 };
 

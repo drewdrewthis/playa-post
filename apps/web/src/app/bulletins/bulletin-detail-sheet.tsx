@@ -305,10 +305,10 @@ export function BulletinDetailSheet({
                 onArchive(card);
               }}
             >
-              {/* "Archive", not the comp's "Delete post": the server soft-deletes, the
+              {/* "Remove", not the comp's "Delete post": the server soft-deletes, the
                   bulletin stays on its author's own list, and a button that said delete
                   would promise an erasure that did not happen. */}
-              Archive post
+              Remove post
             </button>
           ) : (
             <>

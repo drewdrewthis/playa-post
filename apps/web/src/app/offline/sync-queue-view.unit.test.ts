@@ -43,7 +43,7 @@ describe('the sync queue, as the You screen shows it', () => {
       expect(
         describeQueuedMutation(row({ mutationType: 'bulletin.archive', payload: { bulletinId: 'b1' } }))
           .text,
-      ).toBe('Archived bulletin');
+      ).toBe('Removed bulletin');
     });
 
     /** A type this build does not know about is still work the user is owed an account of. */

@@ -28,7 +28,7 @@ import { BULLETIN_TYPE, type BulletinType } from '@playa-post/contracts';
  * `afterEach` also archives the three composed bulletins, for the same shared-database
  * reason but a different mechanism: bulletins have no hard delete, only the
  * author-visible archive (`bulletin-detail-sheet.tsx`'s own comment on why the button
- * reads "Archive", not "Delete"). A *filtered* board excludes even its author's own
+ * reads "Remove", not "Delete"). A *filtered* board excludes even its author's own
  * archived bulletins — unlike the unfiltered board, which still shows them, marked
  * (`visible-bulletins.sql`'s `archived_at is null`; `board.tsx`'s doc comment on why the
  * `listMine` union only fires unfiltered) — so an unarchived leftover here would widen a

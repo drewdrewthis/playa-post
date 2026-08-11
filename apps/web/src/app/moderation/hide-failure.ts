@@ -49,7 +49,7 @@ const TARGET_UNAVAILABLE = 'MODERATION_TARGET_UNAVAILABLE';
  * length mirror ever drifts below the server's.
  */
 const REPORT_REFUSAL: Readonly<Record<string, string>> = {
-  BULLETIN_REPORT_OWN_NOT_ALLOWED: 'You wrote that bulletin. Archive it instead of reporting it.',
+  BULLETIN_REPORT_OWN_NOT_ALLOWED: 'You wrote that bulletin. Remove it instead of reporting it.',
   REPORT_DETAIL_INVALID:
     'The stewards need an account of what happened. Yours was blank or too long.',
 };

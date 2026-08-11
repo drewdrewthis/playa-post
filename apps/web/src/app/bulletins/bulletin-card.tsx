@@ -61,8 +61,8 @@ export function BulletinCard({
         <span className="bulletin-card__header">
           <span className="bulletin-card__type">{card.type}</span>
 
-          {/* The comp's pill slot. Archived is the only state this app has to put in it. */}
-          {card.archived ? <span className="bulletin-card__archived">Archived</span> : null}
+          {/* The comp's pill slot. Removed is the only state this app has to put in it. */}
+          {card.archived ? <span className="bulletin-card__archived">Removed</span> : null}
 
           {age === null ? null : <span className="bulletin-card__time">{age}</span>}
         </span>

@@ -83,6 +83,12 @@ Corollaries, recorded so the model is deliberate rather than accidental:
 - **"Cannot see" is not "not enrolled".** With no service worker registered — a `pnpm dev` run, or the seconds a fresh install spends registering one — nothing is claimed and nothing is forgotten. A settled read that answered "not enrolled" there would clear a working device's marker on a race.
 - **Unavailable storage costs a flash, never a failure.** A locked-down profile throws on `localStorage` access; every read and write is guarded, an unreadable marker reads as empty, and correctness is unaffected because the subscription is still the authority. That device pays one frame of consent copy per panel opening.
 
+## D9 — The bulletin-removal action is called "Remove"; removed bulletins stay visible to their author (2026-08-11)
+
+Conflict: [#168](https://github.com/drewdrewthis/playa-post/issues/168) — the owner asked that "Archive should be remove and can be soft deleted." The action already soft-deletes (`Bulletin.archivedAt`), so only the name was wrong; but renaming reopened whether a removed bulletin should keep appearing, marked, on its author's own board.
+
+Decision: **rename the copy only; keep the current visibility semantics.** Every user-facing surface of this action now says "Remove"/"Removed" — the detail sheet's button, the card's pill, the offline sync queue's row label, and the report-own-bulletin refusal copy. The mechanism is unchanged: `archivedAt` soft delete, no hard delete, and a removed bulletin remains visible to its author, marked as removed, exactly as before. Any change to those semantics — including whether removal should eventually hide the bulletin from its author, and how long soft-deleted rows live — is deferred to [#169](https://github.com/drewdrewthis/playa-post/issues/169) (uniform soft delete + purge), which owns that model as a whole. Internal identifiers (`archivedAt`, `bulletins.archive`, `bulletin-archive-button`, `data-archived`) keep their names: they describe the mechanism, not the copy, and renaming them would churn the API contract and stored offline mutations for no user-visible gain.
+
 ---
 
 Escalation threshold for future decisions: addendum §24. Anything touching user experience, trust/privacy model, irreversible data constraints, significant operational cost, or custom infrastructure goes back to the owner.
