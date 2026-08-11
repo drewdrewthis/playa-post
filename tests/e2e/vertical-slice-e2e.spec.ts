@@ -425,6 +425,15 @@ test.describe('Opening a note and answering it (pin-a-note.feature, #176)', () =
         const sheet = pageB.getByTestId('note-detail-sheet');
         await expect(sheet).toBeVisible();
         await expect(sheet).toContainText(NOTE_BODY);
+
+        // Same evidence contract as `E2E_SHEET_SCREENSHOT_PATH` above: only a local
+        // evidence run sets the env var, and it photographs the open note sheet with
+        // the pin-back control showing. A normal run writes nothing.
+        const noteShotPath = process.env['E2E_NOTE_SHEET_SCREENSHOT_PATH'];
+        if (noteShotPath !== undefined && noteShotPath !== '') {
+          await expect(sheet.getByTestId('note-detail-pin-back-link')).toBeVisible();
+          await pageB.screenshot({ path: noteShotPath, animations: 'disabled' });
+        }
       });
 
       await test.step('The expanded view offers to pin one back, addressed to its author', async () => {
