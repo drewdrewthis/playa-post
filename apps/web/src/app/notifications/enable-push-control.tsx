@@ -1,8 +1,13 @@
-import { useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 
 import { useApi } from '../api/api-provider';
 
-import { enablePush, readPushEnrollment, type PushEnrollment } from './enable-push';
+import {
+  enablePush,
+  readPushEnrollment,
+  settlePushEnrollment,
+  type PushEnrollment,
+} from './enable-push';
 
 /**
  * The consent line, said before the browser's own prompt appears.
@@ -45,24 +50,59 @@ const FAILED_LINE = 'That did not go through. Try again.';
  * including the people who opened the app to post.
  *
  * **Renders nothing at all** when the browser has no Push API, when this build
- * registered no service worker, or when no `VITE_VAPID_PUBLIC_KEY` was configured — see
- * {@link PushEnrollment}. A control that cannot work is worse than no control: it
- * teaches that the feature is broken rather than absent.
+ * registered no service worker, when no `VITE_VAPID_PUBLIC_KEY` was configured, or when
+ * this device has recently waved the browser's prompt away — see {@link PushEnrollment}.
+ * A control that cannot work is worse than no control: it teaches that the feature is
+ * broken rather than absent.
+ *
+ * **The enrolment is read twice, and the second read wins.** {@link readPushEnrollment}
+ * paints synchronously from what this device remembers, so a device that enrolled last
+ * week shows the enrolled line on the first frame rather than flashing consent copy at
+ * somebody who has already consented; {@link settlePushEnrollment} then asks the browser
+ * what it is actually holding and corrects. Before issue #167 there was only the first
+ * read and no memory behind it, so every reload re-offered push to devices that had it.
  *
  * ⚠ **The press is the user gesture.** {@link enablePush} must run inside one — browsers
  * refuse to show the permission prompt otherwise, and Chrome holds a
  * without-a-gesture ask against the origin permanently. Nothing here may move that call
- * into an effect.
+ * into an effect. The effect below is safe *because* {@link settlePushEnrollment} only
+ * reads; it never asks.
  */
 export function EnablePushControl(): JSX.Element | null {
   const api = useApi();
-  // Read once, on mount: the answer changes only as a result of the press below, and
-  // re-reading per render would re-run a feature detect for nothing.
+  // The first paint's answer, from support, permission, and this device's own marker —
+  // no awaiting, because a control that appears one tick after the panel opens is a
+  // control that moves under a thumb already travelling towards it.
   const [enrollment, setEnrollment] = useState<PushEnrollment>(() => readPushEnrollment());
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
 
+  // ⚠ The press outranks the mount-time read. A settle resolving after a successful
+  // enable would revert the enrolled line to the offer it had just replaced — a ref
+  // rather than state, because nothing renders differently for knowing.
+  const pressed = useRef(false);
+
+  useEffect(() => {
+    let live = true;
+
+    void settlePushEnrollment()
+      .then((settled) => {
+        if (live && !pressed.current) {
+          setEnrollment(settled);
+        }
+      })
+      .catch(() => {
+        // A browser that cannot answer leaves the synchronous read standing. There is
+        // nothing to tell the reader: they asked for their notifications, not for this.
+      });
+
+    return () => {
+      live = false;
+    };
+  }, []);
+
   async function enable(): Promise<void> {
+    pressed.current = true;
     setPending(true);
     setFailed(false);
 
@@ -80,7 +120,11 @@ export function EnablePushControl(): JSX.Element | null {
     }
   }
 
-  if (enrollment === 'unsupported' || enrollment === 'not-configured') {
+  if (
+    enrollment === 'unsupported' ||
+    enrollment === 'not-configured' ||
+    enrollment === 'dismissed'
+  ) {
     return null;
   }
 
