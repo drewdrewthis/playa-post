@@ -66,7 +66,9 @@ export class IntroDeclineCarriesNoNoteError extends ApplicationError {
  * a `viaUserId` that is a real first-degree connection but not a shared one, and a
  * request that is already open for the pair. And on the decide path: no such request,
  * a request that is not yours to decide, one already decided, and one whose eligibility
- * has lapsed since it was made.
+ * has lapsed since it was made. And on the respond path (#166): no such request, one that
+ * is not yours to answer, one the via has not passed on — including one they declined,
+ * which a target must never be able to detect — and one already answered.
  *
  * Serializing every one of those responses into a `Set` must yield exactly one element.
  * Distinguishing any of them would answer "yes, that UUID names somebody real" — or

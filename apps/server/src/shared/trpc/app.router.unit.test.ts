@@ -69,6 +69,7 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
       listIntroInbox: { list: unreachable },
       listIntroOutbox: { list: unreachable },
       decideIntro: { decide: unreachable },
+      respondToIntro: { respond: unreachable },
     }),
     moderation: createModerationRouter({
       reportBulletin: { report: unreachable },

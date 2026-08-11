@@ -36,7 +36,7 @@ const unreachable = (): Promise<never> =>
   Promise.reject(new Error('no procedure is invoked by this router'));
 
 /** How many procedures the assembled router serves. Asserted, never inferred. */
-export const EXPECTED_PROCEDURE_COUNT = 35;
+export const EXPECTED_PROCEDURE_COUNT = 36;
 
 /** Build the whole ten-module router with no infrastructure behind it. */
 export function buildNullObjectAppRouter(): ReturnType<typeof createAppRouter> {
@@ -70,6 +70,7 @@ export function buildNullObjectAppRouter(): ReturnType<typeof createAppRouter> {
       listIntroInbox: { list: unreachable },
       listIntroOutbox: { list: unreachable },
       decideIntro: { decide: unreachable },
+      respondToIntro: { respond: unreachable },
     }),
     moderation: createModerationRouter({
       reportBulletin: { report: unreachable },

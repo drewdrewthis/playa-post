@@ -4,8 +4,10 @@ import type { IntroPerson } from '@playa-post/contracts';
 
 import {
   askViaLabel,
+  INTRO_ANSWER_LINE,
   INTRO_CONSENT_LINE,
   INTRO_NOT_PASSED_ON_LINE,
+  INTRO_RESPONSE_CONFIRMATION_LINE,
   INTRO_VIA_NOTE_LINE,
   INTRO_VOUCHED_LINE,
   introPendingLabel,
@@ -136,5 +138,46 @@ describe('introRefusalMessage', () => {
 
   it('shows an unknown code rather than swallowing it', () => {
     expect(introRefusalMessage('SOMETHING_NEW')).toContain('SOMETHING_NEW');
+  });
+});
+
+describe('the target’s two answers (issue #166)', () => {
+  /*
+   * ⚠ **This line is what makes "no" a real option.** An introduction arrives from
+   * somebody the reader knows, about somebody they do not, and a reader who does not know
+   * that refusing reaches nobody is a reader under obligation. It is the counterpart to
+   * `INTRO_CONSENT_LINE` from the other end of the hop.
+   */
+  it('tells the target what each answer does before they press either', () => {
+    expect(INTRO_ANSWER_LINE).toContain('Accepting connects you');
+    expect(INTRO_ANSWER_LINE).toContain('Declining tells nobody');
+    // Both the people a decline could plausibly be reported to are named as not being
+    // told: the requester, and the mutual connection who passed it on.
+    expect(INTRO_ANSWER_LINE).toContain('passed it on');
+  });
+
+  /*
+   * ⚠ **The acceptance line must not claim the connection already exists.** The server
+   * records the answer and forms the edge from it moments later (decision D12) — so a
+   * present-tense promise would be false for as long as that takes, and would send
+   * somebody to a graph that has not caught up.
+   */
+  it('says an acceptance is under way rather than already done', () => {
+    const line = INTRO_RESPONSE_CONFIRMATION_LINE.accept;
+
+    expect(line).toContain('being connected');
+    expect(line).not.toMatch(/you are now connected|you’re connected|are connected\./i);
+  });
+
+  it('says a decline reached nobody, which is the reassurance worth repeating', () => {
+    expect(INTRO_RESPONSE_CONFIRMATION_LINE.decline).toContain('Nobody is told');
+  });
+
+  it('keeps the target’s confirmations apart from the via’s', () => {
+    // Two maps rather than four keys on one, because the two actors' answers mean
+    // different things and share only the word "decline". One map keyed by four strings is
+    // a rename away from putting a via's confirmation on a target's row.
+    expect(Object.keys(INTRO_RESPONSE_CONFIRMATION_LINE).sort()).toEqual(['accept', 'decline']);
+    expect(INTRO_RESPONSE_CONFIRMATION_LINE.decline).not.toBe('Declined.');
   });
 });

@@ -21,6 +21,14 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
  * via's own**, so B's decision is now two presses and C's row carries two notes by two
  * people. Walk 1's decline is untouched — a decline carries no note and never will.
  *
+ * Issue #166 gave walk 2 its third: **C accepts, and the introduction becomes a
+ * connection.** That last step is the only one in this file that is not synchronous —
+ * accepting writes the answer and an `IntroAccepted` event in one transaction, and
+ * `modules/connections` forms the edge from that event on the drainer's next round
+ * (decision D12). So the assertion polls a reloaded graph rather than reading it once:
+ * a single read would be racing a delivery the design deliberately does not make
+ * immediate.
+ *
  * ⚠ One browser context lives at a time. Three concurrent contexts each pulling the
  * whole Vite dev module graph starved Chromium into `ERR_INSUFFICIENT_RESOURCES`
  * (blank pages that never mount). The journey is strictly sequential anyway, so each
@@ -220,6 +228,50 @@ test.describe('asking for an intro through a shared connection', () => {
         await expect(targetRow.getByTestId('intro-inbox-via-note')).toContainText(
           'A fixes bikes and C needs one fixed.',
         );
+      });
+    });
+
+    await test.step('walk 2 — C accepts, and the introduction becomes a connection', async () => {
+      const userAHandle = requireEnv('E2E_USER_A_HANDLE');
+
+      await withUser(browser, userCAccessToken, async (pageC) => {
+        await pageC.goto('/graph');
+        await expect(pageC.getByTestId('graph-home')).toBeVisible({ timeout: 20_000 });
+
+        // ⚠ Before the press: A is not on C's graph at all. The two have never been
+        // connected, and C's whole reason for having a row to answer is that A was
+        // disclosed by the introduction rather than by the graph.
+        await expect(pageC.getByTestId(`graph-connection-node-${userAHandle}`)).toHaveCount(0);
+
+        const targetRow = pageC.getByTestId('intro-inbox-target-row');
+        await expect(targetRow).toBeVisible({ timeout: 15_000 });
+        await targetRow.getByTestId('intro-accept-button').click();
+
+        // The row leaves the inbox — an inbox is what is waiting on you — and the live
+        // region says so, because a card that vanishes under the finger with nothing said
+        // reads as a failure.
+        await expect(pageC.getByTestId('intro-inbox-target-row')).toHaveCount(0);
+        await expect(pageC.getByTestId('intro-inbox-confirmation')).toContainText(
+          'being connected',
+        );
+      });
+
+      await withUser(browser, userCAccessToken, async (pageC) => {
+        // ⚠ **Polled with a reload, and the poll is the point.** The edge is written by
+        // the outbox drainer's own round (decision D12), so this is the one assertion in
+        // the file that has to outlast a delivery. `toPass` re-runs the whole reload, which
+        // is what a person refreshing their graph would do.
+        await expect(async () => {
+          await pageC.goto('/graph');
+          await expect(pageC.getByTestId('graph-home')).toBeVisible({ timeout: 20_000 });
+          await expect(
+            pageC.getByTestId(`graph-connection-node-${userAHandle}`),
+          ).toBeVisible({ timeout: 2_000 });
+        }).toPass({ timeout: 30_000 });
+
+        // A direct edge, not merely a node: C is now connected to A rather than seeing
+        // them at a distance, which is the whole of what accepting bought.
+        await expect(pageC.getByTestId(`graph-connection-edge-${userAHandle}`)).toBeVisible();
       });
     });
   });

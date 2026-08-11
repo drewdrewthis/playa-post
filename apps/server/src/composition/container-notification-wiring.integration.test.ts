@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { startPostgresTestDatabase, type PostgresTestDatabase } from '@playa-post/testing';
 
+import { CONNECT_INTRODUCED_PAIR_CONSUMER } from '../modules/connections/persistence/postgres-connect-introduced-pair.handler';
 import { DELIVER_NOTE_PINNED_CONSUMER } from '../modules/notifications/application/deliver-note-pinned.handler';
 
 import type { Configuration } from './config';
@@ -110,6 +111,69 @@ describe('buildAppContainer outbox consumer registration', () => {
         [DELIVER_NOTE_PINNED_CONSUMER, eventId],
       );
       expect(rows[0]?.count).toBe('1');
+    });
+  });
+
+  describe('Scenario: An accepted introduction connects two people through this container (#166)', () => {
+    it('drains IntroAccepted into a real app.connections row', async () => {
+      const requester = await seedOnboardedUser('dusty_wired_requester');
+      const target = await seedOnboardedUser('dusty_wired_target');
+      const via = await seedOnboardedUser('dusty_wired_via');
+      const { rows: introRows } = await testDatabase.client.query<{ id: string }>(
+        `insert into app.intro_requests
+           (requester_id, via_id, target_id, note, via_note, status,
+            created_at, decided_at, responded_at)
+         values ($1, $2, $3, 'why we should meet', 'worth an hour', 'accepted',
+                 now(), now(), now())
+         returning id`,
+        [requester, via, target],
+      );
+      const introRequestId = introRows[0]?.id;
+      if (introRequestId === undefined) {
+        throw new Error('intro request insert returned no row');
+      }
+
+      // `app.outbox_events` directly, the same sanctioned seam the scenario above uses:
+      // identifiers only and no note of either kind, which is the shape `modules/intros`
+      // actually writes.
+      const eventId = randomUUID();
+      await testDatabase.client.query(
+        `insert into app.outbox_events
+           (event_id, event_type, occurred_at, actor_id, aggregate_id, payload)
+         values ($1, 'IntroAccepted', now(), $2, $3, $4::jsonb)`,
+        [
+          eventId,
+          target,
+          introRequestId,
+          JSON.stringify({ introRequestId, requesterId: requester, viaId: via, targetId: target }),
+        ],
+      );
+
+      const result = await container.outboxDrainer.drainOnce();
+
+      expect(result.claimedEventIds).toContain(eventId);
+
+      // ⚠ **The connection itself, not just the receipt**, and that is the difference from
+      // the scenario above. Decision D12 makes this event the only thing that forms the
+      // edge, so an unregistered consumer here is not a late connection — it is a feature
+      // that silently does not exist, with every module-level suite still green because
+      // each of those wires its own module by hand.
+      const { rows: connections } = await testDatabase.client.query<{ count: string }>(
+        `select count(*)::text as count
+           from app.connections
+          where status = 'accepted'
+            and ((user_a_id = $1 and user_b_id = $2) or (user_a_id = $2 and user_b_id = $1))`,
+        [requester, target],
+      );
+      expect(connections[0]?.count).toBe('1');
+
+      const { rows: receipts } = await testDatabase.client.query<{ count: string }>(
+        `select count(*)::text as count
+           from app.consumer_receipts
+          where consumer_name = $1 and event_id = $2`,
+        [CONNECT_INTRODUCED_PAIR_CONSUMER, eventId],
+      );
+      expect(receipts[0]?.count).toBe('1');
     });
   });
 });

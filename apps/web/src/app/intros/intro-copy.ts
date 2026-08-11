@@ -80,6 +80,57 @@ export const INTRO_DECISION_CONFIRMATION_LINE = {
 } as const;
 
 /**
+ * What the **target** reads after answering an introduction, keyed by their answer (#166).
+ *
+ * Its own map rather than two more keys on the one above, because the two actors' answers
+ * mean different things and share only the word "decline" — and because a single map
+ * keyed by four strings is one rename away from putting a via's confirmation on a
+ * target's row.
+ *
+ * ⚠ **The acceptance line does not claim the connection has already happened.** It has
+ * not: the server records the answer and forms the edge from it moments later (decision
+ * D12), so "you are now connected" would be false for as long as it takes and would send
+ * somebody to a graph that has not caught up. Saying what is about to happen costs
+ * nothing and is true when it is read.
+ *
+ * ⚠ **The decline line says who is told, because the answer is nobody.** That is the
+ * whole reason declining is safe — the requester cannot tell a refusal from an
+ * introduction nobody has opened — and somebody deciding whether to press it is exactly
+ * who needs to know.
+ */
+export const INTRO_RESPONSE_CONFIRMATION_LINE = {
+  accept: 'Accepted — you are being connected. They will appear on your graph shortly.',
+  decline: 'Declined. Nobody is told, nothing is connected, and this introduction is closed.',
+} as const;
+
+/** The target's accept control. */
+export const INTRO_ACCEPT_LABEL = 'Accept';
+
+/**
+ * The target's decline control.
+ *
+ * ⚠ **"Decline", not "Not now".** The answer is terminal-once — the row leaves the inbox,
+ * `target_declined` is final, and a second answer is refused — so a label promising
+ * deferral would be a lie told at the exact moment the reader is deciding whether to
+ * refuse. The consent argument this feature rests on requires the refusal control to mean
+ * what it says.
+ */
+export const INTRO_TARGET_DECLINE_LABEL = 'Decline';
+
+/**
+ * The line above the target's two controls, before either is pressed.
+ *
+ * ⚠ **Load-bearing, and the second sentence more than the first.** An introduction
+ * arrives from somebody the reader knows, about somebody they do not, and the pressure to
+ * be polite is the thing that makes an intro product turn into an obligation. Saying
+ * plainly that a refusal reaches nobody is what makes "no" a real option — the same
+ * property `INTRO_CONSENT_LINE` states from the other end, where saying yes is what the
+ * reader has to understand before they act.
+ */
+export const INTRO_ANSWER_LINE =
+  'Accepting connects you. Declining tells nobody — not them, and not whoever passed it on.';
+
+/**
  * The line above the note field, before anything is sent.
  *
  * ⚠ **Load-bearing, not decoration.** Sending an intro request *is* consent to be seen:

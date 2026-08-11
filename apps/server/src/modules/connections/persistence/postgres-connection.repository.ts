@@ -128,7 +128,7 @@ export function createPostgresConnectionRepository(
         const connection = toConnection(inserted);
         const event = connectionAccepted(connection, {
           actorId: write.inviteeId,
-          invitationId: write.invitation.id,
+          origin: { invitationId: write.invitation.id },
         });
 
         // The outbox row rides the same transaction as the connection it describes —
@@ -157,7 +157,12 @@ export function createPostgresConnectionRepository(
             // then have to parse twice. `pg` serializes the object itself.
             payload: {
               connectionId: event.connectionId,
-              invitationId: event.invitationId,
+              // From the invite being spent rather than off the event: since #166
+              // `ConnectionAccepted.invitationId` is one arm of a union and is absent on
+              // an introduction-formed connection, so reading it here would type as
+              // `string | undefined` and could serialize a payload with no origin at all.
+              // On this path there is always exactly one invite, and it is right here.
+              invitationId: write.invitation.id,
               userAId: event.userAId,
               userBId: event.userBId,
             },

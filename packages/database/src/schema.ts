@@ -120,7 +120,11 @@ export interface AppIntroRequests {
   note: string;
   requester_id: string;
   /**
-   * requested -> passed_on | declined. Both decisions are terminal for #89.
+   * When the target accepted or declined (issue #166). Null until they do, and never a copy of decided_at, which belongs to the via. NOT carried on the requester's own read: a target who could be seen refusing cannot safely refuse, so intros.listOutbox reports the via's decision only and a declined introduction is indistinguishable there from one nobody has answered yet.
+   */
+  responded_at: Timestamp | null;
+  /**
+   * requested -> passed_on | declined, and passed_on -> accepted | target_declined (issue #166). The via decides whether the introduction happens; the target decides what to do with the one they were given. Accepting emits IntroAccepted, which modules/connections consumes to write the connection (decision D12) — this table never names app.connections.
    */
   status: string;
   target_id: string;

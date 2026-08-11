@@ -67,6 +67,28 @@ describe('app.intro_requests and app.intro_via_candidates — issue #89', () => 
     );
   }
 
+  /**
+   * Insert with an explicit `responded_at`, so `intro_requests_responded_at` is the only
+   * constraint that can refuse the row (issue #166).
+   *
+   * `decided_at` is always supplied because an answered row was necessarily passed on
+   * first, and `intro_requests_decided_at` would otherwise refuse it for the wrong reason.
+   */
+  async function insertAnswered(
+    requesterId: string,
+    viaId: string,
+    targetId: string,
+    status: string,
+    respondedAt: string | null,
+  ): Promise<void> {
+    await database.client.query(
+      `insert into app.intro_requests
+         (requester_id, via_id, target_id, note, status, created_at, decided_at, responded_at)
+       values ($1, $2, $3, 'why we should meet', $4, now(), now(), $5)`,
+      [requesterId, viaId, targetId, status, respondedAt],
+    );
+  }
+
   describe('app.intro_requests', () => {
     it('exists as a table in schema app', async () => {
       const { rows } = await database.client.query<{ exists: boolean }>(
@@ -146,7 +168,7 @@ describe('app.intro_requests and app.intro_via_candidates — issue #89', () => 
       );
     });
 
-    it('refuses a status outside the three shipped values', async () => {
+    it('refuses a status outside the five shipped values', async () => {
       const [requester, via, target] = await seedUsers(3);
       if (requester === undefined || via === undefined || target === undefined) {
         throw new Error('seedUsers returned too few rows');
@@ -157,6 +179,29 @@ describe('app.intro_requests and app.intro_via_candidates — issue #89', () => 
       await expect(
         insertIntroRequest(requester, via, target, 'withdrawn', new Date().toISOString()),
       ).rejects.toThrow(/intro_requests_status/);
+    });
+
+    it('accepts the two target answers #166 added, and only from the vocabulary it widened', async () => {
+      const [requester, via, targetOne, targetTwo] = await seedUsers(4);
+      if (
+        requester === undefined ||
+        via === undefined ||
+        targetOne === undefined ||
+        targetTwo === undefined
+      ) {
+        throw new Error('seedUsers returned too few rows');
+      }
+
+      // The positive half. Without it the widened CHECK could have been deleted outright
+      // and the negative test above would still pass.
+      for (const [status, target] of [
+        ['accepted', targetOne],
+        ['target_declined', targetTwo],
+      ] as const) {
+        await expect(
+          insertAnswered(requester, via, target, status, new Date().toISOString()),
+        ).resolves.toBeUndefined();
+      }
     });
 
     it('refuses a decided row with no decided_at, and an open row that has one', async () => {
@@ -220,6 +265,91 @@ describe('app.intro_requests and app.intro_via_candidates — issue #89', () => 
       await expect(insertIntroRequest(requester, viaTwo, target)).resolves.toBeUndefined();
     });
 
+    describe('responded_at (issue #166)', () => {
+      it('exists as a nullable timestamptz column', async () => {
+        const { rows } = await database.client.query<{
+          data_type: string;
+          is_nullable: string;
+        }>(
+          `select a.atttypid::pg_catalog.regtype::text as data_type,
+                  case when a.attnotnull then 'NO' else 'YES' end as is_nullable
+             from pg_catalog.pg_attribute a
+             join pg_catalog.pg_class c on c.oid = a.attrelid
+             join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = 'app' and c.relname = 'intro_requests'
+              and a.attname = 'responded_at'`,
+        );
+
+        // Nullable, because every row starts unanswered — including every row that
+        // existed before this column did.
+        expect(rows[0]?.data_type).toBe('timestamp with time zone');
+        expect(rows[0]?.is_nullable).toBe('YES');
+      });
+
+      it('refuses an answered row with no answer time, and an unanswered one that has one', async () => {
+        const [requester, via, target] = await seedUsers(3);
+        if (requester === undefined || via === undefined || target === undefined) {
+          throw new Error('seedUsers returned too few rows');
+        }
+
+        // ⚠ Both directions, because the constraint is an equality — an honest one here,
+        // unlike `intro_requests_via_note`'s implication, because there were no answered
+        // rows to keep valid before this migration. A later editor rewriting it as one
+        // implication would leave half of it enforced.
+        await expect(insertAnswered(requester, via, target, 'accepted', null)).rejects.toThrow(
+          /intro_requests_responded_at/,
+        );
+        await expect(
+          insertAnswered(requester, via, target, 'passed_on', new Date().toISOString()),
+        ).rejects.toThrow(/intro_requests_responded_at/);
+        await expect(
+          insertAnswered(requester, via, target, 'declined', new Date().toISOString()),
+        ).rejects.toThrow(/intro_requests_responded_at/);
+      });
+
+      it('leaves the via’s decision time alone — the two are different people’s timestamps', async () => {
+        const [requester, via, target] = await seedUsers(3);
+        if (requester === undefined || via === undefined || target === undefined) {
+          throw new Error('seedUsers returned too few rows');
+        }
+
+        await insertAnswered(requester, via, target, 'accepted', new Date().toISOString());
+
+        const { rows } = await database.client.query<{
+          decided_at: Date | null;
+          responded_at: Date | null;
+        }>('select decided_at, responded_at from app.intro_requests');
+
+        // Two columns, both set, and neither is the other. A single reused column could
+        // not say when the introduction was made *and* when it was answered.
+        expect(rows[0]?.decided_at).not.toBeNull();
+        expect(rows[0]?.responded_at).not.toBeNull();
+      });
+
+      it('is not part of any index — nothing queries by who answered', async () => {
+        // The migration adds no index deliberately: the target's inbox is served by the
+        // partial `intro_requests_target_passed_idx`, which an answered row simply leaves,
+        // and the requester's record by the non-partial `intro_requests_requester_idx`.
+        const { rows } = await database.client.query<{ count: string }>(
+          `select count(*)::text as count
+             from pg_catalog.pg_index i
+             join pg_catalog.pg_class c on c.oid = i.indrelid
+             join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = 'app' and c.relname = 'intro_requests'
+              and (
+                exists (
+                  select 1 from pg_catalog.pg_attribute a
+                   where a.attrelid = c.oid and a.attnum = any (i.indkey)
+                     and a.attname = 'responded_at'
+                )
+                or coalesce(pg_get_expr(i.indexprs, i.indrelid), '') like '%responded_at%'
+                or coalesce(pg_get_expr(i.indpred, i.indrelid), '') like '%responded_at%'
+              )`,
+        );
+        expect(rows[0]?.count).toBe('0');
+      });
+    });
+
     describe('via_note (issue #175)', () => {
       /** Insert with an explicit `via_note`, so the CHECK is the only thing that can refuse. */
       async function insertWithViaNote(
@@ -231,8 +361,9 @@ describe('app.intro_requests and app.intro_via_candidates — issue #89', () => 
       ): Promise<void> {
         await database.client.query(
           `insert into app.intro_requests
-             (requester_id, via_id, target_id, note, via_note, status, created_at, decided_at)
-           values ($1, $2, $3, 'why we should meet', $4, $5, now(), $6)`,
+             (requester_id, via_id, target_id, note, via_note, status,
+              created_at, decided_at, responded_at)
+           values ($1, $2, $3, 'why we should meet', $4, $5, now(), $6, $7)`,
           [
             requesterId,
             viaId,
@@ -240,6 +371,12 @@ describe('app.intro_requests and app.intro_via_candidates — issue #89', () => 
             viaNote,
             status,
             status === 'requested' ? null : new Date().toISOString(),
+            // Set exactly when the status says the target answered, so
+            // `intro_requests_responded_at` is never the constraint that refuses a row
+            // this block meant to test against `intro_requests_via_note` (#166).
+            status === 'accepted' || status === 'target_declined'
+              ? new Date().toISOString()
+              : null,
           ],
         );
       }
@@ -303,6 +440,31 @@ describe('app.intro_requests and app.intro_via_candidates — issue #89', () => 
         // (`intro-note.policy.ts`), asserted in the feature suite.
         await expect(
           insertWithViaNote(requester, via, other, 'passed_on', null),
+        ).resolves.toBeUndefined();
+      });
+
+      it('keeps the vouch valid after the target answers, in both directions (#166)', async () => {
+        const [requester, via, accepted, refused] = await seedUsers(4);
+        if (
+          requester === undefined ||
+          via === undefined ||
+          accepted === undefined ||
+          refused === undefined
+        ) {
+          throw new Error('seedUsers returned too few rows');
+        }
+
+        // ⚠ **The CHECK #175 shipped becomes false the moment a target answers.** It read
+        // `via_note is null or status = 'passed_on'` while `passed_on` was terminal; an
+        // answered row carries the same vouch under a different status, so the un-widened
+        // form would refuse the very UPDATE that accepts an introduction — a feature
+        // failing on a constraint nobody edited. Both answers, because widening it for one
+        // and forgetting the other is the shape of that mistake.
+        await expect(
+          insertWithViaNote(requester, via, accepted, 'accepted', 'they should meet'),
+        ).resolves.toBeUndefined();
+        await expect(
+          insertWithViaNote(requester, via, refused, 'target_declined', 'they should meet'),
         ).resolves.toBeUndefined();
       });
 

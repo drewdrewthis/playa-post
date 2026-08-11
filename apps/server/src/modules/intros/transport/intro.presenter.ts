@@ -30,11 +30,11 @@ export interface PresentedIntroPerson {
 
 /**
  * An intro request as this API renders one back to the actor who just changed it —
- * `intros.request`'s and `intros.decide`'s answer.
+ * `intros.request`'s, `intros.decide`'s and `intros.respond`'s answer.
  *
- * One type for both, because both answer the same question ("what does this row look
- * like now") to somebody who is already a party to it. Two near-identical types would be
- * two places for the status vocabulary to drift.
+ * One type for all three, because they answer the same question ("what does this row look
+ * like now") to somebody who is already a party to it. Three near-identical types would be
+ * three places for the status vocabulary to drift.
  *
  * ⚠ It carries **no `note`**, and that is a privacy rule rather than a saving. The
  * requester wrote it and the via has it on their inbox row; echoing it out of a mutation
@@ -58,6 +58,16 @@ export interface PresentedIntroRequest {
   readonly createdAt: string;
   /** Absent while the request is open. */
   readonly decidedAt?: string;
+  /**
+   * When the target answered (issue #166). Absent on every receipt but their own.
+   *
+   * Safe on this type precisely because a receipt goes only to the actor who just wrote
+   * the row: `request` and `decide` can only ever match a row nobody has answered, so the
+   * key is omitted for them, and `respond`'s reader is the target themselves. It reaches
+   * no *read* — `intros.listOutbox` carries no answer of any kind, so a decline stays
+   * indistinguishable from an introduction nobody has got to yet.
+   */
+  readonly respondedAt?: string;
 }
 
 /**
@@ -124,7 +134,7 @@ function presentPerson(person: IntroPerson): PresentedIntroPerson {
   };
 }
 
-/** Project the acting party's own view of a request they just wrote or decided. */
+/** Project the acting party's own view of a request they just wrote, decided or answered. */
 export function presentIntroRequest(request: IntroRequest): PresentedIntroRequest {
   return {
     id: request.id,
@@ -133,6 +143,9 @@ export function presentIntroRequest(request: IntroRequest): PresentedIntroReques
     status: request.status,
     createdAt: request.createdAt.toISOString(),
     ...(request.decidedAt === undefined ? {} : { decidedAt: request.decidedAt.toISOString() }),
+    ...(request.respondedAt === undefined
+      ? {}
+      : { respondedAt: request.respondedAt.toISOString() }),
   };
 }
 

@@ -35,11 +35,20 @@ Feature: Request an intro — asking a mutual connection to introduce you
   # `app.intro_via_candidates`, which composes `app.visible_people` on both sides. A
   # request is not a snapshot of the graph it was made in.
   #
-  # Two absences below are deliberate and would otherwise read as gaps:
+  # ⚠ Issue #166 gives the target the other end of it: **accepting is what makes the
+  # connection.** A passed-on introduction is answered once, only by its target, and an
+  # acceptance is the second way a connection can form in this product (decision D12). The
+  # answer travels to `modules/connections` as a published event rather than as a call, so
+  # the row and the fact it emits are one transaction and a connection can never be lost by
+  # a failure between two of them.
   #
-  # There is no scenario for what the target *does* after an introduction. #89 ends at
-  # "the target sees it"; minting a connection from an intro is a new authorization path
-  # and belongs to its own issue.
+  # ⚠ And it gives the target the same protection the via has: **declining is
+  # indistinguishable from not answering yet**, to the requester. A target who could be
+  # seen refusing cannot safely refuse, which is the whole of the reason a via's decline is
+  # invisible — so the requester's own record reports the *via's* decision and never the
+  # target's answer. An acceptance discloses itself, by connecting.
+  #
+  # One absence below is deliberate and would otherwise read as a gap:
   #
   # There is no offline-replay scenario. `intros.request` is deliberately absent from
   # `QUEUED_MUTATION_TYPES` — eligibility is time-varying, so a queued ask could drain into
@@ -192,6 +201,59 @@ Feature: Request an intro — asking a mutual connection to introduce you
     Then user C still reads the note with user B's own self-projected card beside it
     And user B deactivating instead leaves the note standing with no card at all
 
+  @integration
+  # @issue:166
+  Scenario: Accepting a passed-on introduction connects the target to the requester
+    Given user B has passed on user A's request to user C
+    When user C accepts it
+    Then the request is recorded as accepted, carrying the time user C answered
+    And an IntroAccepted event rides the same transaction
+    And draining that event connects user A and user C at an accepted invite's own disclosure
+    And the introduction leaves user C's inbox
+
+  @integration
+  # @issue:166
+  Scenario: Declining a passed-on introduction connects nobody
+    Given user B has passed on user A's request to user C
+    When user C declines it
+    Then the request is recorded as declined by the target, distinguishable from an acceptance
+    And draining every event leaves user A and user C unconnected
+    And an introduction user C never answered connects nobody either
+
+  @integration
+  # @issue:166
+  Scenario: Only the target may answer a passed-on introduction
+    Given user B has passed on user A's request to user C
+    When the requester, the via, a fourth party, or the target naming a request that does not exist attempts to answer it
+    Then all four attempts are refused with the identical INTRO_UNAVAILABLE
+    And the request is still passed on, with no answer and no connection
+
+  @integration
+  # @issue:166
+  Scenario: An introduction is answered once, and only after it has been passed on
+    Given user C has accepted user A's introduction
+    When user C attempts to answer it again, in either direction
+    Then the attempt is refused and the recorded answer time is unchanged
+    And two simultaneous answers leave exactly one winner and one refusal
+    And a request that is still open, or one the via declined, cannot be answered at all
+
+  @integration
+  # @issue:166
+  Scenario: A target's answer is the target's to disclose
+    Given user B has passed on two of user A's requests, to user C and to user D
+    And user C declined theirs while user D has not answered
+    Then user A's own record reads identically for both, reporting only that they were passed on
+    And it carries neither answer time
+    And user C accepting instead discloses itself by connecting, not by a status
+
+  @integration
+  # @issue:166
+  Scenario: Connecting from an introduction happens once, however often the event is delivered
+    Given user C has accepted user A's introduction
+    When the IntroAccepted event is delivered twice
+    Then exactly one connection and one ConnectionAccepted event exist
+    And a pair who were already connected gain no second row
+
   @unit @integration
   # @issue:89
   Scenario: The intro note is trimmed, bounded, and never empty
@@ -219,7 +281,8 @@ Feature: Request an intro — asking a mutual connection to introduce you
 
   @unit
   # @issue:89
+  # @issue:166
   Scenario: The intros contract declares every procedure the router serves
-    Given the intros router mounts five procedures
-    Then packages/contracts declares all five and the parity fitness test is green
+    Given the intros router mounts six procedures
+    Then packages/contracts declares all six and the parity fitness test is green
     And no intros procedure accepts a viewer, user, actor or owner identifier in its input

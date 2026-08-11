@@ -1,13 +1,20 @@
 /**
- * The three states an intro request can be in.
+ * The five states an intro request can be in.
  *
  * ```
- * requested ──pass on──▶ passed_on
- *      └──────decline───▶ declined
+ * requested ──pass on──▶ passed_on ──accept───▶ accepted         (terminal)
+ *      │                     └──────decline───▶ target_declined  (terminal)
+ *      └──────decline───▶ declined                               (terminal)
  * ```
  *
- * Both decisions are terminal. What a target may *do* after `passed_on` — connect,
- * ignore — is not part of this API yet.
+ * ⚠ **Only three of them ever reach `intros.listOutbox`** (#166). The requester's own
+ * record reports the *via's* decision and never the target's answer: `accepted` and
+ * `target_declined` both read back there as `passed_on`, because a target who could be
+ * seen refusing cannot safely refuse. Do not build a "did they say yes" indicator out of
+ * that read — an acceptance announces itself by the connection it makes, on the graph.
+ *
+ * The two target states appear on `intros.respond`'s own receipt, to the target who just
+ * wrote one, and nowhere else on this API.
  */
 export const INTRO_REQUEST_STATUS = {
   /** Waiting on the via. Render "Intro pending via {name}". */
@@ -22,6 +29,24 @@ export const INTRO_REQUEST_STATUS = {
    * and a re-ask button turns a decline into a prompt.
    */
   declined: 'declined',
+  /**
+   * The target accepted the introduction (#166) — `intros.respond`'s receipt only.
+   *
+   * ⚠ **The connection is not there yet when you read this.** Accepting records the
+   * answer; the edge is written from it moments later, by the server's own event drainer.
+   * A client that navigated straight to a connection-only surface on this status would
+   * arrive early — re-read the graph, do not assume.
+   */
+  accepted: 'accepted',
+  /**
+   * The target declined the introduction (#166) — `intros.respond`'s receipt only.
+   *
+   * ⚠ **Never rendered to the requester, and there is no wire shape that could.** It is
+   * `target_declined` rather than a second use of {@link INTRO_REQUEST_STATUS.declined}
+   * so that a client filtering on "the via said no" cannot silently start matching rows
+   * the target has read.
+   */
+  targetDeclined: 'target_declined',
 } as const;
 
 /** One of {@link INTRO_REQUEST_STATUS}'s values. */
@@ -35,6 +60,24 @@ export const INTRO_DECISION = {
 
 /** One of {@link INTRO_DECISION}'s values. */
 export type IntroDecision = (typeof INTRO_DECISION)[keyof typeof INTRO_DECISION];
+
+/**
+ * What the **target** may do with an introduction that was passed on to them (#166).
+ *
+ * Its own vocabulary rather than {@link INTRO_DECISION} reused, even though both spell one
+ * value `decline`: a decision is the via's answer to "should these two meet at all", and a
+ * response is the target's answer to "do I want to meet this person". One type for both
+ * would let a client offer `pass_on` on a `target` row, which the server refuses.
+ */
+export const INTRO_RESPONSE = {
+  /** Connect me with them. */
+  accept: 'accept',
+  /** No thanks. */
+  decline: 'decline',
+} as const;
+
+/** One of {@link INTRO_RESPONSE}'s values. */
+export type IntroResponse = (typeof INTRO_RESPONSE)[keyof typeof INTRO_RESPONSE];
 
 /** Which side of an intro you are standing on, in `intros.listInbox`. */
 export const INTRO_INBOX_ROLE = {
@@ -149,8 +192,31 @@ export type DecideIntroRequest =
     };
 
 /**
- * An intro request as the party who just changed it sees one — `intros.request`'s and
- * `intros.decide`'s answer.
+ * `intros.respond` input — the target's answer to an introduction (#166).
+ *
+ * The actor is always the target; there is no field for it, and only the target of a
+ * **passed-on** introduction may send this. Everything else — the requester, the via, a
+ * stranger, an introduction already answered, one still waiting on its via, and one the
+ * via declined — comes back as the identical `INTRO_UNAVAILABLE`. That last case is why:
+ * a distinct refusal would tell a target the very thing a via's decline exists to hide.
+ *
+ * ⚠ **Neither answer carries a note, and sending one is refused rather than dropped.** An
+ * acceptance says nothing beyond itself; a decline is never disclosed to anybody, so text
+ * written on one has no reader at all.
+ *
+ * ⚠ **Accepting is what creates the connection, and it is not instant.** The server
+ * records the answer and forms the edge from it moments later. Treat a successful response
+ * as "this will connect", re-read the graph rather than assuming, and do not offer the
+ * answer twice — a second one is refused.
+ */
+export interface RespondToIntroRequest {
+  readonly introRequestId: string;
+  readonly response: IntroResponse;
+}
+
+/**
+ * An intro request as the party who just changed it sees one — `intros.request`'s,
+ * `intros.decide`'s and `intros.respond`'s answer.
  *
  * ⚠ It carries **no note of either kind**: the requester's, because you wrote it or you
  * are the via reading it on your own inbox row; and the via's, because you just wrote
@@ -166,6 +232,14 @@ export interface IntroRequestReceipt {
   readonly createdAt: string;
   /** ISO-8601. Absent while the request is open. */
   readonly decidedAt?: string;
+  /**
+   * ISO-8601. When the target answered (#166) — present on `intros.respond`'s receipt and
+   * absent on the other two, which can only ever have written an unanswered row.
+   *
+   * ⚠ It reaches no *read*. `intros.listOutbox` carries no answer time, so a requester
+   * cannot tell a declined introduction from one nobody has got to yet.
+   */
+  readonly respondedAt?: string;
 }
 
 /**
@@ -173,12 +247,19 @@ export interface IntroRequestReceipt {
  *
  * ⚠ **Branch on `role`.** A `via` row is an ask waiting on your decision and names both
  * other people; a `target` row is an introduction already made to you and names the
- * requester only. Rendering a Pass on / Decline control on a `target` row offers an
- * action the server refuses.
+ * requester only. The two take **different actions**: a `via` row's is `intros.decide`
+ * (pass on with a note, or decline), a `target` row's is `intros.respond` (accept, or
+ * decline). Offering either control on the other role's row offers an action the server
+ * refuses.
  *
  * ⚠ **A declined request never appears here for its target, and neither does an open
  * one.** The absence is total: this response is byte-for-byte what somebody nobody has
  * ever asked about receives. Do not infer anything from an empty list.
+ *
+ * ⚠ **An answered introduction leaves this list too** (#166). An inbox is what is waiting
+ * on you, so a `target` row disappears once it is accepted or declined — exactly as a
+ * `via` row does once it is decided. Say so in a live region before the row goes; a card
+ * that vanishes under the finger with nothing said reads as a failure.
  *
  * ⚠ **A `target` row carries two notes by two different people** (#175), and each must be
  * rendered under its own author's card: `note` is the requester's ask, `viaNote` is the
@@ -219,12 +300,19 @@ export interface IntroInboxRow {
 /**
  * One row of `intros.listOutbox` — what you asked, and what came of it.
  *
- * Carries all three states. `targetUserId` is a bare identifier rather than a card
- * because you supplied it: match it against the person you are already rendering from
- * `graph.list` to show "Intro pending via {name}" on their sheet.
+ * Carries three states and only three — `requested`, `passed_on`, `declined`.
+ * `targetUserId` is a bare identifier rather than a card because you supplied it: match it
+ * against the person you are already rendering from `graph.list` to show "Intro pending
+ * via {name}" on their sheet.
  *
- * ⚠ No `note` (you wrote it) and no reason on a `declined` row (see
- * {@link INTRO_REQUEST_STATUS}).
+ * ⚠ **`passed_on` here means "the via passed it on", and says nothing about what the
+ * target did with it** (#166). An introduction they accepted, one they declined, and one
+ * they have not opened all read identically — because a target who could be seen refusing
+ * cannot safely refuse, which is the same rule that keeps a via's decline invisible one
+ * person along. An acceptance still reaches you: it discloses itself by connecting.
+ *
+ * ⚠ No `note` (you wrote it), no reason on a `declined` row (see
+ * {@link INTRO_REQUEST_STATUS}), and no answer time.
  *
  * ⚠ **And no `viaNote` on a `passed_on` row.** The via wrote that one to the person you
  * asked to meet, about you. `INTRO_PASSED_ON_LINE` — "they have your note now" — is the

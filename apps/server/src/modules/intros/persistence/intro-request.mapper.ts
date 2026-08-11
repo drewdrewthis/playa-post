@@ -45,6 +45,10 @@ function toIntroRequestStatus(stored: string): IntroRequestStatus {
  * `(status = 'requested') = (decided_at is null)` guarantees the two agree, and an
  * absent key is what `exactOptionalPropertyTypes` lets the compiler keep honest.
  *
+ * `respondedAt` follows the same rule under its own equality CHECK,
+ * `(responded_at is null) = (status not in ('accepted','target_declined'))` — so an
+ * absent key means the target has not answered, and never "they did and we lost when".
+ *
  * `viaNote` is omitted on the same principle but for a weaker guarantee: its CHECK is an
  * implication rather than an equality, so a `passed_on` row genuinely may hold no via
  * note — one passed on before #175 asked for one. The absent key says "there is no such
@@ -61,5 +65,6 @@ export function toIntroRequest(row: IntroRequestRow): IntroRequest {
     status: toIntroRequestStatus(row.status),
     createdAt: row.created_at,
     ...(row.decided_at === null ? {} : { decidedAt: row.decided_at }),
+    ...(row.responded_at === null ? {} : { respondedAt: row.responded_at }),
   };
 }

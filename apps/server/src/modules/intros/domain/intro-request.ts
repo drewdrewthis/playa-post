@@ -1,16 +1,22 @@
 /**
- * The three states an intro request can be in.
+ * The five states an intro request can be in.
  *
  * ```
- * requested ──pass_on──▶ passed_on   (terminal for #89)
- *      └─────decline───▶ declined    (terminal)
+ * requested ──pass_on──▶ passed_on ──accept───▶ accepted         (terminal)
+ *      │                     └──────decline───▶ target_declined  (terminal)
+ *      └─────decline───▶ declined                                (terminal)
  * ```
  *
  * A `text` column with a CHECK rather than an enum, matching
  * {@link import('../../connections/domain/connection').CONNECTION_STATUS}: adding a
- * state is then a migration rather than a type rewrite. What the *target* may do after
- * `passed_on` — connect, ignore — is deliberately out of scope for #89, because minting
- * a connection from an intro is a new authorization path and not a fourth value here.
+ * state is a migration rather than a type rewrite, which is exactly what issue #166 did
+ * to the three #89 shipped.
+ *
+ * ⚠ **Two actors, two decisions, and the second one only follows the first.** The via
+ * decides whether the introduction happens at all; the target decides what to do with the
+ * one they were given. They are separate columns and separate statuses rather than a
+ * shared vocabulary because neither actor may make the other's choice — see
+ * {@link INTRO_DECISION} and {@link INTRO_RESPONSE}.
  *
  * Exported so a consumer branching on status compares against this rather than
  * re-spelling the literal.
@@ -18,7 +24,7 @@
 export const INTRO_REQUEST_STATUS = {
   /** Waiting on the via. The only state the via's inbox shows. */
   requested: 'requested',
-  /** The via passed it on. The only state the target ever sees. */
+  /** The via passed it on. The only state a target may answer, and the only one they see. */
   passedOn: 'passed_on',
   /**
    * The via declined.
@@ -29,6 +35,31 @@ export const INTRO_REQUEST_STATUS = {
    * equality against a never-asked control user rather than by an absent-field check.
    */
   declined: 'declined',
+  /**
+   * The target accepted the introduction (issue #166).
+   *
+   * ⚠ **This is the state that makes a connection**, and it is the only one in this
+   * module that changes anything outside it. The connection itself is written by
+   * `modules/connections` from the `IntroAccepted` event rather than from here (decision
+   * D12), so reaching this status and forming the edge are one transactional fact plus one
+   * at-least-once delivery, never two writes that could disagree.
+   */
+  accepted: 'accepted',
+  /**
+   * The target declined the introduction (issue #166).
+   *
+   * ⚠ **`target_declined`, not a second meaning for {@link INTRO_REQUEST_STATUS.declined}.**
+   * That one says the via would not pass it on and the target was never told; this one
+   * says the target read it and said no. Collapsing them would make the requester's record
+   * unable to tell "nobody showed them" from "they saw it and declined" — and would make
+   * every read that filters on `declined` silently start matching rows a target has seen.
+   *
+   * ⚠ **Indistinguishable from an unanswered introduction, to the requester.** The same
+   * rule that keeps a via's decline invisible to the target applies here one person along:
+   * somebody who can be seen refusing cannot safely refuse. `findOutboxFor` reports the
+   * via's decision and never the target's answer.
+   */
+  targetDeclined: 'target_declined',
 } as const;
 
 /** One of {@link INTRO_REQUEST_STATUS}'s values. */
@@ -54,6 +85,45 @@ export const STATUS_FOR_DECISION: Readonly<Record<IntroDecision, IntroRequestSta
   [INTRO_DECISION.passOn]: INTRO_REQUEST_STATUS.passedOn,
   [INTRO_DECISION.decline]: INTRO_REQUEST_STATUS.declined,
 };
+
+/**
+ * What the **target** may do with an introduction that was passed on to them, and the
+ * only two things they may do (issue #166).
+ *
+ * ⚠ **Its own vocabulary, not {@link INTRO_DECISION} reused**, even though both spell one
+ * of their values `decline`. A decision is the via's answer to "should these two meet at
+ * all"; a response is the target's answer to "do I want to meet this person". One type
+ * for both would let a caller submit `pass_on` as a target — a state transition no
+ * statement in this module implements — and would put the two actors' authorization rules
+ * behind one union that a future `if` could cross.
+ */
+export const INTRO_RESPONSE = {
+  accept: 'accept',
+  decline: 'decline',
+} as const;
+
+/** One of {@link INTRO_RESPONSE}'s values. */
+export type IntroResponse = (typeof INTRO_RESPONSE)[keyof typeof INTRO_RESPONSE];
+
+/** The stored status a response produces. Total over {@link IntroResponse}. */
+export const STATUS_FOR_RESPONSE: Readonly<Record<IntroResponse, IntroRequestStatus>> = {
+  [INTRO_RESPONSE.accept]: INTRO_REQUEST_STATUS.accepted,
+  [INTRO_RESPONSE.decline]: INTRO_REQUEST_STATUS.targetDeclined,
+};
+
+/**
+ * The statuses a target's answer produces, as the set a reader can test membership in.
+ *
+ * Derived from {@link STATUS_FOR_RESPONSE} rather than written out again, so "a request
+ * the target has answered" cannot drift from "a status a response produces" — the two are
+ * the same claim and a third response would otherwise need remembering in two places. The
+ * outbox read (`postgres-intro-request.repository.ts`) builds its mask from this set, so a
+ * status a response produces can never leak to the requester merely because somebody
+ * forgot to add it to a hand-written list.
+ */
+export const ANSWERED_STATUSES: ReadonlySet<IntroRequestStatus> = new Set(
+  Object.values(STATUS_FOR_RESPONSE),
+);
 
 /**
  * An intro request as `app.intro_requests` stores one.
@@ -114,6 +184,24 @@ export interface IntroRequest {
    * Absent rather than `null`: `(status = 'requested') = (decided_at is null)` is a
    * database CHECK, so the two can never disagree, and an omitted key is what
    * `exactOptionalPropertyTypes` lets the compiler keep honest.
+   *
+   * ⚠ **Never overwritten by the target's answer.** It is the via's timestamp, and an
+   * accepted introduction still has to say when the introduction itself was made.
    */
   readonly decidedAt?: Date;
+  /**
+   * When the target answered, or `undefined` until they do (issue #166).
+   *
+   * Its own column rather than a second meaning for {@link IntroRequest.decidedAt},
+   * because the two are different people's timestamps and the interval between them is
+   * the only record of how long an introduction sat unanswered. It is also what
+   * {@link import('./intro-request.events').introResponded} reads for its `occurredAt`:
+   * reusing `decidedAt` would emit an acceptance claiming to have happened when the via
+   * acted.
+   *
+   * ⚠ **Not carried on any read but the answering target's own receipt.** The requester
+   * must not be able to tell a decline from an unanswered introduction, and a timestamp
+   * that appeared the moment somebody declined would say it as loudly as a status would.
+   */
+  readonly respondedAt?: Date;
 }

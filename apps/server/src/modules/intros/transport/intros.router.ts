@@ -7,6 +7,7 @@ import type { ListIntroInboxQuery } from '../application/list-intro-inbox.query'
 import type { ListIntroOutboxQuery } from '../application/list-intro-outbox.query';
 import type { ListIntroViaCandidatesQuery } from '../application/list-intro-via-candidates.query';
 import type { RequestIntroService } from '../application/request-intro.service';
+import type { RespondToIntroService } from '../application/respond-to-intro.service';
 import { IntroUnavailableError } from '../domain/intro-request.errors';
 
 import { decideIntroCommandFields, decideIntroInput } from './decide-intro.input';
@@ -21,6 +22,7 @@ import {
   type PresentedIntroRequest,
 } from './intro.presenter';
 import { requestIntroCommandFields, requestIntroInput } from './request-intro.input';
+import { respondToIntroCommandFields, respondToIntroInput } from './respond-to-intro.input';
 import { viaCandidatesInput } from './via-candidates.input';
 
 /** The application operations this router speaks for. One use case, one procedure. */
@@ -30,6 +32,7 @@ export interface IntrosRouterDependencies {
   readonly listIntroInbox: ListIntroInboxQuery;
   readonly listIntroOutbox: ListIntroOutboxQuery;
   readonly decideIntro: DecideIntroService;
+  readonly respondToIntro: RespondToIntroService;
 }
 
 /**
@@ -87,12 +90,15 @@ async function present<T>(operation: () => Promise<T>): Promise<T> {
  * one outbox, and one via per request that a caller may act as (ADR-0002 §5a).
  * `tests/fitness/viewer-id-provenance.fitness.test.ts` walks this router to prove it.
  *
- * ⚠ **There is deliberately no `getById` and no target-side action.** A `getById` would
- * be a second authorized read of rows the two list procedures already gate, on a surface
- * where "does this id exist" is exactly the question that must stay unanswerable. What
- * the target may *do* after an introduction — connect, ignore — is out of scope for #89:
- * minting a connection from an intro is a new authorization path and belongs to its own
- * issue rather than to a sixth procedure here.
+ * ⚠ **There is deliberately no `getById`.** It would be a second authorized read of rows
+ * the three list-and-decide procedures already gate, on a surface where "does this id
+ * exist" is exactly the question that must stay unanswerable.
+ *
+ * `respond` is the sixth procedure and the target's end of the hop (issue #166): #89
+ * stopped at "the target sees it", and minting a connection from an introduction was left
+ * to its own issue because it is a second way a connection can form. Decision D12 settled
+ * how — a token-free mutation authorized by the caller's own resolved actor, never a
+ * minted bearer invite.
  *
  * Every procedure is `authenticatedProcedure`: each reads or writes state attached to an
  * actor, so there is no version of any of them a signed-out caller could sensibly be
@@ -197,6 +203,38 @@ export function createIntrosRouter(dependencies: IntrosRouterDependencies) {
             await dependencies.decideIntro.decide({
               actorId: ctx.actor.userId,
               ...decideIntroCommandFields(input),
+            }),
+          ),
+        ),
+      ),
+
+    /**
+     * Accept an introduction that was passed on to you, or decline it (issue #166).
+     *
+     * **Accepting is what makes the connection.** The edge is written by
+     * `modules/connections` from the `IntroAccepted` event this emits, so a client that
+     * sees a `202`-shaped success has an introduction that *will* connect rather than one
+     * that already has (decision D12) — the graph is the surface to read it back from.
+     *
+     * Only the named target may. Anybody else — the requester, the via, a stranger — gets
+     * the same 404 `INTRO_UNAVAILABLE` a request that never existed does, and so does an
+     * introduction already answered, one still waiting on its via, and one the via
+     * declined. That last case is why the refusal has to be the shared one: a distinct
+     * "that was declined" would tell a target the very thing a via's decline exists to
+     * hide from them.
+     *
+     * There is no content refusal on this path, because neither answer carries content —
+     * the input is a `strictObject` with no note field, so a caller that sends one is
+     * refused by zod rather than silently ignored (`respond-to-intro.input.ts`).
+     */
+    respond: authenticatedProcedure
+      .input(respondToIntroInput)
+      .mutation(async ({ ctx, input }): Promise<PresentedIntroRequest> =>
+        present(async () =>
+          presentIntroRequest(
+            await dependencies.respondToIntro.respond({
+              actorId: ctx.actor.userId,
+              ...respondToIntroCommandFields(input),
             }),
           ),
         ),
