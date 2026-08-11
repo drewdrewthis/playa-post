@@ -139,6 +139,27 @@ export function createConnectIntroducedPairHandler(
             // These two are already connected — through an invite, or through an earlier
             // introduction between the same pair. The acceptance still stands and the
             // receipt above still lands; there is simply no new fact to announce.
+            //
+            // ⚠ But only if the existing row really is an accepted connection. The pair
+            // key spans every status and the column carries no CHECK, so an unrecognised
+            // status is reachable — and treating one as "already connected" would mark
+            // the event processed with no edge formed and nothing owed. Fail closed
+            // instead, exactly as `acceptInvitation` does: the throw rolls the receipt
+            // back and leaves the delivery to the drainer's retry and dead-letter path.
+            const existing = await transaction
+              .selectFrom('app.connections')
+              .select('status')
+              .where('user_a_id', '=', userAId)
+              .where('user_b_id', '=', userBId)
+              .where('status', '=', CONNECTION_STATUS.accepted)
+              .executeTakeFirst();
+
+            if (existing === undefined) {
+              throw new Error(
+                `IntroAccepted ${event.eventId}: pair row exists but is not an accepted connection`,
+              );
+            }
+
             return;
           }
 

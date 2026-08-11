@@ -1751,6 +1751,57 @@ describe('request an intro (request-an-intro.feature, #89, #175 and #166)', () =
       );
       expect(receipts[0]?.count).toBe('2');
     });
+
+    it('fails the delivery, receipt and all, when the pair row is not an accepted connection', async () => {
+      // ⚠ `app.connections.status` carries no CHECK, so an unrecognised value is
+      // reachable — and "a row exists for this pair" must not be read as "these two are
+      // connected". Treating it that way would mark the event processed with no edge
+      // formed and nothing owed. The handler fails closed instead (the same rule
+      // `acceptInvitation` follows), which rolls the receipt back and leaves the
+      // delivery to the drainer's retry and dead-letter path.
+      const { alice, bruno, cleo } = await seedSymmetricWorld();
+      const { callerFor } = makeCallers();
+      const callerAlice = await callerFor(alice.authUserId);
+      const callerBruno = await callerFor(bruno.authUserId);
+      const callerCleo = await callerFor(cleo.authUserId);
+
+      const created = await callerAlice.intros.request({
+        targetUserId: cleo.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      await callerBruno.intros.decide(passOn(created.id));
+      await callerCleo.intros.respond({ introRequestId: created.id, response: 'accept' });
+
+      // A pair row in a state this module does not recognise, planted before delivery.
+      await testDatabase.client.query(
+        `insert into app.connections (user_a_id, user_b_id, status, created_at)
+         values (least($1::uuid, $2::uuid), greatest($1::uuid, $2::uuid), 'suspended', now())`,
+        [alice.userId, cleo.userId],
+      );
+
+      await expect(deliverEveryEventTo(introducedPairConsumer())).rejects.toThrow(
+        /not an accepted connection/,
+      );
+
+      // The whole transaction rolled back: no receipt, no announcement, and the planted
+      // row is untouched — the delivery is still owed, not swallowed.
+      const { rows: receipts } = await testDatabase.client.query<{ count: string }>(
+        `select count(*)::text as count from app.consumer_receipts
+          where consumer_name = 'ConnectIntroducedPairHandler'`,
+      );
+      expect(receipts[0]?.count).toBe('0');
+      expect(
+        (await outboxRows()).filter((event) => event.event_type === 'ConnectionAccepted'),
+      ).toHaveLength(0);
+      const { rows: pairRows } = await testDatabase.client.query<{ status: string }>(
+        `select status from app.connections
+          where user_a_id = least($1::uuid, $2::uuid)
+            and user_b_id = greatest($1::uuid, $2::uuid)`,
+        [alice.userId, cleo.userId],
+      );
+      expect(pairRows).toEqual([{ status: 'suspended' }]);
+    });
   });
 
   describe('Scenario: An invalid note is refused before eligibility is considered (@integration, #89, AC12)', () => {

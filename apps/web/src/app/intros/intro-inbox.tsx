@@ -161,6 +161,11 @@ export function IntroInbox(): JSX.Element | null {
               row={row}
               answering={busy}
               onRespond={(command) => {
+                // Both mutations share one refusal line, so starting either clears
+                // both — otherwise a via-row failure would keep showing under a
+                // target-row confirmation, and the reader would read a stale refusal
+                // as this answer's outcome.
+                decide.reset();
                 respond.mutate(command);
               }}
             />
@@ -170,6 +175,8 @@ export function IntroInbox(): JSX.Element | null {
               row={row}
               deciding={busy}
               onDecide={(command) => {
+                // See onRespond: one refusal line, so either start clears the other.
+                respond.reset();
                 decide.mutate(command);
               }}
             />

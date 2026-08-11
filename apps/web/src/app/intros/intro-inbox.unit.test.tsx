@@ -513,4 +513,36 @@ describe('the intro inbox', () => {
       requireElement(mounted().container, '[data-testid="intro-inbox-error"]').textContent,
     ).toBe('That introduction is not available.');
   });
+
+  it('drops a stale refusal when the other role’s answer starts', async () => {
+    // ⚠ The two roles share one refusal line. A via-row failure left on screen under a
+    // later target-row confirmation would read as that answer's outcome — so starting
+    // either mutation clears the other's error, and this pins it with both rows mounted.
+    await mountInbox(
+      [VIA_ROW, TARGET_ROW],
+      () => {
+        throw Object.assign(new Error('refused'), {
+          data: { code: 'NOT_FOUND', applicationCode: 'INTRO_UNAVAILABLE' },
+        });
+      },
+      () => ({}),
+    );
+
+    await press('intro-pass-on-button');
+    await writeViaNote('They should meet at the tea camp.');
+    await press('intro-pass-on-submit-button');
+
+    expect(
+      requireElement(mounted().container, '[data-testid="intro-inbox-error"]').textContent,
+    ).toBe('That introduction is not available.');
+
+    await press('intro-accept-button');
+
+    const container = mounted().container;
+
+    expect(container.querySelector('[data-testid="intro-inbox-error"]')).toBeNull();
+    expect(
+      requireElement(container, '[data-testid="intro-inbox-confirmation"]').textContent,
+    ).toContain('being connected');
+  });
 });
