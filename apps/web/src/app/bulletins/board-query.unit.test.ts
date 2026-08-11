@@ -5,6 +5,7 @@ import {
   buildBoardQuery,
   isBoardQueryActive,
   matchCountLabel,
+  parseBoardTypeFilter,
 } from './board-query';
 
 describe('buildBoardQuery', () => {
@@ -48,6 +49,49 @@ describe('buildBoardQuery', () => {
       expect(buildBoardQuery('all', 'trust:>=60')).toBe('trust:>=60');
       expect(buildBoardQuery('all', '-hammock')).toBe('-hammock');
     });
+  });
+});
+
+describe('parseBoardTypeFilter', () => {
+  it('answers "all" for a query with no type term', () => {
+    expect(parseBoardTypeFilter('')).toBe('all');
+    expect(parseBoardTypeFilter('welding hands')).toBe('all');
+  });
+
+  it('recovers the chip a single type term selects', () => {
+    expect(parseBoardTypeFilter('type:request')).toBe('request');
+  });
+
+  it('finds the type term wherever it sits among other words', () => {
+    expect(parseBoardTypeFilter('welding type:request hands')).toBe('request');
+  });
+
+  // `update` is a real value in the server's seven-type grammar, but no chip offers it
+  // (BOARD_FILTER_CHIPS) — a query naming it has nothing in the chip row to select.
+  it('answers "all" for a grammar type with no chip', () => {
+    expect(parseBoardTypeFilter('type:update')).toBe('all');
+  });
+
+  it('answers "all" for a value the grammar itself would refuse', () => {
+    expect(parseBoardTypeFilter('type:bogus')).toBe('all');
+  });
+
+  // This milestone's client can only ever write one type into a query, but the server
+  // grammar already accepts several — pipe alternation within one term, or the field
+  // repeated — and #171 is what will teach the chip row to select more than one. Until
+  // then this degrades to "all" rather than guessing which of several values a
+  // single-select chip row should show.
+  it('answers "all" for an OR-ed multi-type term', () => {
+    expect(parseBoardTypeFilter('type:offer|request')).toBe('all');
+  });
+
+  it('answers "all" for the type field repeated', () => {
+    expect(parseBoardTypeFilter('type:offer type:request')).toBe('all');
+  });
+
+  it('does not crash on a malformed type term', () => {
+    expect(parseBoardTypeFilter('type:')).toBe('all');
+    expect(parseBoardTypeFilter('type:offer|')).toBe('all');
   });
 });
 

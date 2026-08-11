@@ -8,7 +8,7 @@ import type { ModerationTargetRequest, ReportBulletinRequest } from '@playa-post
 import { useApi } from '../api/api-provider';
 import { applicationErrorCode } from '../api/client';
 import type { BoardCardView } from '../bulletins/board-card-view';
-import { buildBoardQuery, type BoardTypeFilter } from '../bulletins/board-query';
+import { buildBoardQuery, parseBoardTypeFilter, type BoardTypeFilter } from '../bulletins/board-query';
 import { BoardSearch } from '../bulletins/board-search';
 import { BulletinCard } from '../bulletins/bulletin-card';
 import { BulletinDetailSheet } from '../bulletins/bulletin-detail-sheet';
@@ -90,13 +90,21 @@ export function BoardRoute(): JSX.Element {
   const { database, syncRunner } = useOffline();
   const [searchParams] = useSearchParams();
   const [hidden, setHidden] = useState<readonly string[]>([]);
-  // Seeded from `?q=` once, on mount: that is how the Saved screen's "OPEN ON BOARD"
-  // arrives, and it is a *starting point* rather than bound state — a person who then
-  // edits the field is editing their own search, not fighting a URL. The chip stays
-  // "All", because a saved query already carries its own `type:` term if it has one
-  // (the comp's `onOpen` sets `filter:'all'` for exactly this reason).
-  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
-  const [filter, setFilter] = useState<BoardTypeFilter>('all');
+  const urlQuery = searchParams.get('q') ?? '';
+  // Seeded from `?q=` on mount and re-synced whenever it changes (the effect below) —
+  // that is how the Saved screen's "OPEN ON BOARD" arrives (#173), and the chip is
+  // derived the same way: a saved `type:` term now selects its own chip instead of
+  // resetting to "All" underneath it (`parseBoardTypeFilter`). Typing or clicking a chip
+  // never writes back to `?q=`, so re-deriving here can never fight a person's own edit —
+  // it only ever reacts to a *new* URL, which is exactly a saved view opening or a
+  // browser back/forward landing on a different `?q=`.
+  const [search, setSearch] = useState(() => urlQuery);
+  const [filter, setFilter] = useState<BoardTypeFilter>(() => parseBoardTypeFilter(urlQuery));
+
+  useEffect(() => {
+    setSearch(urlQuery);
+    setFilter(parseBoardTypeFilter(urlQuery));
+  }, [urlQuery]);
   const [openBulletinId, setOpenBulletinId] = useState<string | null>(null);
   /*
    * The card being reported, held separately from `openBulletinId`. Reporting hides the

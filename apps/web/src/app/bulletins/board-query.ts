@@ -83,6 +83,64 @@ export function buildBoardQuery(filter: BoardTypeFilter, search: string): string
 }
 
 /**
+ * Every value carried by this query's `type:` terms, flattened.
+ *
+ * A query can carry the field more than once (`type:offer type:request`) or use the
+ * grammar's own pipe alternation within one term (`type:offer|request`) — the server's
+ * `parseBoardQuery` concatenates both shapes into one values array (ADR-0007's `values`
+ * production), and this mirrors that so a value this function misses is a value the
+ * server would have kept.
+ */
+function queryTypeValues(query: string): readonly string[] {
+  const values: string[] = [];
+
+  for (const term of query.split(/\s+/u)) {
+    if (!term.startsWith('type:')) {
+      continue;
+    }
+
+    values.push(...term.slice('type:'.length).split('|'));
+  }
+
+  return values;
+}
+
+/** Narrows to a chip-backed type — the six {@link BULLETIN_TYPE} values, not the grammar's seven. */
+function isBulletinType(value: string): value is BulletinType {
+  return (Object.values(BULLETIN_TYPE) as readonly string[]).includes(value);
+}
+
+/**
+ * Recover the chip a query's `type:` term selects — `buildBoardQuery`'s inverse.
+ *
+ * Opening a saved view navigates straight to `/board?q=<source text>` (#173); this is
+ * what lets the board's chip row show the term the saved text already carries instead of
+ * resetting to "All" underneath it.
+ *
+ * Degrades to `'all'` rather than throwing whenever the query does not name exactly one
+ * chip-backed type: no `type:` term at all, `type:update` (a real server value with no
+ * chip — see {@link BOARD_FILTER_CHIPS}), an unrecognised value, or more than one value
+ * from either an OR'ed term or a repeated field. That last case is unreachable from
+ * today's client — it can only ever *write* one type — but the server grammar already
+ * allows several, and #171 turns this into the multi-select chip row. This function
+ * already tells the two cases apart, so that work is a change to the `'all'` branch, not
+ * a rewrite of the parsing.
+ *
+ * @param query - A `?q=` value, exactly as the URL carries it.
+ * @returns The one chip it selects, or `'all'`.
+ */
+export function parseBoardTypeFilter(query: string): BoardTypeFilter {
+  const values = queryTypeValues(query);
+
+  if (values.length !== 1) {
+    return 'all';
+  }
+
+  const [value] = values;
+  return value !== undefined && isBulletinType(value) ? value : 'all';
+}
+
+/**
  * Is the board showing a filtered view rather than everything?
  *
  * The comp's `queryActive`: what gates the match count and the save affordance.
