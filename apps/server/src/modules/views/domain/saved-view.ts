@@ -29,12 +29,15 @@ export const SAVED_VIEW_LIMIT_PER_OWNER = 24;
  * round-trips into the board's search field exactly as the person typed it, and the AST
  * is what a future server-side evaluation would read so it never re-parses untrusted text.
  *
- * ⚠ **There is no `notify` field here, and that absence is decision D1.** Whether this
- * view is the one the bell is lit on is a fact about `app.notify_me_queries` — the table
- * whose primary key on `owner_id` *is* "exactly one Notify Me query per user". A boolean
- * on this entity would be a second answer to the same question, and the two would
- * disagree the first time either was written without the other. The Saved screen's bell
- * state arrives as {@link SavedViewListing.notifyingViewId} instead.
+ * ⚠ **There is no `notify` field here, and that absence outlived the decision that
+ * produced it.** It was D1's — "exactly one Notify Me query per user", so a boolean per
+ * view could have drawn a state the database could not hold. **D16 supersedes that half
+ * of D1**: a person may now light the bell on several views at once, and the field is
+ * still absent, for the reason that never depended on the count. Whether this view is
+ * notifying is a fact about `app.notify_me_queries`; a boolean here would be a second
+ * answer to the same question, and the two would disagree the first time either was
+ * written without the other. The Saved screen's bell state arrives as
+ * {@link SavedViewListing.notifyingViewIds} instead.
  */
 export interface SavedView {
   readonly id: string;
@@ -64,21 +67,24 @@ export interface SavedView {
 }
 
 /**
- * Everything the Saved screen needs in one answer: the views, and which one is notifying.
+ * Everything the Saved screen needs in one answer: the views, and which are notifying.
  *
  * **One read, not two**, because the two facts have to agree. Serving the list and the
- * designation through separate procedures would let a client render a bell against a
- * view that a concurrent `setNotify` had already moved it off — a lie about somebody's
- * notification settings, which is the one thing on this screen worth being careful with.
+ * designations through separate procedures would let a client render a bell against a
+ * view a concurrent `setNotify` had already cleared — a lie about somebody's notification
+ * settings, which is the one thing on this screen worth being careful with.
  */
 export interface SavedViewListing {
   readonly views: readonly SavedView[];
   /**
-   * The {@link SavedView.id} the caller's Notify Me query was designated from, or `null`.
+   * Every {@link SavedView.id} one of the caller's Notify Me queries was designated from.
    *
-   * `null` covers both "no Notify Me query at all" and "a query written directly through
-   * `views.notifyMe.update`, belonging to no view" — indistinguishable to this screen,
-   * because in both cases no card's bell is lit.
+   * Empty covers both "no Notify Me query at all" and "only a query written directly
+   * through `views.notifyMe.update`, belonging to no view" — indistinguishable to this
+   * screen, because in both cases no card's bell is lit.
+   *
+   * ⚠ **A set, and its order carries no meaning.** It is ordered only so that two reads
+   * of unchanged state serialize identically; nothing renders it as a sequence.
    */
-  readonly notifyingViewId: string | null;
+  readonly notifyingViewIds: readonly string[];
 }

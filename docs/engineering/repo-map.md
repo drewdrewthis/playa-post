@@ -133,8 +133,11 @@ apps/server/     The modular monolith.
                  board grammar was all it shipped, and gained application/ persistence/ transport/ with
                  Notify Me in M2.10 — its <name>.module.ts is now a factory as well as a barrel. Saved
                  views (app.saved_views, views.saved.*) landed there too, ahead of M5, with the
-                 comp's per-view bell modelled as a pointer FROM app.notify_me_queries so decision
-                 D1's "exactly one Notify Me query per user" stays a primary key: ADR-0016.)
+                 comp's per-view bell modelled as a pointer FROM app.notify_me_queries so "who gets
+                 notified" has one answer and not two: ADR-0016. Issue #172 / decision D16 reopened
+                 D1's count — several bells may be lit at once — and the pointer survived it: the
+                 constraint carrying the rule is now unique (owner_id, source_view_id) rather than a
+                 primary key on owner_id.)
                  A module MAY also grow an infrastructure/ for a
                  non-persistence adapter — modules/connections/infrastructure/ holds the node:crypto
                  CSPRNG behind the invite-token port, and modules/notifications/infrastructure/ holds

@@ -7,9 +7,14 @@ export interface SetSavedViewNotifyCommand {
   readonly notify: boolean;
 }
 
-/** What the caller is told: which view the one bell is now lit on, if any. */
+/**
+ * What the caller is told: every view their bells are now lit on.
+ *
+ * The whole set rather than the view just toggled, so a client that raced another device
+ * re-renders from the server's answer instead of patching its own copy.
+ */
 export interface NotifyMeDesignation {
-  readonly notifyingViewId: string | null;
+  readonly notifyingViewIds: readonly string[];
 }
 
 export interface SetSavedViewNotifyService {
@@ -24,22 +29,25 @@ export interface SetSavedViewNotifyDependencies {
 }
 
 /**
- * The Notify Me designation use case — the comp's per-view bell (issue #45, decision D1).
+ * The Notify Me designation use case — the comp's per-view bell (issue #45, #172).
  *
- * ⚠ **Turning the bell on view B on turns it off on view A, and that is the whole
- * feature.** D1 resolved the PDF↔prototype conflict in the PDF's favour: there is exactly
- * one Notify Me query per user, and "the prototype's per-view bell becomes the UI
- * affordance for designating *which* view's query is the Notify Me query". This service
- * never counts rows to enforce that — `app.notify_me_queries`' primary key on `owner_id`
- * does, so a second notifying query is not a bug this code prevents but a row the
- * database cannot hold (ADR-0016).
+ * ⚠ **Every bell is its own switch, and that is decision D16 reopening D1.** D1 read the
+ * PDF's "one special saved query called Notify Me" as exactly one per user, so turning the
+ * bell on view B on turned it off on view A; the owner has since asked for the prototype's
+ * plain reading, and a person may now notify on several views at once. What did not change
+ * is where the truth lives: this service still never counts rows to keep bells from
+ * colliding, because `app.notify_me_queries`' unique constraint on
+ * `(owner_id, source_view_id)` is what makes one bell one row (ADR-0016, D16).
  *
- * The query text copied onto the designation is the view's, as stored. Re-parsing it here
+ * The query text copied onto a designation is the view's, as stored. Re-parsing it here
  * would let a grammar change silently reinterpret a saved query at designation time —
  * which is the exact failure `ast_version` exists to prevent (ADR-0007:70-72).
  *
  * @throws {import('../domain/saved-view.errors').SavedViewUnavailableError} when the view
  *   is not one of this actor's — the same answer an invented ID gets (M5-AC16).
+ * @throws {import('../domain/notify-me-query.errors').NotifyMeQueryLimitReachedError} when
+ *   lighting this bell would take the actor past the per-owner cap that bounds what the
+ *   notification evaluator reads on every bulletin.
  */
 export function createSetSavedViewNotifyService(
   dependencies: SetSavedViewNotifyDependencies,
@@ -49,7 +57,7 @@ export function createSetSavedViewNotifyService(
   return {
     async set(command: SetSavedViewNotifyCommand): Promise<NotifyMeDesignation> {
       return {
-        notifyingViewId: await dependencies.savedViews.setNotify({
+        notifyingViewIds: await dependencies.savedViews.setNotify({
           ownerId: command.actorId,
           viewId: command.viewId,
           notify: command.notify,

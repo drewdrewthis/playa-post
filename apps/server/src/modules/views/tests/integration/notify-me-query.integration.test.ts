@@ -20,17 +20,25 @@ import { createPostgresNotifyMeQueryRepository } from '../../persistence/postgre
  * lane's test-writing pass** (the coder/reviewer owns ratifying or replacing it in
  * the same PR that adds `update-notify-me-query.service.ts`):
  *
- * `app.notify_me_queries` has **no separate query id** — ADR-0007:79 pins the
- * primary key to `owner_id` alone, "exactly one Notify Me query per user". B14
- * forbids any tRPC input schema carrying an `ownerId`/`userId`/`actorId`/`viewerId`
- * field, so there is structurally no client-suppliable identifier through which an
- * actor could *name* another user's query — the same "no unrelated-actor case
- * exists" property `create-bulletin.service.ts`'s docstring already states for
- * `bulletin.create`. `UpdateNotifyMeQuery` is therefore modelled here with **no**
- * target-owner field at all: the command takes only `{ actorId, sourceText,
- * expectedVersion }`, and the write is unconditionally scoped `WHERE owner_id =
- * actorId`, mirroring `postgres-bulletin.repository.ts#archive`'s
- * `.where('author_id', '=', write.actorId)` pattern.
+ * `views.notifyMe.update` names **no query at all**. B14 forbids any tRPC input schema
+ * carrying an `ownerId`/`userId`/`actorId`/`viewerId` field, so there is structurally
+ * no client-suppliable identifier through which an actor could *name* another user's
+ * query — the same "no unrelated-actor case exists" property
+ * `create-bulletin.service.ts`'s docstring already states for `bulletin.create`.
+ * `UpdateNotifyMeQuery` is therefore modelled with **no** target-owner field at all:
+ * the command takes only `{ actorId, sourceText, expectedVersion }`, and the write is
+ * unconditionally scoped `WHERE owner_id = actorId`, mirroring
+ * `postgres-bulletin.repository.ts#archive`'s `.where('author_id', '=', write.actorId)`
+ * pattern.
+ *
+ * ⚠ **What made that addressable used to be the primary key on `owner_id`** — D1's
+ * "exactly one Notify Me query per user", ADR-0007:79. **Issue #172 reopened D1** and a
+ * person may now hold several queries, so the address narrowed with it: this procedure
+ * writes the one row of theirs that belongs to **no saved view**, held to one per person
+ * by `UNIQUE NULLS NOT DISTINCT (owner_id, source_view_id)`. The scenario below is
+ * unaffected — the rows seeded here carry no `source_view_id`, which is exactly the row
+ * this procedure means — and `saved-view.integration.test.ts` carries the assertions
+ * about the designated rows this one cannot reach.
  *
  * Given that, "actor C submits notifyMe.update for [user A's] query" is realized
  * the one way the data model allows it: **C submits `expectedVersion` equal to A's

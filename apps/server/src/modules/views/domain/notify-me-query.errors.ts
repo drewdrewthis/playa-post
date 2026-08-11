@@ -1,5 +1,7 @@
 import { ApplicationError } from '../../../shared/errors/application-error';
 
+import { NOTIFY_ME_QUERY_LIMIT_PER_OWNER } from './notify-me-query';
+
 /**
  * The saved query you were editing is not the one that is stored.
  *
@@ -25,5 +27,32 @@ export class NotifyMeQueryConflictError extends ApplicationError {
       'Your saved Notify Me query has changed since you loaded it.',
     );
     this.name = 'NotifyMeQueryConflictError';
+  }
+}
+
+/**
+ * You already have as many notifications switched on as this product evaluates.
+ *
+ * ⚠ **It names the bound and the remedy, and echoes nothing.** The same rule
+ * {@link import('./saved-view.errors').SavedViewLimitReachedError} follows: a message
+ * carrying the query text somebody typed is one log line away from being a leak, and a
+ * refusal that does not say what to do instead gets retried until it is reported as a bug.
+ *
+ * Reachable from both write paths onto `app.notify_me_queries`, because both can add a
+ * row: lighting the bell on a view that has none, and `views.notifyMe.update` writing a
+ * first untied query. Neither can reach it by *changing* a query that already exists —
+ * an upsert onto a row this owner already holds does not grow the count.
+ *
+ * See {@link NOTIFY_ME_QUERY_LIMIT_PER_OWNER} for why the number is what it is.
+ */
+export class NotifyMeQueryLimitReachedError extends ApplicationError {
+  static readonly code = 'NOTIFY_ME_QUERY_LIMIT_REACHED';
+
+  constructor() {
+    super(
+      NotifyMeQueryLimitReachedError.code,
+      `You can have notifications on for up to ${String(NOTIFY_ME_QUERY_LIMIT_PER_OWNER)} saved queries. Switch one off to add another.`,
+    );
+    this.name = 'NotifyMeQueryLimitReachedError';
   }
 }

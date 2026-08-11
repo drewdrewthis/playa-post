@@ -7,15 +7,21 @@ import type {
   SavedNotifyMeQuery,
 } from '../application/notify-me-query.directory';
 import { BOARD_QUERY_AST_VERSION } from '../domain/board-query-grammar';
-import type { NotifyMeQuery } from '../domain/notify-me-query';
-import { NotifyMeQueryConflictError } from '../domain/notify-me-query.errors';
+import {
+  NOTIFY_ME_QUERY_LIMIT_PER_OWNER,
+  type NotifyMeQuery,
+} from '../domain/notify-me-query';
+import {
+  NotifyMeQueryConflictError,
+  NotifyMeQueryLimitReachedError,
+} from '../domain/notify-me-query.errors';
 import { notifyMeQueryChanged, type NotifyMeQueryChanged } from '../domain/notify-me-query.events';
 import type {
   NotifyMeQueryRepository,
   SaveNotifyMeQuery,
 } from '../domain/notify-me-query.repository';
 
-import { toBoardQuery, toNotifyMeQuery } from './notify-me-query.mapper';
+import { toBoardQuery, toNotifyMeQuery, type NotifyMeQueryRow } from './notify-me-query.mapper';
 
 /** Everything the repository needs, injected (addendum §12). */
 export interface PostgresNotifyMeQueryRepositoryDependencies {
@@ -27,10 +33,18 @@ export interface PostgresNotifyMeQueryRepositoryDependencies {
  * `app.notify_me_queries`, behind both of this module's ports.
  *
  * One object implementing two interfaces, because they describe two *questions* over
- * one table: {@link NotifyMeQueryRepository} is the owner writing their own query, and
- * {@link NotifyMeQueryDirectory} is the evaluation path reading everybody's projected
+ * one table: {@link NotifyMeQueryRepository} is the owner writing their own untied query,
+ * and {@link NotifyMeQueryDirectory} is the evaluation path reading everybody's projected
  * filter. Consumers declare whichever they need, so the notification evaluator cannot
  * reach a write and the update service cannot enumerate other people's queries.
+ *
+ * ⚠ **The per-view designations are not written here.** After D16 this table holds several
+ * rows per owner and two write paths reach it: this one owns the row whose
+ * `source_view_id` is `NULL`, and `postgres-saved-view.repository.ts` owns the rows behind
+ * the Saved screen's bells. Both are this module's, and the split is the same one that was
+ * already true when there was a single row — a designation is a fact spanning
+ * `app.saved_views` and this table, so it is written where both can be held in one
+ * transaction.
  *
  * **This is the only file in the system allowed to name `app.notify_me_queries`**
  * (addendum §19: cross-module reads go through the application interface above, never
@@ -63,28 +77,16 @@ export function createPostgresNotifyMeQueryRepository(
         // wants actorship settled before version comparison; expressing it as a
         // predicate on the one statement means there is no ordering for a future edit
         // to get wrong, and no window a concurrent write could exploit.
+        //
+        // ⚠ **Both branches pin `source_view_id` to NULL** — the insert by writing it, the
+        // update by predicating on it — and after D16 that is what keeps "the actor is the
+        // address" true. This procedure names no row, so the row it means has to be the one
+        // of theirs that belongs to no view. Without the predicate the UPDATE would be free
+        // to land on whichever designated query happened to share the version, silently
+        // rewriting the query behind a lit bell to text that card does not say.
         const row =
           write.expectedVersion === undefined
-            ? await transaction
-                .insertInto('app.notify_me_queries')
-                .values({
-                  owner_id: write.ownerId,
-                  source_text: write.sourceText,
-                  ast,
-                  ast_version: write.astVersion,
-                  updated_at: write.updatedAt,
-                  // `views.notifyMe.update` writes a query that belongs to no saved
-                  // view. Explicit rather than left to the column default so the two
-                  // write paths onto this table state the same field — the designation
-                  // is set only by `views.saved.setNotify` (ADR-0016).
-                  source_view_id: null,
-                })
-                // A row already existing IS the version mismatch: the caller said "I
-                // have none". `do nothing` rather than `do update` so a first-save
-                // race cannot silently overwrite the query that won it.
-                .onConflict((conflict) => conflict.doNothing())
-                .returningAll()
-                .executeTakeFirst()
+            ? await insertUntiedQuery(transaction, write, ast)
             : await transaction
                 .updateTable('app.notify_me_queries')
                 .set({
@@ -93,12 +95,9 @@ export function createPostgresNotifyMeQueryRepository(
                   ast_version: write.astVersion,
                   version: sql<number>`version + 1`,
                   updated_at: write.updatedAt,
-                  // Cleared, not preserved: the text just became something the
-                  // designated view does not say, so leaving the pointer would light a
-                  // bell on a card whose query is no longer the one being notified on.
-                  source_view_id: null,
                 })
                 .where('owner_id', '=', write.ownerId)
+                .where('source_view_id', 'is', null)
                 .where('version', '=', write.expectedVersion)
                 .returningAll()
                 .executeTakeFirst();
@@ -124,6 +123,11 @@ export function createPostgresNotifyMeQueryRepository(
         // `source_text` is not selected. The evaluator has no use for it and the
         // narrower projection is what keeps somebody's typed words out of a code path
         // whose whole job is to fan out to other systems (ADR-0006, M2-AC16).
+        //
+        // ⚠ `source_view_id` is not selected either, and after D16 that is a choice
+        // rather than a leftover: the evaluator matches a *person*, and which of their
+        // bells produced the match is not something a notification says. Handing it over
+        // would put a saved view's identity into the fan-out path for nobody to read.
         .select(['owner_id', 'ast'])
         // Queries stored under another grammar are excluded rather than reinterpreted
         // (ADR-0007:70-72). Filtered in SQL so the exclusion cannot be forgotten by a
@@ -134,6 +138,58 @@ export function createPostgresNotifyMeQueryRepository(
       return rows.map((row) => ({ ownerId: row.owner_id, query: toBoardQuery(row.ast) }));
     },
   };
+}
+
+/**
+ * Insert the actor's untied query, refusing it if they are already at the cap.
+ *
+ * Split out because the insert branch is the only one of the two that can grow the
+ * owner's row count, and therefore the only one the cap has anything to say about — an
+ * `UPDATE` of a row that already exists cannot take anybody past a limit they were
+ * already inside.
+ *
+ * The count is taken inside the caller's transaction but takes no lock, which is
+ * {@link NOTIFY_ME_QUERY_LIMIT_PER_OWNER}'s stated trade: two writes racing each other can
+ * land one extra row, and a bound that exists to stop a list growing without limit does
+ * not need to be exact.
+ */
+async function insertUntiedQuery(
+  transaction: DatabaseConnection,
+  write: SaveNotifyMeQuery,
+  ast: { types: string[]; text: string[] },
+): Promise<NotifyMeQueryRow | undefined> {
+  const held = await transaction
+    .selectFrom('app.notify_me_queries')
+    .select(({ fn }) => fn.countAll<string>().as('count'))
+    .where('owner_id', '=', write.ownerId)
+    .executeTakeFirstOrThrow();
+
+  if (Number(held.count) >= NOTIFY_ME_QUERY_LIMIT_PER_OWNER) {
+    throw new NotifyMeQueryLimitReachedError();
+  }
+
+  return transaction
+    .insertInto('app.notify_me_queries')
+    .values({
+      owner_id: write.ownerId,
+      source_text: write.sourceText,
+      ast,
+      ast_version: write.astVersion,
+      updated_at: write.updatedAt,
+      // `views.notifyMe.update` writes a query that belongs to no saved view. Explicit
+      // rather than left to the column default, because after D16 this is not an absent
+      // designation but a **key value**: `NULLS NOT DISTINCT` makes it the one row per
+      // owner this procedure can ever address (ADR-0016, D16).
+      source_view_id: null,
+    })
+    // An untied row already existing IS the version mismatch: the caller said "I have
+    // none". `do nothing` rather than `do update` so a first-save race cannot silently
+    // overwrite the query that won it. No conflict target, so any unique violation lands
+    // here — which is exactly one constraint, and the one that means "you already have
+    // an untied query".
+    .onConflict((conflict) => conflict.doNothing())
+    .returningAll()
+    .executeTakeFirst();
 }
 
 /**
@@ -158,9 +214,10 @@ async function appendOutboxEvent(
       event_type: event.type,
       occurred_at: event.occurredAt,
       actor_id: event.ownerId,
-      // The owner is the aggregate: one query per user is the primary key
-      // (ADR-0007:79), so there is no separate query ID to route on.
-      aggregate_id: event.ownerId,
+      // The query is the aggregate, not the owner (D16): a person may hold several, so an
+      // event routed on `owner_id` could not say which one this is about. The owner is
+      // still on the envelope as the actor and in the payload as the routing fact.
+      aggregate_id: event.queryId,
       // Identifiers and routing data only — no source text, no AST. A consumer that
       // needs the query re-reads it through this module's own read path.
       payload: { ownerId: event.ownerId, version: event.version },

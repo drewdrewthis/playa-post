@@ -76,6 +76,40 @@ a silent orphan.
 `EvaluateNotifyMeHandler` and `NotifyMeQueryDirectory#findAllCurrent` are **unchanged, to
 the character.** That is the test of this decision.
 
+⚠ **Amended by issue [#172](https://github.com/drewdrewthis/playa-post/issues/172) /
+product decision D16: the count is reopened, the structure is not.** The owner asked to be
+able to notify on several views at once, so "at most one view per person can carry the
+bell" no longer holds and neither does the primary key that enforced it:
+
+```sql
+-- migration 20260812120000_notify_me_queries_per_view.sql
+alter table app.notify_me_queries add column id uuid not null default pg_catalog.gen_random_uuid();
+alter table app.notify_me_queries drop constraint notify_me_queries_pkey;
+alter table app.notify_me_queries add constraint notify_me_queries_pkey primary key (id);
+alter table app.notify_me_queries
+  add constraint notify_me_queries_owner_id_source_view_id_key
+    unique nulls not distinct (owner_id, source_view_id);
+```
+
+Everything above this paragraph that is *not* about the count still stands, and that is
+most of it: `app.saved_views` still carries no notify flag, `app.notify_me_queries` is
+still the sole answer to "who gets notified", the composite foreign key is untouched, and
+D1 is still a constraint rather than application code — it is now `UNIQUE NULLS NOT
+DISTINCT (owner_id, source_view_id)` instead of a primary key, reading "one query per
+(owner, view), plus one untied query per owner". The `NULLS NOT DISTINCT` is what keeps
+`views.notifyMe.update` addressable with no identifier, and it costs that procedure its old
+side effect: it no longer detaches a lit bell, because the bells are other rows.
+
+Two claims above did not survive. **"Lighting a second one is an `ON CONFLICT DO UPDATE`
+that moves it"** is now an upsert on the *pair*, so a second bell adds a query and only
+re-lighting the same bell converges. And **`EvaluateNotifyMeHandler` is no longer unchanged
+to the character**: `findAllCurrent` may return several rows per owner, so the handler
+settles a person at their first match — a `NotifyMeMatched` per query would push one
+bulletin at somebody once per bell. The read cost that used to be bounded by the primary
+key is bounded instead by `NOTIFY_ME_QUERY_LIMIT_PER_OWNER` (six), which is deliberately
+**not** D3's 24; D16 records why the two caps have different payers and therefore different
+numbers.
+
 ### D2 — the card's match count is `bulletins.board`, called by the client, once per view
 
 `views.saved.list` reports no counts. The Saved screen issues one
@@ -189,7 +223,10 @@ it. Widening the grammar is separate work.
 | The table carries the ADR-0002 §4 backstop and only `app_rw` is granted | `tests/security/baseline-catalog.security.test.ts` (B3) quantifies over every table in `schema app`; the migration calls `app.apply_rls_backstop('app.saved_views')` |
 | `schema app` holds exactly the declared tables | `tests/security/app-table-inventory.security.test.ts`, updated to fifteen names |
 | One owner's views are unreachable by anybody else, and a refusal leaks none of their state | `apps/server/src/modules/views/tests/integration/saved-view.integration.test.ts` › "a saved view is reachable only by its owner" — rename, delete and setNotify each attempted by an unrelated actor; the owner's row unchanged, zero outbox rows, and the serialized rejections asserted not to contain the query text |
-| Lighting a second bell moves the designation instead of adding one (D1) | same file › "writes exactly one notify_me_queries row however many bells are tapped" |
+| ~~Lighting a second bell moves the designation instead of adding one (D1)~~ **Superseded by D16**: lighting a second bell *adds* a query, and switching one off leaves the others lit | same file › "writes one notify_me_queries row per lit bell rather than moving a single one" and "switches one bell off without touching the others" |
+| The per-person cap that replaced D1's primary key as the evaluator's read bound (D16) | same file › "refuses the 7th bell, bounding what the evaluator reads per bulletin" — and re-lighting an already-lit bell at the cap still succeeds, because it adds nothing to count |
+| A person is matched once per bulletin however many of their queries match (D16) | `modules/notifications/tests/unit/evaluate-notify-me-multiple-queries.unit.test.ts` |
+| An existing single-notify user's bell survives the key swap (#172 AC3) | `notify-me-queries-schema-migration.integration.test.ts` › "Scenario: an existing Notify Me user survives the key swap" — the migrations are applied in two halves around #172's, with the pre-#172 row written in between |
 | Deleting the designated view stops the notifications | same file › "stops the notifications when the view the bell is on is deleted" |
 | A stale client cannot switch off a bell that has already moved | same file › "does not switch off a bell that has already moved" |
 | A write names **one** view, not every view its owner holds — the `id` predicate on `rename` and `delete` | same file › "renames only the view it was given" and "deletes only the view it was given". Both need an owner holding **two** views: with one row per owner, `WHERE owner_id = X` and `WHERE owner_id = X AND id = V` select the identical set and no assertion can tell them apart. The delete case carries no lit bell on purpose, so the composite FK cannot mask the missing predicate. |

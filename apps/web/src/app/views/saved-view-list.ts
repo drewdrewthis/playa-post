@@ -60,6 +60,9 @@ export function bellLabel(notifying: boolean): string {
  * "NOTIFY OFF, toggle button" once per card with nothing to tell them apart. `aria-pressed` carries lit-ness — which is why this string must not
  * also carry it: a toggle whose *name* changes when it is pressed reads as a different
  * control each time, and the visible label already says which state it is in.
+ *
+ * The name matters more under D16 than it did under D1: several bells may be lit at once,
+ * so "the lit one" is no longer a thing a listener can hold in their head.
  */
 export function bellActionLabel(name: string): string {
   return `Notify me about ${name}`;
@@ -128,4 +131,41 @@ export function saveViewFailureMessage(error: unknown): string {
   return code !== null && SAVE_REFUSAL_CODES.includes(code) && error instanceof Error
     ? error.message
     : 'That view could not be saved. Check your connection and try again.';
+}
+
+/**
+ * The refusals of `views.saved.setNotify` whose remedy is the person's own.
+ *
+ * One code, and it arrived with decision D16: switching a bell *on* can now be refused,
+ * because several may be lit at once and the number the notification evaluator will read
+ * per bulletin has to be bounded somewhere. `SAVED_VIEW_UNAVAILABLE` is deliberately
+ * absent — a card whose view has been deleted elsewhere is not something the person can
+ * fix by reading a sentence, and the refetch that follows removes the card anyway.
+ */
+const SET_NOTIFY_REFUSAL_CODES: readonly string[] = ['NOTIFY_ME_QUERY_LIMIT_REACHED'];
+
+/**
+ * What to tell someone whose bell tap did not take.
+ *
+ * ⚠ **A refusal must not be dressed as a connectivity problem** — `saveViewFailureMessage`'s
+ * rule, and it bites harder here: somebody at the notification cap who is told to check
+ * their connection will tap again, and the tap fails identically forever, while the one
+ * thing that would work (switching another bell off) is what the server said and this
+ * screen threw away.
+ *
+ * The server's own message is passed through rather than restated, which is safe for the
+ * reason the error documents: it names the bound and echoes none of the person's input
+ * (`views/domain/notify-me-query.errors.ts`).
+ *
+ * @param error - Whatever the mutation rejected with: a tRPC envelope, or a transport
+ *   failure with no envelope at all.
+ * @param name - The view whose bell was tapped, for the connectivity message that has to
+ *   say which of two dozen identical controls did not register.
+ */
+export function setNotifyFailureMessage(error: unknown, name: string): string {
+  const code = applicationErrorCode(error);
+
+  return code !== null && SET_NOTIFY_REFUSAL_CODES.includes(code) && error instanceof Error
+    ? error.message
+    : `Notifications for ${name} could not be changed. Check your connection and try again.`;
 }

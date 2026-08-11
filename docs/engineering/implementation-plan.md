@@ -50,7 +50,12 @@ Per-feature engineering DoD remains addendum §25 plus the repo-specific additio
   payments, public people search, groups, native mobile apps, user-facing analytics, E2EE,
   automatic community-wide punishment.
 - Private notes / `type:note` — cut by decision D2.
-- Multiple notifying saved queries — cut by decision D1 (exactly one Notify Me).
+- ~~Multiple notifying saved queries — cut by decision D1 (exactly one Notify Me).~~
+  **Reinstated by decision D16** ([#172](https://github.com/drewdrewthis/playa-post/issues/172),
+  owner-directed): several saved views may notify at once, capped per person because the
+  evaluator reads every switched-on query on every `BulletinCreated`. Struck rather than
+  deleted — this list is what a brief reads to learn what is deliberately absent, and a
+  line silently removed reads as an oversight.
 - Microservices, event sourcing, a custom command bus, or a custom query framework (addendum §8, §18).
 - Horizontal build-out of all modules before the M2 slice works (PDF §9, addendum §23).
 - Performance projections, caches, or materialized views before measurement demands them (ADR-0004).
@@ -990,7 +995,7 @@ Not filed. Labels: `feature`, `adr`, `vertical-slice`, `bug`.
 | 18 | graph: `visible_people` recursive CTE + read model + person projection | Checked-in `SECURITY INVOKER` function (ADR-0004) with `SET search_path = ''` (ADR-0002 §5 pooler-safety — that rule's home is ADR-0002, not ADR-0004), limited in M2 to the viewer plus accepted 1st-degree connections. Blocks prune inside the recursive term. Implements ADR-0002 §6a: every person representation in every payload is projected through this function's `disclosure` level. | vertical-slice |
 | 19 | bulletins: create and archive a Request | `CreateBulletinService` and `ArchiveBulletinService` with lifecycle timestamps, `version`, and `BulletinCreated`/`BulletinArchived` outbox events in the same transaction. Request type only. Non-author `getById` on an archived bulletin returns 404 `BULLETIN_GONE`. | vertical-slice |
 | 20 | views: query grammar tokenizer, Zod AST, and SQL compiler | ADR-0007 restricted to `type:` and bare text. Unknown fields, over-length input, and > 16 terms are rejected naming the offending token; well-formed values that resolve to nothing return zero rows, never an error. Compiles to parameterized SQL over the authorized CTE. | adr |
-| 21 | views: single Notify Me query | One row per user enforced by a primary key on `owner_id` (D1 as a constraint). Stores source text plus validated AST with `ast_version`. `UpdateNotifyMeQuery` emits `NotifyMeQueryChanged`. | vertical-slice |
+| 21 | views: Notify Me queries | Shipped as one row per user, enforced by a primary key on `owner_id` (D1 as a constraint). **Superseded by decision D16** ([#172](https://github.com/drewdrewthis/playa-post/issues/172)): several saved views may notify at once, so the key is a surrogate `id` with `unique nulls not distinct (owner_id, source_view_id)` carrying the rule, and the per-person count is bounded by `NOTIFY_ME_QUERY_LIMIT_PER_OWNER` instead of by the key. Unchanged: stores source text plus validated AST with `ast_version`, and `UpdateNotifyMeQuery` emits `NotifyMeQueryChanged`. | vertical-slice |
 | 22 | notifications: subscription, grouped delivery, delivery-time re-check | Web Push subscribe, `EvaluateNotifyMeHandler` on `BulletinCreated`, `SendGroupedPushHandler` with a 60 s window. Recipient authorization is re-evaluated in the send handler inside the receipt transaction (ADR-0002 §11); payloads carry identifiers and a generic string only. | vertical-slice |
 | 23 | moderation: private report and viewer-local dismissal | Reporting hides the bulletin for the reporter immediately and never discloses the reporter to the author. Dismissal is viewer-local. No strike counts, no aggregation. | vertical-slice |
 | 24 | sync: envelope, idempotency, actorship, replay | ADR-0005 envelope; `app.mutation_results` written in the same transaction as the effect; the `bulletin.create` handler. **Actorship is verified before any handler and before version comparison**, so an unrelated actor never receives a conflict envelope. Same ID + same hash → `replayed`; different hash → `IDEMPOTENCY_KEY_REUSE`. | adr |

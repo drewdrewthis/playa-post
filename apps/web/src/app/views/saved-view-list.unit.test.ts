@@ -9,6 +9,7 @@ import {
   notifyToast,
   saveViewFailureMessage,
   seedSavedViewName,
+  setNotifyFailureMessage,
 } from './saved-view-list';
 
 describe('seedSavedViewName (comp: `saveQuery`)', () => {
@@ -134,5 +135,47 @@ describe('saveViewFailureMessage', () => {
     expect(saveViewFailureMessage(refusal('SOMETHING_NEW', 'internal detail'))).toBe(
       CONNECTION_MESSAGE,
     );
+  });
+});
+
+/**
+ * The bell's own refusal path, which arrived with decision D16 (issue #172).
+ *
+ * Under D1 a bell tap could only fail by not arriving — there was one query per person and
+ * lighting one moved it, so there was nothing to refuse. Several may now be lit at once and
+ * the number is capped, which gives this control its first judged failure.
+ */
+describe('setNotifyFailureMessage', () => {
+  const NOTIFY_CONNECTION_MESSAGE =
+    'Notifications for Rides could not be changed. Check your connection and try again.';
+
+  it('tells someone at the notification cap to switch one off, not to check their connection', () => {
+    // ⚠ The same defect `saveViewFailureMessage` closes, on the control D16 made
+    // refusable: retrying at the cap fails identically forever, and the one thing that
+    // would work is what the server said.
+    const atCap = refusal(
+      'NOTIFY_ME_QUERY_LIMIT_REACHED',
+      'You can have notifications on for up to 6 saved queries. Switch one off to add another.',
+    );
+
+    expect(setNotifyFailureMessage(atCap, 'Rides')).toBe(
+      'You can have notifications on for up to 6 saved queries. Switch one off to add another.',
+    );
+    expect(setNotifyFailureMessage(atCap, 'Rides')).not.toBe(NOTIFY_CONNECTION_MESSAGE);
+  });
+
+  it('names the view when there was no answer to read, because every bell looks alike', () => {
+    expect(setNotifyFailureMessage(TRANSPORT_FAILURE, 'Rides')).toBe(NOTIFY_CONNECTION_MESSAGE);
+  });
+
+  it('does not pass through a refusal it has no remedy for', () => {
+    // `SAVED_VIEW_UNAVAILABLE` is the live case: a card whose view was deleted on another
+    // device is not something a sentence helps with, and the refetch removes the card.
+    expect(
+      setNotifyFailureMessage(
+        refusal('SAVED_VIEW_UNAVAILABLE', 'That saved view is no longer available.'),
+        'Rides',
+      ),
+    ).toBe(NOTIFY_CONNECTION_MESSAGE);
   });
 });

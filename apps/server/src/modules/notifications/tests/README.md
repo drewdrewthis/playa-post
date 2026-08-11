@@ -18,6 +18,7 @@ runs in the `integration` vitest project against a Testcontainers Postgres with
 | `integration/` | `notification-seen.integration.test.ts` | **none** — `notifications.markSeen` (issue #178). Proves what only a database can: the watermark survives a new caller, a second open replaces rather than accumulates, a stale write never moves it backwards, and it is scoped to one recipient. Every scenario asserts `unread` beside `seen`, because the regression this feature can ship is one flag implying the other |
 | `unit/` | `list-notifications-unread.unit.test.ts` | **none** — the `unread`/dismiss rule's boundary cases, against in-memory fakes |
 | `unit/` | `list-notifications-seen.unit.test.ts` | **none** — the `seen` rule's boundary cases (no watermark, a timestamp exactly on it, either side of it, a second open) and all four `seen`×`unread` combinations, against in-memory fakes |
+| `unit/` | `evaluate-notify-me-multiple-queries.unit.test.ts` | `notify-me.feature` › "A bulletin matching two of one viewer's queries notifies them once" (#172, decision D16) — one match per person however many of their queries match, the scan stopping at a person's first match, people kept apart, and the author skipped before any read. The authorized-read half stays in `notify-me-push.integration.test.ts`: a fake here would prove nothing about `app.visible_bulletins` |
 
 The two pure rules this module owns — the 60-second tumbling window
 (`domain/notification-window.ts`) and the payload's fixed shape

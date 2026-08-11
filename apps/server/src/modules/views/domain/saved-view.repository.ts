@@ -55,7 +55,12 @@ export interface DeleteSavedView {
 export interface SetSavedViewNotify {
   readonly ownerId: string;
   readonly viewId: string;
-  /** `true` moves the Notify Me designation onto this view; `false` clears it (D1). */
+  /**
+   * `true` adds a Notify Me query for this view; `false` removes this view's.
+   *
+   * ⚠ **Adds, not moves** — decision D16, reopening D1. Bells on other views are
+   * untouched in both directions.
+   */
   readonly notify: boolean;
   readonly changedAt: Date;
 }
@@ -67,18 +72,18 @@ export interface SetSavedViewNotify {
  *
  * ⚠ **Four of these five operations may touch `app.notify_me_queries` as well as
  * `app.saved_views`, and that is not a layering slip.** Both tables belong to this
- * module, and a designation is a fact *spanning* them: which view the bell is lit on
+ * module, and a designation is a fact *spanning* them: which views the bells are lit on
  * (`saved_views.id`) and what is actually being notified on (`notify_me_queries`) are one
  * transactional truth, exactly as a state change and its outbox row are (addendum §10,
  * ADR-0006). A port per table would make that atomicity a convention two services have to
- * remember rather than a guarantee the database enforces — and D1's "exactly one Notify
- * Me query per user" would stop being a primary key.
+ * remember rather than a guarantee the database enforces — and D16's "one query per
+ * (owner, view)" would stop being a unique constraint.
  */
 export interface SavedViewRepository {
   /**
-   * This owner's views, oldest first, and which of them the bell is lit on.
+   * This owner's views, oldest first, and which of them have a bell lit.
    *
-   * One read rather than two, so the list and the designation cannot disagree — see
+   * One read rather than two, so the list and the designations cannot disagree — see
    * {@link SavedViewListing}.
    */
   listFor(ownerId: string): Promise<SavedViewListing>;
@@ -110,9 +115,10 @@ export interface SavedViewRepository {
   /**
    * Remove one of the acting owner's own views.
    *
-   * ⚠ **Clears the Notify Me query first when this view is the one it was designated
-   * from**, inside the same transaction. Leaving it would keep pushing notifications for
-   * a query whose only off-switch — the bell on this card — has just been deleted.
+   * ⚠ **Clears this view's Notify Me query first, if it has one**, inside the same
+   * transaction, and leaves the owner's other queries alone. Keeping it would push
+   * notifications for a query whose only off-switch — the bell on this card — has just
+   * been deleted.
    *
    * Idempotent, and **the one operation here that does not raise
    * {@link import('./saved-view.errors').SavedViewUnavailableError} for an id that is not
@@ -131,23 +137,29 @@ export interface SavedViewRepository {
   delete(write: DeleteSavedView): Promise<boolean>;
 
   /**
-   * Move the Notify Me designation onto this view, or clear it.
+   * Light the Notify Me bell on this view, or clear this view's.
    *
-   * `notify: true` **replaces** whatever the owner's single Notify Me query was — D1's
-   * "toggling a bell on view B moves Notify Me from view A, it does not create a second
-   * notifying query", which is `app.notify_me_queries`' primary key on `owner_id` rather
-   * than an application rule.
+   * ⚠ **Independent of every other bell this owner has lit** — decision D16, which
+   * supersedes D1's single-query rule and with it ADR-0016 D1's "lighting a second one is
+   * an `ON CONFLICT DO UPDATE` that moves it". `notify: true` adds a query keyed
+   * `(owner_id, viewId)`; `notify: false` removes that one row. Neither statement can
+   * reach another view's row, because the key is what addresses it — the same shape of
+   * guarantee the old primary key gave, applied to a set instead of a singleton.
    *
-   * `notify: false` removes the query only when it is *this* view's; a stale client
-   * clearing a bell that has already moved must not switch off the notifications the
-   * owner just turned on somewhere else.
+   * Lighting a bell that is already lit is still an upsert onto the row that is there, so
+   * a double tap converges rather than accumulating.
    *
-   * No `expectedVersion`: the bell is a designation rather than a document, there is
-   * nothing to merge, and the last tap winning is what a toggle means.
+   * No `expectedVersion`: a bell is a designation rather than a document, there is nothing
+   * to merge, and the last tap winning is what a toggle means.
    *
-   * @returns The view the bell is now lit on, or `null` when it is lit on none.
+   * @returns Every view this owner's bells are now lit on — the whole set, so a client
+   *   that raced another device is corrected rather than left to patch its own copy.
    * @throws {import('./saved-view.errors').SavedViewUnavailableError} when the view is
    *   not one of this owner's — the same answer an invented ID gets (M5-AC16).
+   * @throws {import('./notify-me-query.errors').NotifyMeQueryLimitReachedError} when
+   *   lighting this bell would take the owner past
+   *   {@link import('./notify-me-query').NOTIFY_ME_QUERY_LIMIT_PER_OWNER}. Only ever
+   *   raised for a bell that is not already lit: re-lighting one changes no count.
    */
-  setNotify(write: SetSavedViewNotify): Promise<string | null>;
+  setNotify(write: SetSavedViewNotify): Promise<readonly string[]>;
 }

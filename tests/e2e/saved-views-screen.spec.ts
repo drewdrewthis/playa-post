@@ -16,11 +16,11 @@ import { bellLabel, matchNowLabel } from '../../apps/web/src/app/views/saved-vie
  * *declared* and *resolves* are different facts and only one of them is visible in a
  * stylesheet.
  *
- * The three states it covers are the three a person actually meets: nothing saved yet,
- * views saved with the bell dark, and the bell lit on exactly one of them — which is
- * decision D1's whole shape (`◉ NOTIFY ON` on one card while every other card still
- * reads `○ NOTIFY OFF`), and the one thing on this screen a still image can prove that
- * an integration test cannot.
+ * The states it covers are the ones a person actually meets: nothing saved yet, views
+ * saved with every bell dark, one bell lit beside a dark one, and — since issue #172 —
+ * **every bell lit at once**, which is decision D16's whole shape and the thing a still
+ * image can prove that an integration test cannot. The one-lit frame is kept rather than
+ * replaced, because it is the only one that shows both states of the control side by side.
  *
  * It writes `docs/engineering/screenshots/m2-saved-views-*.png` when
  * `E2E_SAVED_VIEWS_SCREENSHOT_DIR` is set — the same opt-in shape
@@ -216,7 +216,7 @@ async function openSavedScreen(page: Page, theme: 'light' | 'dark'): Promise<voi
 }
 
 test.describe('the Saved screen renders in both themes', () => {
-  test('shows the empty state, the saved cards, and the bell lit on exactly one', async ({
+  test('shows the empty state, the saved cards, one bell lit, and then both', async ({
     page,
   }) => {
     const userAAccessToken = requireEnv('E2E_USER_A_ACCESS_TOKEN');
@@ -290,7 +290,7 @@ test.describe('the Saved screen renders in both themes', () => {
       await capture(page, `m2-saved-views-list-${theme}`);
     }
 
-    /* 3. The bell lit on exactly one card — decision D1, as a picture. */
+    /* 3. One bell lit — both states of the control in one frame, for the design review. */
     await openSavedScreen(page, 'light');
     await page.getByTestId('saved-view-bell').first().click();
     await expect(page.getByTestId('saved-views-status')).toHaveText(
@@ -301,8 +301,7 @@ test.describe('the Saved screen renders in both themes', () => {
       await openSavedScreen(page, theme);
 
       // One lit, one dark, in one frame. Both states of the control are therefore in
-      // every screenshot this loop writes, which is what the design review needs to see
-      // and what a per-card boolean would have made impossible to guarantee.
+      // every screenshot this loop writes, which is what the design review needs to see.
       await expect(page.getByTestId('saved-view-bell')).toHaveText([
         bellLabel(true),
         bellLabel(false),
@@ -318,5 +317,55 @@ test.describe('the Saved screen renders in both themes', () => {
 
       await capture(page, `m2-saved-views-notify-on-${theme}`);
     }
+
+    /*
+     * 4. Both bells lit at once — decision D16, as a picture (#172 AC1).
+     *
+     * ⚠ **This step used to be impossible and its absence used to be the assertion.** Under
+     * D1 lighting the second bell put the first one out, and the loop above was the whole
+     * story: "exactly one". The browser is where that claim is worth re-checking, because
+     * the screen renders lit-ness from server state and a client that still assumed one
+     * designation would draw exactly the old picture while the database held two rows.
+     */
+    await openSavedScreen(page, 'light');
+    await page.getByTestId('saved-view-bell').nth(1).click();
+    await expect(page.getByTestId('saved-views-status')).toHaveText(
+      'You’ll hear when new bulletins match',
+    );
+
+    for (const theme of THEMES) {
+      await openSavedScreen(page, theme);
+
+      await expect(page.getByTestId('saved-view-bell')).toHaveText([
+        bellLabel(true),
+        bellLabel(true),
+      ]);
+      for (const index of [0, 1]) {
+        await expect(page.getByTestId('saved-view-bell').nth(index)).toHaveAttribute(
+          'aria-pressed',
+          'true',
+        );
+      }
+
+      await capture(page, `m2-saved-views-notify-both-${theme}`);
+    }
+
+    /*
+     * 5. Switching one off leaves the other lit (#172 AC2), read back after a reload.
+     *
+     * The reload is the point: `openSavedScreen` re-reads `views.saved.list`, so what is
+     * on screen is what the server stored rather than what this tab optimistically drew.
+     */
+    await openSavedScreen(page, 'light');
+    await page.getByTestId('saved-view-bell').first().click();
+    await expect(page.getByTestId('saved-views-status')).toHaveText(
+      /^Notifications off for /,
+    );
+
+    await openSavedScreen(page, 'light');
+    await expect(page.getByTestId('saved-view-bell')).toHaveText([
+      bellLabel(false),
+      bellLabel(true),
+    ]);
   });
 });

@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { sql, type DatabaseConnection } from '@playa-post/database';
 
+import { NOTIFY_ME_QUERY_LIMIT_PER_OWNER } from '../domain/notify-me-query';
+import { NotifyMeQueryLimitReachedError } from '../domain/notify-me-query.errors';
 import {
   notifyMeQueryChanged,
   notifyMeQueryCleared,
@@ -33,7 +35,7 @@ export interface PostgresSavedViewRepositoryDependencies {
 
 /**
  * `app.saved_views`, plus the one column of `app.notify_me_queries` that says which of
- * them the bell is lit on.
+ * them have a bell lit.
  *
  * **This is the only file allowed to name `app.saved_views`** (addendum §19). Every
  * statement is schema-qualified per ADR-0002's pooler-safety rules, and **every statement
@@ -43,11 +45,17 @@ export interface PostgresSavedViewRepositoryDependencies {
  * therefore cannot be told apart from the answer.
  *
  * ⚠ It also writes `app.notify_me_queries` and `app.outbox_events`. Neither is a layering
- * slip: the designation spans both product tables as one transactional truth (see
+ * slip: a designation spans both product tables as one transactional truth (see
  * {@link SavedViewRepository}), and a state change and its event are one fact
  * (addendum §10, ADR-0006). `postgres-notify-me-query.repository.ts` remains the owner of
- * the *query* itself — this file only ever moves or clears the **designation**, and never
- * writes a `source_text` the caller supplied.
+ * the **untied** query — the one row per person that belongs to no view; this file owns
+ * the rows behind the bells, and never writes a `source_text` the caller supplied.
+ *
+ * ⚠ **Every statement here that touches `app.notify_me_queries` carries BOTH `owner_id`
+ * and `source_view_id`, and after D16 the second predicate is load-bearing rather than
+ * redundant.** While there was one row per owner, scoping to the owner selected the same
+ * single row whatever else was written; a person may now hold several, so a statement
+ * missing its `source_view_id` would silently reach every bell they have lit.
  */
 export function createPostgresSavedViewRepository(
   dependencies: PostgresSavedViewRepositoryDependencies,
@@ -58,7 +66,7 @@ export function createPostgresSavedViewRepository(
     async listFor(ownerId: string): Promise<SavedViewListing> {
       // Concurrent, because neither read informs the other. They are still one answer:
       // see `SavedViewListing` for why the two facts are not two procedures.
-      const [rows, designation] = await Promise.all([
+      const [rows, designations] = await Promise.all([
         database
           .selectFrom('app.saved_views')
           .selectAll()
@@ -69,19 +77,10 @@ export function createPostgresSavedViewRepository(
           .orderBy('created_at', 'asc')
           .orderBy('id', 'asc')
           .execute(),
-        database
-          .selectFrom('app.notify_me_queries')
-          // `source_text` is not selected: this read answers "which card's bell is lit",
-          // and the query text is already on the view row it points at.
-          .select('source_view_id')
-          .where('owner_id', '=', ownerId)
-          .executeTakeFirst(),
+        designatedViewIds(database, ownerId),
       ]);
 
-      return {
-        views: rows.map(toSavedView),
-        notifyingViewId: designation?.source_view_id ?? null,
-      };
+      return { views: rows.map(toSavedView), notifyingViewIds: designations };
     },
 
     async save(write: SaveSavedView): Promise<SavedView> {
@@ -149,11 +148,16 @@ export function createPostgresSavedViewRepository(
         // ⚠ First, and not optional: `notify_me_queries_source_view_fkey` refuses the
         // delete below while a designation still points here. That refusal is the
         // backstop — the reason this clear happens at all is that the bell which turned
-        // the notifications on is about to stop existing.
+        // these notifications on is about to stop existing.
+        //
+        // `returning('id')` rather than a row count, because the event has to name the
+        // query that went (D16) and the only honest source for that is the statement that
+        // removed it.
         const cleared = await transaction
           .deleteFrom('app.notify_me_queries')
           .where('owner_id', '=', write.ownerId)
           .where('source_view_id', '=', write.viewId)
+          .returning('id')
           .executeTakeFirst();
 
         const removed = await transaction
@@ -162,10 +166,10 @@ export function createPostgresSavedViewRepository(
           .where('owner_id', '=', write.ownerId)
           .executeTakeFirst();
 
-        if (cleared.numDeletedRows > 0n) {
+        if (cleared !== undefined) {
           await appendOutboxEvent(
             transaction,
-            notifyMeQueryCleared(write.ownerId, write.deletedAt),
+            notifyMeQueryCleared(write.ownerId, cleared.id, write.deletedAt),
           );
         }
 
@@ -173,7 +177,7 @@ export function createPostgresSavedViewRepository(
       });
     },
 
-    async setNotify(write: SetSavedViewNotify): Promise<string | null> {
+    async setNotify(write: SetSavedViewNotify): Promise<readonly string[]> {
       return database.transaction().execute(async (transaction) => {
         // ⚠ **Read first, for both directions of the switch**, and scoped to the actor.
         // Skipping this on the `notify: false` path would make the same procedure answer
@@ -197,22 +201,49 @@ export function createPostgresSavedViewRepository(
           const cleared = await transaction
             .deleteFrom('app.notify_me_queries')
             .where('owner_id', '=', write.ownerId)
-            // Scoped to *this* view, not merely to the owner: a stale client clearing a
-            // bell that has already moved must not switch off the notifications the
-            // owner just turned on somewhere else.
+            // ⚠ Scoped to *this* view, and under D16 that predicate is the whole
+            // independence guarantee (#172 AC2): without it, switching one bell off
+            // switches off every bell this person has lit. It was already required
+            // before — a stale client clearing a bell that had moved must not undo a live
+            // choice — but a single row per owner meant dropping it cost nothing in the
+            // common case. It now costs everything.
             .where('source_view_id', '=', write.viewId)
+            .returning('id')
             .executeTakeFirst();
 
-          if (cleared.numDeletedRows === 0n) {
-            return currentDesignation(transaction, write.ownerId);
+          // Nothing of this owner's matched means nothing was switched off, and nothing may
+          // claim it was: a spurious `NotifyMeQueryCleared` is what a downstream consumer
+          // would act on to stop sending.
+          if (cleared !== undefined) {
+            await appendOutboxEvent(
+              transaction,
+              notifyMeQueryCleared(write.ownerId, cleared.id, write.changedAt),
+            );
           }
 
-          await appendOutboxEvent(
-            transaction,
-            notifyMeQueryCleared(write.ownerId, write.changedAt),
-          );
+          // Either way the caller is told where their bells actually are, so a client that
+          // raced another device is corrected rather than told "none".
+          return designatedViewIds(transaction, write.ownerId);
+        }
 
-          return null;
+        // ⚠ The cap is checked here and not on the `notify: false` path, and only for a
+        // bell that is not already lit: `NOTIFY_ME_QUERY_LIMIT_PER_OWNER` bounds how many
+        // queries the evaluator reads per bulletin, so only a write that *adds* a row has
+        // anything to answer for. Re-lighting a lit bell is an upsert onto the row that is
+        // already there and must stay a no-op rather than becoming a refusal somebody
+        // meets by tapping twice.
+        //
+        // Counted inside this transaction and unlocked, which is the cap's stated trade
+        // (see the constant): two taps racing each other can land one extra row.
+        const held = await transaction
+          .selectFrom('app.notify_me_queries')
+          .select('source_view_id')
+          .where('owner_id', '=', write.ownerId)
+          .execute();
+
+        const alreadyLit = held.some((row) => row.source_view_id === write.viewId);
+        if (!alreadyLit && held.length >= NOTIFY_ME_QUERY_LIMIT_PER_OWNER) {
+          throw new NotifyMeQueryLimitReachedError();
         }
 
         // ⚠ The stored AST is copied across verbatim rather than re-parsed from
@@ -231,19 +262,23 @@ export function createPostgresSavedViewRepository(
             updated_at: write.changedAt,
             source_view_id: write.viewId,
           })
-          // D1, as one statement: the owner already having a Notify Me query is not a
-          // conflict to refuse but the very case the bell exists for — the designation
-          // MOVES. `notify_me_queries` (unqualified) is PostgreSQL's alias for the
-          // insert target inside `DO UPDATE`, and names the row already stored.
+          // ⚠ **The conflict target is `(owner_id, source_view_id)`, which is D16 replacing
+          // D1 in one line.** It used to be `owner_id` alone, and the upsert's meaning was
+          // "the designation MOVES"; the pair means "this view's bell", so lighting a
+          // second one adds a query and lighting the same one twice converges. Re-lighting
+          // is the only case that reaches `DO UPDATE`, and it refreshes the copied query
+          // text — a view whose card was renamed still notifies on its own query, but a
+          // view saved before a grammar migration picks up nothing it did not already
+          // have. `notify_me_queries` (unqualified) is PostgreSQL's alias for the insert
+          // target inside `DO UPDATE`, and names the row already stored.
           .onConflict((conflict) =>
-            conflict.column('owner_id').doUpdateSet({
+            conflict.columns(['owner_id', 'source_view_id']).doUpdateSet({
               source_text: view.source_text,
               ast: view.ast,
               ast_version: view.ast_version,
               updated_at: write.changedAt,
-              source_view_id: write.viewId,
               // Bumped so a client holding a stale `expectedVersion` cannot overwrite a
-              // designation it never saw through `views.notifyMe.update` (ADR-0005:98).
+              // designation it never saw (ADR-0005:98).
               version: sql<number>`notify_me_queries.version + 1`,
             }),
           )
@@ -252,30 +287,43 @@ export function createPostgresSavedViewRepository(
 
         await appendOutboxEvent(transaction, notifyMeQueryChanged(toNotifyMeQuery(designated)));
 
-        return write.viewId;
+        return designatedViewIds(transaction, write.ownerId);
       });
     },
   };
 }
 
 /**
- * Which view this owner's bell is currently lit on, if any.
+ * Every view this owner's bells are currently lit on.
  *
- * Used only on the "nothing was mine to clear" path, so a client that raced a
- * designation is told where the bell actually is rather than being told `null` and
- * rendering every card dark.
+ * ⚠ **The single answer both `listFor` and `setNotify` give**, deliberately one function
+ * rather than a query written at each call site: they are the two surfaces a client uses
+ * to decide which cards are lit, and two spellings of "which bells are on" would be two
+ * chances to forget the `owner_id` predicate or the `NOT NULL` filter.
+ *
+ * The untied query is excluded by `source_view_id is not null` — it belongs to no view and
+ * therefore appears on no card's bell, exactly as it did when there was only one query.
+ *
+ * Ordered so that two reads of unchanged state serialize identically. Nothing renders it
+ * as a sequence; the order carries no meaning beyond that.
  */
-async function currentDesignation(
-  transaction: DatabaseConnection,
+async function designatedViewIds(
+  connection: DatabaseConnection,
   ownerId: string,
-): Promise<string | null> {
-  const row = await transaction
+): Promise<readonly string[]> {
+  const rows = await connection
     .selectFrom('app.notify_me_queries')
+    // `source_text` is not selected: this read answers "which cards' bells are lit", and
+    // each query's text is already on the view row it points at.
     .select('source_view_id')
     .where('owner_id', '=', ownerId)
-    .executeTakeFirst();
+    .where('source_view_id', 'is not', null)
+    .orderBy('source_view_id', 'asc')
+    .execute();
 
-  return row?.source_view_id ?? null;
+  // The `is not null` predicate is a fact about the rows, not about the column type, so
+  // the compiler still has these as nullable. Narrowed rather than asserted.
+  return rows.flatMap((row) => (row.source_view_id === null ? [] : [row.source_view_id]));
 }
 
 /**
@@ -309,11 +357,11 @@ async function appendOutboxEvent(
       event_type: event.type,
       occurred_at: event.occurredAt,
       actor_id: event.ownerId,
-      // The owner is the aggregate: one Notify Me query per user is the primary key
-      // (D1, ADR-0007:79), so there is no separate query ID to route on — and
-      // deliberately not the view id, which would make two events about the same
-      // person's single query route to two different aggregates.
-      aggregate_id: event.ownerId,
+      // The query is the aggregate (D16), and deliberately still not the *view* id: the
+      // designation and the query it carries are one row with one lifetime, and routing on
+      // the view would make an untied query — which has no view — unroutable by the same
+      // rule. `postgres-notify-me-query.repository.ts` writes the identical field.
+      aggregate_id: event.queryId,
       // Identifiers and routing data only — no name, no source text, no AST. A saved
       // view is a statement about what a person is interested in, which is exactly what
       // an outbox row must not leave lying around in a log (ADR-0006, M2-AC16).

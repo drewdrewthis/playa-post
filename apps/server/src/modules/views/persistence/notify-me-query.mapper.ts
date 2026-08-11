@@ -51,6 +51,7 @@ export function toBoardQuery(ast: unknown): BoardQuery {
  */
 export function toNotifyMeQuery(row: NotifyMeQueryRow): NotifyMeQuery {
   return {
+    id: row.id,
     ownerId: row.owner_id,
     sourceText: row.source_text,
     query: toBoardQuery(row.ast),

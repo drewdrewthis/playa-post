@@ -50,9 +50,10 @@ export interface ViewsRouterDependencies {
  * answer an invented one gets, which is what M5-AC16 asks for and the identical decision
  * `bulletins.router.ts` makes for `BULLETIN_GONE`.
  *
- * `SAVED_VIEW_LIMIT_REACHED` is `BAD_REQUEST` rather than `CONFLICT`: nothing about the
- * stored state changed under the caller, and re-reading and re-submitting would fail
- * identically. The fix is theirs — delete a view — which is what a bad request means.
+ * `SAVED_VIEW_LIMIT_REACHED` and `NOTIFY_ME_QUERY_LIMIT_REACHED` are `BAD_REQUEST` rather
+ * than `CONFLICT`: nothing about the stored state changed under the caller, and re-reading
+ * and re-submitting would fail identically. The fix is theirs — delete a view, or switch a
+ * bell off — which is what a bad request means.
  *
  * Everything else this module raises is `INVALID_BOARD_QUERY` or
  * `SAVED_VIEW_NAME_INVALID` — the caller's own input being malformed, which is a **bad
@@ -116,7 +117,7 @@ async function present<T>(operation: () => Promise<T>): Promise<T> {
  * ⚠ `delete` and `setNotify` return their application results **unprojected**, unlike
  * every other procedure in this module. A presenter exists to keep a *domain entity* off
  * the wire — to turn a `Date` into a string and to drop fields a client has no business
- * with — and these two carry neither: `{ viewId, deleted }` and `{ notifyingViewId }` are
+ * with — and these two carry neither: `{ viewId, deleted }` and `{ notifyingViewIds }` are
  * already the whole answer, in primitives. An identity-mapping presenter would be
  * ceremony that reads like a promise of translation it does not perform.
  * `tests/fitness/contracts-api-parity.fitness.test.ts` pins both shapes either way.
@@ -133,7 +134,7 @@ export function createViewsRouter(dependencies: ViewsRouterDependencies) {
      */
     saved: router({
       /**
-       * The caller's own saved views, oldest first, and which one the bell is lit on.
+       * The caller's own saved views, oldest first, and which of them have a bell lit.
        *
        * **No input at all**, the same statement `graph.list` and `notifications.list`
        * make: there is exactly one person's views a caller may read, so there is no
@@ -210,11 +211,16 @@ export function createViewsRouter(dependencies: ViewsRouterDependencies) {
         ),
 
       /**
-       * Light the Notify Me bell on this view, or clear it.
+       * Light the Notify Me bell on this view, or clear this view's.
        *
-       * ⚠ **Lighting it on view B clears it on view A** — decision D1: there is exactly
-       * one Notify Me query per user, and the bell designates which view's query that is.
-       * The answer names the view the bell is now on, so a client never has to infer it.
+       * ⚠ **Every bell is independent** — decision D16, which supersedes D1's "lighting it
+       * on view B clears it on view A". Lighting a second one adds a notification rather
+       * than moving the one there was, and switching one off leaves the others alone.
+       * Bounded per person, because the evaluator reads every switched-on query on every
+       * bulletin; a bell past the cap is refused naming the bound.
+       *
+       * The answer names **every** view the caller's bells are now on, so a client never
+       * has to infer the rest of the screen from the one request it sent.
        */
       setNotify: authenticatedProcedure
         .input(setSavedViewNotifyInput)
@@ -231,11 +237,17 @@ export function createViewsRouter(dependencies: ViewsRouterDependencies) {
 
     notifyMe: router({
       /**
-       * Save the caller's one Notify Me query.
+       * Save the caller's **untied** Notify Me query — the one belonging to no saved view.
        *
-       * Not `create`/`update` as two procedures: there is at most one query per user
-       * (D1, ADR-0007:79), so "which one" is never a question and the second call is
-       * the same operation as the first with a version attached.
+       * Still not `create`/`update` as two procedures, and still taking no identifier:
+       * "which one" is never a question here because a person has at most one query that
+       * belongs to no view (`app.notify_me_queries`' `UNIQUE NULLS NOT DISTINCT`), so the
+       * actor is the address and the second call is the first with a version attached.
+       *
+       * ⚠ **It no longer takes the query away from a lit bell.** Under D1 there was one
+       * query per person, so writing one here necessarily detached it from whichever view
+       * it had been designated from; under D16 the bells are separate queries and this
+       * procedure cannot reach them.
        */
       update: authenticatedProcedure
         .input(updateNotifyMeQueryInput)

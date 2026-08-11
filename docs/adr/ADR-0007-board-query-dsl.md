@@ -75,13 +75,21 @@ and the **validated AST as JSONB** with an `ast_version`:
 
 ```sql
 app.saved_views (id, owner_id, name, source_text, ast jsonb, ast_version int, sort, created_at, updated_at, version)
-app.notify_me_queries (owner_id primary key, source_text, ast jsonb, ast_version int, updated_at, version)
+app.notify_me_queries (id primary key, owner_id, source_text, ast jsonb, ast_version int, source_view_id, updated_at, version)
 ```
 
 Storing the AST means Notify Me evaluation on the outbox path does not re-parse untrusted text on every
 event, and a future grammar change is a versioned migration rather than a silent reinterpretation of
-saved queries. Exactly one Notify Me query per user — enforced by the primary key on `owner_id`, which
-is D1 expressed as a database constraint rather than a convention.
+saved queries.
+
+⚠ **`app.notify_me_queries` used to read `owner_id primary key` here, and that line was D1** —
+"exactly one Notify Me query per user, expressed as a database constraint rather than a convention".
+Product decision **D16** ([#172](https://github.com/drewdrewthis/playa-post/issues/172), owner-directed)
+reopened the count: a person may notify on several saved views at once. The constraint expressing it is
+now `unique nulls not distinct (owner_id, source_view_id)` — one query per (owner, view), plus one
+untied query per owner — so it is still the database enforcing the rule, over a set rather than a
+singleton. The per-person bound the primary key was also providing (how many queries the evaluator reads
+per `BulletinCreated`) moved into `NOTIFY_ME_QUERY_LIMIT_PER_OWNER`; see D16 and ADR-0016's amended D1.
 
 ### Compilation
 

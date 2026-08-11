@@ -14,14 +14,17 @@ events" is a claim about SQL.
 | Directory | Suite | Feature-file scenarios |
 |---|---|---|
 | `unit/` | `board-query-grammar.unit.test.ts` | `board-visibility-query.feature`'s four `@unit` scenarios — ADR-0007's rejection rule and both sides of the 256-character and 16-term boundaries (M2-AC13) |
-| `integration/` | `notify-me-queries-schema-migration.integration.test.ts` | `app.notify_me_queries`' catalog shape — RLS, ownership, grants, and the primary key on `owner_id` that makes D1 a constraint (ADR-0007:77-79) |
+| `integration/` | `notify-me-queries-schema-migration.integration.test.ts` | `app.notify_me_queries`' catalog shape — RLS, ownership, grants, and the key that carries decision D16: `id` as the primary key with `UNIQUE NULLS NOT DISTINCT (owner_id, source_view_id)` beside it, replacing the `owner_id` key that was D1 (#172, ADR-0007:77-79). Plus `notify-me.feature` › "An existing single-notify user keeps their notification through the migration" (#172 AC3) |
 | `unit/` | `saved-view-name.unit.test.ts` | The name policy's bounds, and that a refusal names the bound rather than echoing what was typed |
 | `integration/` | `notify-me-query.integration.test.ts` | `notify-me.feature` › "notifyMe.update fails closed for an actor unrelated to the query" (M2-AC19) |
-| `integration/` | `saved-view.integration.test.ts` | Saved-views CRUD (issue #45), the viewer-scoping M5-AC16 asks for, and decision D1 surviving a per-view bell — one `app.notify_me_queries` row however many bells are tapped (ADR-0016) |
+| `integration/` | `saved-view.integration.test.ts` | Saved-views CRUD (issue #45), the viewer-scoping M5-AC16 asks for, and decision D16 — `notify-me.feature`'s "A second saved view can be notified on without switching the first off", "Switching one saved view's notifications off leaves the others on", and "Switching on more notifications than the per-person cap is refused" (#172 AC1/AC2/AC4, ADR-0016) |
 
-The Notify Me *push* half is `modules/notifications`' — this module owns the query, its
+The Notify Me *push* half is `modules/notifications`' — this module owns the queries, their
 table, and `views.notifyMe.update`; that one owns matching, grouping, and delivery. Its
-suites are in `modules/notifications/tests/`.
+suites are in `modules/notifications/tests/`. D16's corollary lives on that side of the
+seam and not here: "a person is matched once per bulletin however many of their queries
+match" is a decision about notifications, so it is proved by
+`modules/notifications/tests/unit/evaluate-notify-me-multiple-queries.unit.test.ts`.
 
 The compiler half lives with its SQL, in
 `modules/bulletins/persistence/board-filter.ts`: `domain/` may not emit SQL, and the

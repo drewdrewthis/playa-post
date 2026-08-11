@@ -12,6 +12,11 @@ import { createSaveViewService } from '../../application/save-view.service';
 import { createSetSavedViewNotifyService } from '../../application/set-saved-view-notify.service';
 import { createUpdateNotifyMeQueryService } from '../../application/update-notify-me-query.service';
 import { InvalidBoardQueryError } from '../../domain/board-query-grammar';
+import { NOTIFY_ME_QUERY_LIMIT_PER_OWNER } from '../../domain/notify-me-query';
+import {
+  NotifyMeQueryConflictError,
+  NotifyMeQueryLimitReachedError,
+} from '../../domain/notify-me-query.errors';
 import { SAVED_VIEW_LIMIT_PER_OWNER } from '../../domain/saved-view';
 import {
   SavedViewConflictError,
@@ -31,13 +36,15 @@ import { createPostgresSavedViewRepository } from '../../persistence/postgres-sa
  *    `WHERE owner_id = <actor>`, so an actor naming somebody else's view id gets the
  *    same answer an invented id gets. Asserted as *both* halves: the other owner's row
  *    is untouched, and the refusal carries none of their state.
- * 3. **Decision D1 survives a per-view bell.** The comp draws a bell on every card and
- *    the PDF allows exactly one Notify Me query; D1 resolved that by making the bell a
- *    *designation*. The assertion that matters is that `app.notify_me_queries` never
- *    holds two rows for one owner no matter how many bells get tapped — which is its
- *    primary key, not a rule this code enforces.
+ * 3. **Decision D16 — every bell is its own switch.** D1 read the PDF's one Notify Me
+ *    query against the comp's bell-per-card and made the bell a *designation*: exactly one
+ *    row per owner, moved rather than added. **Issue #172 reopened that**, and what these
+ *    tests now hold down is the pair of claims that replaced it — several bells may be lit
+ *    at once, and switching one changes nothing about the others. The invariant is
+ *    `(owner_id, source_view_id)` unique, not `owner_id` unique, so the assertions look for
+ *    one row *per bell* rather than one row per person.
  */
-describe('saved views (issue #45, M5-AC16, D1)', () => {
+describe('saved views (issue #45, #172, M5-AC16, D16)', () => {
   let testDatabase: PostgresTestDatabase;
   let database: DatabaseConnection;
 
@@ -143,7 +150,7 @@ describe('saved views (issue #45, M5-AC16, D1)', () => {
 
       const listing = await list.list({ viewerId: owner });
       expect(listing.views.map((each) => each.id)).toEqual([view.id]);
-      expect(listing.notifyingViewId).toBeNull();
+      expect(listing.notifyingViewIds).toEqual([]);
     });
 
     it('parses the query through the one grammar and stores nothing when it is refused', async () => {
@@ -302,7 +309,7 @@ describe('saved views (issue #45, M5-AC16, D1)', () => {
       // The bell is still on `rides`, and the designation still points at it by id.
       const listing = await list.list({ viewerId: owner });
       expect(listing.views.map((each) => each.id)).toEqual([rides.id]);
-      expect(listing.notifyingViewId).toBe(rides.id);
+      expect(listing.notifyingViewIds).toEqual([rides.id]);
 
       const rows = await notifyMeRows();
       expect(rows).toHaveLength(1);
@@ -387,8 +394,11 @@ describe('saved views (issue #45, M5-AC16, D1)', () => {
     });
   });
 
-  describe('Scenario: the bell designates one view, and moving it does not create a second query (D1)', () => {
-    it('writes exactly one notify_me_queries row however many bells are tapped', async () => {
+  describe('Scenario: several bells may be lit at once, and each is its own switch (#172, D16)', () => {
+    it('writes one notify_me_queries row per lit bell rather than moving a single one', async () => {
+      // ⚠ This test used to assert the opposite — "writes exactly one row however many
+      // bells are tapped" — and it was right until the owner reopened D1. What it holds
+      // down now is #172 AC1: a second bell *adds* a notification.
       const owner = await seedOnboardedUser('dusty_views_bell');
       const { save, setNotify, list } = services();
 
@@ -401,39 +411,78 @@ describe('saved views (issue #45, M5-AC16, D1)', () => {
 
       await expect(
         setNotify.set({ actorId: owner, viewId: rides.id, notify: true }),
-      ).resolves.toEqual({ notifyingViewId: rides.id });
+      ).resolves.toEqual({ notifyingViewIds: [rides.id] });
 
-      expect(await notifyMeRows()).toEqual([
-        {
-          owner_id: owner,
-          source_text: 'type:offer truck',
-          source_view_id: rides.id,
-          version: 1,
-        },
-      ]);
+      const bothLit = await setNotify.set({ actorId: owner, viewId: events.id, notify: true });
+      // Sorted on both sides: `notifyingViewIds` is a set with a deterministic order, and
+      // asserting the order the repository happens to emit would pin something nothing
+      // renders.
+      expect([...bothLit.notifyingViewIds].sort()).toEqual([rides.id, events.id].sort());
 
-      // D1: "toggling a bell on view B moves Notify Me from view A, it does not create a
-      // second notifying query."
-      await expect(
-        setNotify.set({ actorId: owner, viewId: events.id, notify: true }),
-      ).resolves.toEqual({ notifyingViewId: events.id });
+      // Two rows, each carrying its own view's query text — not one row rewritten twice.
+      // The text is the assertion that catches a bell that "lit" by overwriting its
+      // neighbour, which a count alone would let through.
+      expect([...(await notifyMeRows())].sort(bySourceText)).toEqual(
+        [
+          {
+            owner_id: owner,
+            source_text: 'type:offer truck',
+            source_view_id: rides.id,
+            version: 1,
+          },
+          { owner_id: owner, source_text: 'type:event', source_view_id: events.id, version: 1 },
+        ].sort(bySourceText),
+      );
 
-      expect(await notifyMeRows()).toEqual([
-        {
-          owner_id: owner,
-          source_text: 'type:event',
-          source_view_id: events.id,
-          // Bumped, so a client holding a stale expectedVersion cannot overwrite a
-          // designation it never saw (ADR-0005:98).
-          version: 2,
-        },
-      ]);
-
-      expect((await list.list({ viewerId: owner })).notifyingViewId).toBe(events.id);
+      expect([...(await list.list({ viewerId: owner })).notifyingViewIds].sort()).toEqual(
+        [rides.id, events.id].sort(),
+      );
       expect(await outboxEventTypes()).toEqual(['NotifyMeQueryChanged', 'NotifyMeQueryChanged']);
     });
 
-    it('clears the query when the bell is switched off, and says so on the outbox', async () => {
+    it('switches one bell off without touching the others (#172 AC2)', async () => {
+      const owner = await seedOnboardedUser('dusty_views_bell_independent');
+      const { save, setNotify, list } = services();
+
+      const rides = await save.save({ actorId: owner, name: 'Rides', sourceText: 'type:offer' });
+      const events = await save.save({ actorId: owner, name: 'Events', sourceText: 'type:event' });
+      const kitchen = await save.save({
+        actorId: owner,
+        name: 'Kitchen',
+        sourceText: 'type:request',
+      });
+
+      for (const view of [rides, events, kitchen]) {
+        // Sequential, because the cap is counted per transaction and a concurrent burst
+        // would be testing the race rather than the feature.
+        await setNotify.set({ actorId: owner, viewId: view.id, notify: true });
+      }
+
+      const afterOff = await setNotify.set({ actorId: owner, viewId: events.id, notify: false });
+      expect([...afterOff.notifyingViewIds].sort()).toEqual([rides.id, kitchen.id].sort());
+
+      // ⚠ The other two are still lit *and still their own queries* — the failure this
+      // guards against is a clear scoped to `owner_id` alone, which would switch off
+      // everything while answering exactly as a correct one does for the view named.
+      expect([...(await notifyMeRows())].sort(bySourceText)).toEqual(
+        [
+          { owner_id: owner, source_text: 'type:offer', source_view_id: rides.id, version: 1 },
+          { owner_id: owner, source_text: 'type:request', source_view_id: kitchen.id, version: 1 },
+        ].sort(bySourceText),
+      );
+
+      expect([...(await list.list({ viewerId: owner })).notifyingViewIds].sort()).toEqual(
+        [rides.id, kitchen.id].sort(),
+      );
+      expect(await outboxEventTypes()).toEqual([
+        'NotifyMeQueryChanged',
+        'NotifyMeQueryChanged',
+        'NotifyMeQueryChanged',
+        'NotifyMeQueryCleared',
+      ]);
+    });
+
+    it('clears the query when the only bell is switched off, and says so on the outbox', async () => {
       const owner = await seedOnboardedUser('dusty_views_bell_off');
       const { save, setNotify, list } = services();
 
@@ -442,69 +491,184 @@ describe('saved views (issue #45, M5-AC16, D1)', () => {
 
       await expect(
         setNotify.set({ actorId: owner, viewId: view.id, notify: false }),
-      ).resolves.toEqual({ notifyingViewId: null });
+      ).resolves.toEqual({ notifyingViewIds: [] });
 
       expect(await notifyMeRows()).toHaveLength(0);
-      expect((await list.list({ viewerId: owner })).notifyingViewId).toBeNull();
+      expect((await list.list({ viewerId: owner })).notifyingViewIds).toEqual([]);
       expect(await outboxEventTypes()).toEqual(['NotifyMeQueryChanged', 'NotifyMeQueryCleared']);
     });
 
-    it('does not switch off a bell that has already moved — a stale client must not undo a live choice', async () => {
+    it('converges when the same bell is lit twice rather than accumulating queries', async () => {
+      // The unique constraint's other half: `(owner_id, source_view_id)` means a double
+      // tap upserts onto the row that is already there. Without it a person could stack
+      // duplicate queries on one card and be pushed about the same bulletin twice.
+      const owner = await seedOnboardedUser('dusty_views_bell_twice');
+      const { save, setNotify } = services();
+
+      const view = await save.save({ actorId: owner, name: 'Rides', sourceText: 'type:offer' });
+
+      await setNotify.set({ actorId: owner, viewId: view.id, notify: true });
+      await expect(
+        setNotify.set({ actorId: owner, viewId: view.id, notify: true }),
+      ).resolves.toEqual({ notifyingViewIds: [view.id] });
+
+      expect(await notifyMeRows()).toEqual([
+        {
+          owner_id: owner,
+          source_text: 'type:offer',
+          source_view_id: view.id,
+          // Bumped by the second tap, so a client holding a stale expectedVersion cannot
+          // overwrite a designation it never saw (ADR-0005:98).
+          version: 2,
+        },
+      ]);
+    });
+
+    it('does not switch off a bell whose view was never lit — a stale client must not undo a live choice', async () => {
       const owner = await seedOnboardedUser('dusty_views_bell_stale');
       const { save, setNotify } = services();
 
       const rides = await save.save({ actorId: owner, name: 'Rides', sourceText: 'type:offer' });
       const events = await save.save({ actorId: owner, name: 'Events', sourceText: 'type:event' });
 
+      await setNotify.set({ actorId: owner, viewId: events.id, notify: true });
+
+      // A client that still believes `rides` is lit taps it off. Nothing of theirs matches
+      // the clear, and the answer is where their bells actually are.
+      await expect(
+        setNotify.set({ actorId: owner, viewId: rides.id, notify: false }),
+      ).resolves.toEqual({ notifyingViewIds: [events.id] });
+
+      expect(await notifyMeRows()).toHaveLength(1);
+      // Nothing was cleared, so nothing may claim it was: a spurious `NotifyMeQueryCleared`
+      // is what a downstream consumer would act on to stop sending.
+      expect(await outboxEventTypes()).toEqual(['NotifyMeQueryChanged']);
+    });
+
+    it(`refuses the ${String(NOTIFY_ME_QUERY_LIMIT_PER_OWNER + 1)}th bell, bounding what the evaluator reads per bulletin`, async () => {
+      // ⚠ The cap D16 owes D1. D1 bounded the evaluator at one query per person by making
+      // that a primary key; reopening it gives that bound up, and this is what replaced it.
+      // Deliberately below the saved-view cap, so a person can hold views they are not
+      // notifying on — see NOTIFY_ME_QUERY_LIMIT_PER_OWNER for why the two numbers differ.
+      const owner = await seedOnboardedUser('dusty_views_bell_cap');
+      const { save, setNotify, list } = services();
+
+      const views = [];
+      for (let index = 0; index <= NOTIFY_ME_QUERY_LIMIT_PER_OWNER; index += 1) {
+        views.push(
+          await save.save({
+            actorId: owner,
+            name: `View ${String(index)}`,
+            sourceText: 'type:request',
+          }),
+        );
+      }
+
+      for (const view of views.slice(0, NOTIFY_ME_QUERY_LIMIT_PER_OWNER)) {
+        await setNotify.set({ actorId: owner, viewId: view.id, notify: true });
+      }
+
+      const overCap = views[NOTIFY_ME_QUERY_LIMIT_PER_OWNER];
+      if (overCap === undefined) {
+        throw new Error('the cap test needs one more view than the cap');
+      }
+
+      await expect(
+        setNotify.set({ actorId: owner, viewId: overCap.id, notify: true }),
+      ).rejects.toBeInstanceOf(NotifyMeQueryLimitReachedError);
+
+      // Refused rather than silently swapped: the bells that were on are still on, and the
+      // refusal wrote no row and announced nothing.
+      expect(await notifyMeRows()).toHaveLength(NOTIFY_ME_QUERY_LIMIT_PER_OWNER);
+      expect((await list.list({ viewerId: owner })).notifyingViewIds).not.toContain(overCap.id);
+      expect(await outboxEventTypes()).toHaveLength(NOTIFY_ME_QUERY_LIMIT_PER_OWNER);
+
+      // ⚠ At the cap, re-lighting a bell that is already lit must still work: it adds
+      // nothing to count, and refusing it would make the cap a trap somebody springs by
+      // tapping a control that is already on.
+      const alreadyLit = views[0];
+      if (alreadyLit === undefined) {
+        throw new Error('the cap test needs at least one lit view');
+      }
+      await expect(
+        setNotify.set({ actorId: owner, viewId: alreadyLit.id, notify: true }),
+      ).resolves.toBeDefined();
+    });
+
+    it('stops the notifications when a view a bell is on is deleted, and only that one', async () => {
+      const owner = await seedOnboardedUser('dusty_views_bell_deleted');
+      const { save, setNotify, remove, list } = services();
+
+      const rides = await save.save({ actorId: owner, name: 'Rides', sourceText: 'type:offer' });
+      const events = await save.save({ actorId: owner, name: 'Events', sourceText: 'type:event' });
       await setNotify.set({ actorId: owner, viewId: rides.id, notify: true });
       await setNotify.set({ actorId: owner, viewId: events.id, notify: true });
 
-      // A client that still believes the bell is on `rides` taps it off.
-      await expect(
-        setNotify.set({ actorId: owner, viewId: rides.id, notify: false }),
-      ).resolves.toEqual({ notifyingViewId: events.id });
-
-      expect(await notifyMeRows()).toHaveLength(1);
-    });
-
-    it('stops the notifications when the view the bell is on is deleted', async () => {
-      const owner = await seedOnboardedUser('dusty_views_bell_deleted');
-      const { save, setNotify, remove } = services();
-
-      const view = await save.save({ actorId: owner, name: 'Rides', sourceText: 'type:offer' });
-      await setNotify.set({ actorId: owner, viewId: view.id, notify: true });
-
-      await expect(remove.delete({ actorId: owner, viewId: view.id })).resolves.toEqual({
-        viewId: view.id,
+      await expect(remove.delete({ actorId: owner, viewId: rides.id })).resolves.toEqual({
+        viewId: rides.id,
         deleted: true,
       });
 
-      // The bell that turned them on was on the card that just disappeared; leaving the
-      // query would push notifications with no surface left to switch them off.
-      expect(await notifyMeRows()).toHaveLength(0);
-      expect(await savedViewRows()).toHaveLength(0);
-      expect(await outboxEventTypes()).toEqual(['NotifyMeQueryChanged', 'NotifyMeQueryCleared']);
+      // The bell that turned those on was on the card that just disappeared; leaving the
+      // query would push notifications with no surface left to switch them off. The bell on
+      // `events` is untouched, because a delete is not a reason to stop anything else.
+      expect(await notifyMeRows()).toEqual([
+        { owner_id: owner, source_text: 'type:event', source_view_id: events.id, version: 1 },
+      ]);
+      expect((await list.list({ viewerId: owner })).notifyingViewIds).toEqual([events.id]);
+      expect(await outboxEventTypes()).toEqual([
+        'NotifyMeQueryChanged',
+        'NotifyMeQueryChanged',
+        'NotifyMeQueryCleared',
+      ]);
     });
 
-    it('leaves the designation clear when views.notifyMe.update writes a query of its own', async () => {
+    it('leaves every lit bell alone when views.notifyMe.update writes an untied query', async () => {
+      // ⚠ **This assertion is the inverse of the one it replaces, and the inversion is
+      // D16.** Under D1 there was a single query per person, so writing one here took it
+      // away from whichever view it had been designated from and the card went dark. A
+      // person now has an untied query *and* their bells, independently: the two write
+      // paths address different rows and cannot reach each other.
       const owner = await seedOnboardedUser('dusty_views_notify_direct');
       const { save, setNotify, updateNotifyMe, list } = services();
 
       const view = await save.save({ actorId: owner, name: 'Rides', sourceText: 'type:offer' });
       await setNotify.set({ actorId: owner, viewId: view.id, notify: true });
 
-      // The pre-existing procedure still works, and takes the query away from the view:
-      // the text is no longer what the card says, so no card's bell may stay lit.
-      await updateNotifyMe.update({
-        actorId: owner,
-        sourceText: 'type:request',
-        expectedVersion: 1,
-      });
+      // No `expectedVersion`: this person has no untied query yet, and the designated one
+      // is not it. Supplying the designation's version would be a conflict for that reason.
+      await updateNotifyMe.update({ actorId: owner, sourceText: 'type:request' });
+
+      expect([...(await notifyMeRows())].sort(bySourceText)).toEqual(
+        [
+          { owner_id: owner, source_text: 'type:offer', source_view_id: view.id, version: 1 },
+          { owner_id: owner, source_text: 'type:request', source_view_id: null, version: 1 },
+        ].sort(bySourceText),
+      );
+      // The untied query belongs to no view, so it lights no card — the one thing about
+      // this screen that D16 did not change.
+      expect((await list.list({ viewerId: owner })).notifyingViewIds).toEqual([view.id]);
+    });
+
+    it('refuses a notifyMe.update carrying a designated query’s version, rather than rewriting it', async () => {
+      // ⚠ The designated rows are unreachable from this procedure *by predicate*, not by
+      // luck: `source_view_id is null` is on the UPDATE. Without it, an actor whose only
+      // query is behind a lit bell would have that bell's query silently rewritten to text
+      // the card does not say — the exact failure the pointer exists to prevent.
+      const owner = await seedOnboardedUser('dusty_views_notify_direct_version');
+      const { save, setNotify, updateNotifyMe, list } = services();
+
+      const view = await save.save({ actorId: owner, name: 'Rides', sourceText: 'type:offer' });
+      await setNotify.set({ actorId: owner, viewId: view.id, notify: true });
+
+      await expect(
+        updateNotifyMe.update({ actorId: owner, sourceText: 'type:request', expectedVersion: 1 }),
+      ).rejects.toBeInstanceOf(NotifyMeQueryConflictError);
 
       expect(await notifyMeRows()).toEqual([
-        { owner_id: owner, source_text: 'type:request', source_view_id: null, version: 2 },
+        { owner_id: owner, source_text: 'type:offer', source_view_id: view.id, version: 1 },
       ]);
-      expect((await list.list({ viewerId: owner })).notifyingViewId).toBeNull();
+      expect((await list.list({ viewerId: owner })).notifyingViewIds).toEqual([view.id]);
     });
   });
 
@@ -515,7 +679,7 @@ describe('saved views (issue #45, M5-AC16, D1)', () => {
    * actor listing sees none of another owner's rows, and rename/delete/setNotify all
    * refuse. It cannot say anything about the four statements that read or write
    * `app.notify_me_queries`, because **no owner in it has a bell lit**: with that table
-   * empty, `listFor`'s second query, `currentDesignation`, and the clear inside `delete`
+   * empty, `listFor`'s second query, `designatedViewIds`, and the clear inside `delete`
    * all return or affect nothing whether their `owner_id` predicate is there or not.
    * Correct today, and unpinned — which is how a predicate gets deleted in a later
    * refactor with a green suite.
@@ -555,7 +719,7 @@ describe('saved views (issue #45, M5-AC16, D1)', () => {
       // Deterministic: one row means `executeTakeFirst` has nothing else to pick.
       const listing = await list.list({ viewerId: ownerB });
 
-      expect(listing.notifyingViewId).toBeNull();
+      expect(listing.notifyingViewIds).toEqual([]);
       expect(listing.views.map((each) => each.id)).toEqual([viewB.id]);
     });
 
@@ -570,13 +734,13 @@ describe('saved views (issue #45, M5-AC16, D1)', () => {
       await setNotify.set({ actorId: ownerA, viewId: viewA.id, notify: true });
       await setNotify.set({ actorId: ownerB, viewId: viewB.id, notify: true });
 
-      // Both assertions in one test on purpose. Unscoped, `executeTakeFirst` returns
-      // whichever of the two rows the plan emits first — and that single row can be the
-      // right answer for at most ONE of these owners, so one of the two must fail
-      // whichever way the planner goes. No storage or plan detail can make this pass
-      // without the predicate.
-      expect((await list.list({ viewerId: ownerA })).notifyingViewId).toBe(viewA.id);
-      expect((await list.list({ viewerId: ownerB })).notifyingViewId).toBe(viewB.id);
+      // Both assertions in one test on purpose. Unscoped, the read returns *both* rows and
+      // each owner is handed the other's view id alongside their own — so each assertion
+      // fails on the extra element, whichever order the plan emits them in. (Before #172
+      // the same test rested on `executeTakeFirst` picking one row that could be right for
+      // at most one owner; the reasoning changed with the read, the conclusion did not.)
+      expect((await list.list({ viewerId: ownerA })).notifyingViewIds).toEqual([viewA.id]);
+      expect((await list.list({ viewerId: ownerB })).notifyingViewIds).toEqual([viewB.id]);
     });
 
     it("answers a no-op bell-off with the caller's own designation, never another owner's", async () => {
@@ -590,12 +754,12 @@ describe('saved views (issue #45, M5-AC16, D1)', () => {
       const viewB = await save.save({ actorId: ownerB, name: 'B events', sourceText: 'type:event' });
 
       // B taps off a bell that was never on. Nothing of B's matches the clear, so the
-      // repository falls through to `currentDesignation` — "where is my bell actually?",
-      // the one read on that path and the only statement in this file no other test
-      // reaches while `app.notify_me_queries` holds a row. Unscoped it answers with A's.
+      // repository falls through to `designatedViewIds` — "where are my bells actually?",
+      // the read on that path, reached here while `app.notify_me_queries` holds a row
+      // belonging to somebody else. Unscoped it answers with A's.
       await expect(
         setNotify.set({ actorId: ownerB, viewId: viewB.id, notify: false }),
-      ).resolves.toEqual({ notifyingViewId: null });
+      ).resolves.toEqual({ notifyingViewIds: [] });
 
       // A's bell is untouched by B's tap.
       expect(await notifyMeRows()).toEqual([
@@ -700,6 +864,17 @@ describe('saved views (issue #45, M5-AC16, D1)', () => {
     });
   });
 });
+
+/**
+ * Order two Notify Me rows by the query text they carry.
+ *
+ * A person may now hold several, and nothing about the table promises which comes back
+ * first. Sorting by `source_text` rather than by `source_view_id` keeps the expected
+ * literals in these tests readable — the text is what a reader recognises; a uuid is not.
+ */
+function bySourceText(left: { source_text: string }, right: { source_text: string }): number {
+  return left.source_text.localeCompare(right.source_text);
+}
 
 /** Mirrors `packages/database/src/database-schema.integration.test.ts`'s helper. */
 function asRole(connectionString: string, username: string, password: string): string {
