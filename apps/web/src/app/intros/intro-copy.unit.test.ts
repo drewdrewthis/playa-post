@@ -128,15 +128,6 @@ describe('introRefusalMessage', () => {
     expect(introRefusalMessage('INTRO_CONTENT_INVALID')).toContain('Shorten it');
   });
 
-  /*
-   * Reachable only from a client that got the wire shape wrong — the decline control
-   * sends no note, and `DecideIntroRequest`'s union will not let it — so this says what
-   * happened rather than apologising for it. There is nothing the reader can do.
-   */
-  it('states plainly that declining sends no note', () => {
-    expect(introRefusalMessage('INTRO_DECLINE_CARRIES_NO_NOTE')).toBe('Declining sends no note.');
-  });
-
   // A dropped connection carries no application code, and must not be rendered as a
   // refusal the server made.
   it('does not turn a transport failure into a server answer', () => {

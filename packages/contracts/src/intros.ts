@@ -122,11 +122,12 @@ export interface RequestIntroRequest {
  * card. It is required — a pass-on with nothing added comes back as
  * `INTRO_CONTENT_INVALID`, exactly as an empty note on `intros.request` does.
  *
- * ⚠ **A decline carries none, and sending one is refused** with
- * `INTRO_DECLINE_CARRIES_NO_NOTE` rather than quietly dropped. The requester is told only
- * that it was not passed on — no reason, no re-ask control (see
- * {@link INTRO_REQUEST_STATUS}) — so text written on a decline has no reader, and a field
- * the server discarded in silence would let its writer believe otherwise.
+ * ⚠ **A decline carries none, and sending one is refused rather than quietly dropped** —
+ * the wire's strict decline shape rejects the unknown field as a plain `BAD_REQUEST`
+ * carrying no application code. The requester is told only that it was not passed on — no
+ * reason, no re-ask control (see {@link INTRO_REQUEST_STATUS}) — so text written on a
+ * decline has no reader, and a field the server discarded in silence would let its writer
+ * believe otherwise.
  */
 export type DecideIntroRequest =
   | {

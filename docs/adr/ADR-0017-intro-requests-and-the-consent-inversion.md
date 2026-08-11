@@ -153,10 +153,13 @@ paths — and both services raise it **before** the repository is called. Revers
 caller could probe reachability by sending deliberate rubbish and reading which refusal
 came back — the oracle §10 forbids, reopened by an ordering nobody would think to look at.
 
-D8 adds exactly one more, `INTRO_DECLINE_CARRIES_NO_NOTE` (`BAD_REQUEST`), and it is safe
-beside the two above for the same reason: it is a statement about the caller's own
-submission, decided before the row is looked for, so it can never be the answer to "may I
-decide this request".
+D8 adds one more code, `INTRO_DECLINE_CARRIES_NO_NOTE`, that a tRPC caller never
+observes: the wire's strict decline arm refuses the unknown `note` key first, as a plain
+zod `BAD_REQUEST` with no application code. The domain error is the backstop for callers
+that reach the service another way, and were it ever surfaced it would be safe beside the
+two above for the same reason: it is a statement about the caller's own submission,
+decided before the row is looked for, so it can never be the answer to "may I decide this
+request".
 
 `intros.viaCandidates` never refuses at all: an unreachable, deactivated or invented
 `targetUserId` returns an **empty list**.

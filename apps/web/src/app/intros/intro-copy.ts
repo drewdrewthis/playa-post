@@ -156,7 +156,6 @@ const REFUSAL_MESSAGE: Readonly<Record<string, string>> = {
    * developer's mistake surfacing where a user can see it. It says what happened rather
    * than apologising, because there is nothing for the reader to do about it.
    */
-  INTRO_DECLINE_CARRIES_NO_NOTE: 'Declining sends no note.',
 };
 
 /**

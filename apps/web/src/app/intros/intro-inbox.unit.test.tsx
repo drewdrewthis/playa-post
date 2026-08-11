@@ -272,9 +272,9 @@ describe('the intro inbox', () => {
       const api = await mountInbox([VIA_ROW]);
 
       // ⚠ Opening the pass-on form must not turn the decline into a "decline with a
-      // reason". The wire refuses a note on a decline (`INTRO_DECLINE_CARRIES_NO_NOTE`)
-      // because the requester is told only that it was not passed on — so whatever is in
-      // the field, declining sends the decision alone.
+      // reason". The wire's strict decline shape refuses a note on a decline because the
+      // requester is told only that it was not passed on — so whatever is in the field,
+      // declining sends the decision alone.
       await press('intro-pass-on-button');
       await writeViaNote('Not for you, sorry.');
       await press('intro-decline-button');

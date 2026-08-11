@@ -33,9 +33,11 @@ alter table app.intro_requests add column via_note text;
 -- ⚠ **`via_note is null or status = 'passed_on'`, and NOT the biconditional form
 -- `intro_requests_decided_at` uses beside it.** "Only a passed-on request may carry a via
 -- note" is true forever; "every passed-on request carries one" is not, because rows
--- passed on before this column existed have none and migrations are forward-only —
--- stating the equality here would refuse to apply against any database with history in
--- it, and would then refuse every read that touched those rows.
+-- passed on before this column existed have none and migrations are forward-only. A
+-- plain biconditional would refuse to apply against those rows; the `not valid` variant
+-- would apply by skipping them, but would leave the schema permanently asserting a
+-- requirement the stored data does not meet, validated nowhere. This table states only
+-- what holds for every row for all time.
 --
 -- The other half of the rule lives where it can state the present tense instead:
 -- `modules/intros/domain/intro-note.policy.ts` requires a note on every *new* pass-on.
