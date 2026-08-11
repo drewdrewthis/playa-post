@@ -204,6 +204,17 @@ test.describe('The M2 vertical slice, end to end (vertical-slice-e2e.feature, M2
             .getByTestId(`board-bulletin-card-${bulletinId}`)
             .getByTestId('bulletin-open-button')
             .click();
+          // Same evidence contract as the board capture below: only a local evidence
+          // run sets the env var, and it photographs the open sheet with the removal
+          // button showing before the click lands.
+          const sheetShotPath = process.env['E2E_SHEET_SCREENSHOT_PATH'];
+          if (sheetShotPath !== undefined && sheetShotPath !== '') {
+            const removeButton = pageA
+              .getByTestId('bulletin-detail-sheet')
+              .getByTestId('bulletin-archive-button');
+            await removeButton.scrollIntoViewIfNeeded();
+            await pageA.screenshot({ path: sheetShotPath, animations: 'disabled' });
+          }
           await pageA
             .getByTestId('bulletin-detail-sheet')
             .getByTestId('bulletin-archive-button')
