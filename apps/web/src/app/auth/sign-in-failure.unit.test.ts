@@ -86,4 +86,46 @@ describe('describeSignInFailure', () => {
       expect(describeSignInFailure(authApiError(400, 'validation_failed'))).toBe(generic);
     });
   });
+
+  /**
+   * GoTrue answers a wrong digit, an expired code, and an already-spent code with the
+   * identical `otp_expired` / HTTP 403 signal — the same lookup fails for all three, and
+   * there is nothing on the wire to tell them apart (issue #179). These cases stand in
+   * for all three causes; there is deliberately no separate "expired" or "already used"
+   * branch to test, because none exists.
+   */
+  describe('code rejected', () => {
+    /** Shaped like `AuthApiError`: an `Error` carrying `status` and `code`. */
+    function authApiError(status: number, code: string): Error {
+      return Object.assign(new Error('Token has expired or is invalid'), { status, code });
+    }
+
+    it('says to request a new code, not to re-check the address', () => {
+      const message = describeSignInFailure(authApiError(403, 'otp_expired'));
+
+      expect(message).not.toBe(generic);
+      expect(message).toMatch(/request a new/i);
+    });
+
+    it('recognises the provider’s raw envelope, where `code` is the number and `error_code` the string', () => {
+      expect(
+        describeSignInFailure({
+          code: 403,
+          error_code: 'otp_expired',
+          msg: 'Token has expired or is invalid',
+        }),
+      ).not.toBe(generic);
+    });
+
+    it('does not mistake an unrelated 403 for a rejected code', () => {
+      expect(describeSignInFailure(authApiError(403, 'some_other_reason'))).toBe(generic);
+    });
+
+    it('is distinct from the rate-limit message', () => {
+      const codeMessage = describeSignInFailure(authApiError(403, 'otp_expired'));
+      const rateLimitMessage = describeSignInFailure(authApiError(429, 'over_email_send_rate_limit'));
+
+      expect(codeMessage).not.toBe(rateLimitMessage);
+    });
+  });
 });

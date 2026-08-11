@@ -133,7 +133,7 @@ apps/server/     The modular monolith.
 packages/        contracts · database · observability · configuration · testing. contracts/src/*.ts
                  is the declared wire surface (ADR-0014) — the only legal import from apps/web
                  into the server side.
-supabase/        migrations/ · sql/ · seed/ · tests/.
+supabase/        migrations/ · sql/ · seed/ · templates/ · tests/.
 scripts/         Repo tooling.
 tests/           fitness/ (executable architecture rules) · security/ (ADR-0002 bypass suite) ·
                  integration/ (root-level cross-module integration tests) · e2e/ (Playwright

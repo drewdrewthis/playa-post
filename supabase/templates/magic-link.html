@@ -1,0 +1,19 @@
+<!--
+  Sign-in email (issue #179). Two ways in from one request:
+
+  - `{{ .ConfirmationURL }}`, the magic link — opens in the system browser, unchanged
+    from before this template existed.
+  - `{{ .Token }}`, the same six-digit code the link is built from — typed into the
+    sign-in screen itself, which is the only path that completes inside an installed
+    PWA (a magic link opens the system browser, which never hands the PWA a session).
+
+  Governs LOCAL DEVELOPMENT ONLY (supabase/config.toml's `content_path`, per that
+  file's own header). Production's magic-link template is dashboard-managed and must
+  be edited by hand to mirror this file.
+-->
+<h2>Sign in to The Playa Post</h2>
+<p>Tap the link below to sign in:</p>
+<p><a href="{{ .ConfirmationURL }}">Sign in to The Playa Post</a></p>
+<p>Signing in from the app instead? Enter this code:</p>
+<h1>{{ .Token }}</h1>
+<p>If you did not request this, no action is needed.</p>

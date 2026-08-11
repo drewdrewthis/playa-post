@@ -432,8 +432,13 @@ throwaway code.
 
 M3.1 launch the blueprint (`render blueprint launch`) and record the service ID and public URL ·
 M3.2 set the service's secret env vars in the Render dashboard (`sync: false` keys only; names in
-`docs/engineering/secrets.md`) · M3.3 point the service at the Supabase project through the `app_rw`
-role and prove the connection identity (S3a) · **M3.4 `/healthz` liveness is what M3 deploys and what
+`docs/engineering/secrets.md`) · M3.2a mirror `supabase/templates/magic-link.html` into the production
+Supabase project's dashboard-managed magic-link email template (Authentication → Email Templates), so
+the deployed email carries `{{ .Token }}` the same as local dev — `supabase/config.toml`'s
+`content_path` pin only governs local development (issue #179), so this is the one step that makes the
+installed-PWA sign-in path work outside a developer's machine · M3.3 point the service at the Supabase
+project through the `app_rw` role and prove the connection identity (S3a) · **M3.4 `/healthz` liveness
+is what M3 deploys and what
 Render polls — unconditionally.** It is already implemented and `render.yaml` hardcodes it; the
 SHA-carrying `/health` is **M4.3's separate endpoint**, added *alongside* `/healthz` and never
 replacing it · M3.5 measure the free-plan cold start after an idle spin-down and record it ·

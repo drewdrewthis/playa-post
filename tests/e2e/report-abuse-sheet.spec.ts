@@ -458,7 +458,7 @@ test.describe('a rate-limited sign-in tells the user to wait, in both themes', (
       // that the advice it replaced is gone.
       const failure = page.getByRole('alert');
       await expect(failure).toHaveText(
-        'Too many sign-in links have been requested for that address. Wait a few minutes and try again — the last link we sent is still valid.',
+        'Too many sign-in attempts for that address. Wait a few minutes and try again — the last email we sent is still valid.',
       );
       await expect(failure).not.toContainText('Check the address');
 

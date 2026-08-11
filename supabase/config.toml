@@ -75,5 +75,17 @@ enable_signup = true
 enable_confirmations = false
 double_confirm_changes = true
 
+# issue #179: the same sign-in email must also carry the numeric OTP (`{{ .Token }}`)
+# alongside the magic link, so an installed PWA — which never receives a system-browser
+# magic-link click — can complete sign-in itself. The default template omits `.Token`
+# entirely, so a custom one is required, not optional. ⚠ This `content_path` governs
+# LOCAL DEVELOPMENT ONLY, per this file's header; the production project's magic-link
+# template is dashboard-managed and must be edited by hand to mirror
+# supabase/templates/magic-link.html, or the deployed email silently reverts to
+# link-only and the PWA path breaks with no local signal.
+[auth.email.template.magic_link]
+subject = "Your Playa Post sign-in link"
+content_path = "./templates/magic-link.html"
+
 [analytics]
 enabled = false
