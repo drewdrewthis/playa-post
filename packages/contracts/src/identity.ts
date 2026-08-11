@@ -96,9 +96,14 @@ export interface UpdateDisplayNameRequest {
 /**
  * `identity.updateDisplayName` output — the name the server actually stored.
  *
- * The echo, not the request: trimming happens server-side, so what came back is what
- * every other reader will now see, and a client that caches this value cannot drift
- * from the database on a race between two edits.
+ * The echo, not the request: trimming happens server-side, so this is the truthful
+ * value for a client that caches what it just sent rather than re-reading.
+ *
+ * ⚠ **The You screen is deliberately not that client.** A display name renders in more
+ * places than this response knows about — the profile heading, the graph, board
+ * attribution, note author cards — so it invalidates its queries and lets every one of
+ * them re-read, and never looks at this field. The echo is here for the caller that has
+ * only this answer to go on, not because the shipped client leans on it.
  */
 export interface StoredDisplayName {
   readonly displayName: string;

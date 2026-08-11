@@ -58,9 +58,12 @@ export function createUpdateDisplayNameService(
         throw new UserRowMissingError();
       }
 
-      // The stored row's value, not the argument: what the caller is told is what the
-      // database now holds, so a client that echoes it into its cache cannot diverge
-      // from the server on a race between two edits.
+      // The stored row's value, not the argument: trimming happens on the way in, so
+      // this is the truthful answer to "what is stored now" for any caller that keeps
+      // it. The You screen is not such a caller — it discards the echo and refetches —
+      // but returning the *request* back would be answering with something the database
+      // does not necessarily say, which is a worse contract for the caller who has only
+      // this response to go on.
       return user.displayName;
     },
   };

@@ -126,6 +126,68 @@ describe('DisplayNameEditor', () => {
     expect(requireElement(tree.container, '.profile__name').textContent).toBe('Dusty Rhodes');
   });
 
+  it('takes focus on open and hands it back to the Edit button on close', async () => {
+    // Both halves are about somebody who is not using a mouse. Opening leaves them on a
+    // button that has just unmounted; closing without this leaves them on `<body>`,
+    // returned to the top of the document for the crime of finishing.
+    const mounted = await mountWithApi(
+      <DisplayNameEditor displayName="Dusty Rhodes" />,
+      createFakeApi({}),
+    );
+    tree = mounted;
+
+    await press(mounted, 'display-name-edit-button');
+
+    expect(document.activeElement).toBe(
+      requireElement(mounted.container, '[data-testid="display-name-input"]'),
+    );
+
+    await press(mounted, 'display-name-cancel-button');
+
+    expect(document.activeElement).toBe(
+      requireElement(mounted.container, '[data-testid="display-name-edit-button"]'),
+    );
+  });
+
+  it('hands focus back to the Edit button when a save is what closes the editor', async () => {
+    // Asserted separately from the Cancel path because the two arrive differently: a
+    // save disables the field for the duration of the request, and disabling a focused
+    // element blurs it, so focus is already gone by the time the editor closes.
+    const api = createFakeApi({ [RENAME_PATH]: () => ({ displayName: 'Dust Storm' }) });
+
+    const mounted = await mountWithApi(<DisplayNameEditor displayName="Dusty Rhodes" />, api);
+    tree = mounted;
+
+    await typeName(mounted, 'Dust Storm');
+    await save(mounted);
+
+    expect(document.activeElement).toBe(
+      requireElement(mounted.container, '[data-testid="display-name-edit-button"]'),
+    );
+  });
+
+  it('freezes the field while the save is in flight, so nothing typed after it is dropped', async () => {
+    // `onSuccess` closes the editor by discarding the draft, so a name typed while a
+    // slow request was out would vanish with no word about it. The field stops taking
+    // input instead, which is a state a person can see.
+    //
+    // ⚠ The route never answers, deliberately: `settle()` turns the macrotask queue a
+    // fixed number of times and then returns, so an unanswered request is how a test
+    // observes the in-flight state at all. The tree is unmounted by `afterEach`.
+    const api = createFakeApi({ [RENAME_PATH]: () => new Promise(() => {}) });
+
+    const mounted = await mountWithApi(<DisplayNameEditor displayName="Dusty Rhodes" />, api);
+    tree = mounted;
+
+    await typeName(mounted, 'Dust Storm');
+    await save(mounted);
+
+    expect(
+      requireElement<HTMLInputElement>(mounted.container, '[data-testid="display-name-input"]')
+        .disabled,
+    ).toBe(true);
+  });
+
   it('refuses to send an empty name rather than asking the server to refuse it', async () => {
     const api = createFakeApi({ [RENAME_PATH]: () => ({ displayName: 'unreachable' }) });
 
