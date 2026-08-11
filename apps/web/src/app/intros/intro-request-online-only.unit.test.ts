@@ -41,4 +41,17 @@ describe('requesting an intro', () => {
     expect(SYNC_REPLAYED_MUTATION_TYPES).not.toContain('intros.decide');
     expect(DIRECTLY_REPLAYED_MUTATION_TYPES).not.toContain('intros.decide');
   });
+
+  /*
+   * ⚠ Nor answering one (#166), and this is the arm with the worst failure. Accepting
+   * *creates a connection*, so a queued acceptance that drained into
+   * `UNSUPPORTED_MUTATION_TYPE` would leave somebody believing they had connected with a
+   * stranger they will now never hear from — and answering is terminal-once, so there is
+   * no second press to fix it.
+   */
+  it('and neither is answering one', () => {
+    expect(queued).not.toContain('intros.respond');
+    expect(SYNC_REPLAYED_MUTATION_TYPES).not.toContain('intros.respond');
+    expect(DIRECTLY_REPLAYED_MUTATION_TYPES).not.toContain('intros.respond');
+  });
 });

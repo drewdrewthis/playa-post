@@ -13,13 +13,20 @@ import {
   INTRO_DECISION,
   INTRO_REQUEST_STATUS,
   STATUS_FOR_DECISION,
+  STATUS_FOR_RESPONSE,
   type IntroRequest,
 } from '../domain/intro-request';
 import { IntroUnavailableError } from '../domain/intro-request.errors';
-import { introDecided, introRequested, type IntroEvent } from '../domain/intro-request.events';
+import {
+  introDecided,
+  introRequested,
+  introResponded,
+  type IntroEvent,
+} from '../domain/intro-request.events';
 import type {
   IntroDecisionWrite,
   IntroRequestRepository,
+  IntroResponseWrite,
   NewIntroRequest,
 } from '../domain/intro-request.repository';
 
@@ -48,7 +55,8 @@ export interface PostgresIntroRequestRepositoryDependencies {
  * {@link import('./intro-request.mapper').IntroRequestRow} to be right about only one of.
  */
 const INTRO_REQUEST_COLUMNS = sql`
-  id, requester_id, via_id, target_id, note, via_note, status, created_at, decided_at
+  id, requester_id, via_id, target_id, note, via_note, status,
+  created_at, decided_at, responded_at
 `;
 
 /**
@@ -228,6 +236,62 @@ export function createPostgresIntroRequestRepository(
       });
     },
 
+    async respond(write: IntroResponseWrite): Promise<IntroRequest> {
+      return database.transaction().execute(async (transaction) => {
+        // ⚠ **Every rule about who may answer and in what state lives in this `where`,
+        // and there is no eligibility clause beside them** — the one structural difference
+        // from `decide` above. A pass-on re-asks the graph because it is about to disclose
+        // the requester to somebody; an answer discloses nothing new, because the target
+        // has already read the introduction. Re-checking here would let a graph change
+        // strand somebody holding an introduction they can neither accept nor refuse.
+        //
+        // `target_id = <actor>` is what makes "only the target may answer" true — the
+        // requester, the via and a stranger each match zero rows, exactly as an id naming
+        // nothing does.
+        //
+        // `status = 'passed_on'` carries three rules at once: an introduction cannot be
+        // answered before the via passed it on, cannot be answered twice, and — because a
+        // via's `declined` is not this value — cannot be answered at all when the via said
+        // no, which is what keeps a target from detecting a decline by trying to accept
+        // it. It is also the concurrency control: two simultaneous answers block on the
+        // row, and the loser re-evaluates against the committed status and matches
+        // nothing.
+        //
+        // ⚠ `decided_at` is untouched. It is the via's timestamp; the answer gets its own
+        // column, so the row keeps both halves of its history and the event below can say
+        // when the target actually acted.
+        const { rows } = await sql<IntroRequestRow>`
+          update app.intro_requests as request
+             set status = ${STATUS_FOR_RESPONSE[write.response]}::text,
+                 responded_at = ${write.respondedAt}::timestamptz
+           where request.id = ${write.introRequestId}::uuid
+             and request.target_id = ${write.actorId}::uuid
+             and request.status = ${INTRO_REQUEST_STATUS.passedOn}::text
+          returning ${INTRO_REQUEST_COLUMNS}
+        `.execute(transaction);
+
+        const answered = rows[0];
+
+        if (answered === undefined) {
+          // "No such introduction", "not yours to answer", "not passed on", "the via
+          // declined it" and "already answered" are one answer, and the throw rolls back
+          // so a refused response writes no event.
+          throw new IntroUnavailableError();
+        }
+
+        const request = toIntroRequest(answered);
+        // ⚠ **The acceptance and its event are one transactional fact, and the event is
+        // the only thing that makes the connection** (decision D12, ADR-0006).
+        // `modules/connections` writes the edge from this row; a connection created by a
+        // call from here instead would live in a second transaction, and a failure between
+        // the two would leave an introduction that says `accepted`, no connection, and no
+        // way to retry — because answering is terminal-once.
+        await appendOutboxEvent(transaction, introResponded(request));
+
+        return request;
+      });
+    },
+
     async findViaCandidates(requesterId: string, targetId: string): Promise<readonly IntroPerson[]> {
       // Both identifiers travel as bound parameters, which is what ADR-0002 §5 means by
       // "every viewer-scoped read passes viewer_id explicitly": no session GUC, no
@@ -337,10 +401,28 @@ export function createPostgresIntroRequestRepository(
       // about the requester; showing them here would turn a vouch into something the
       // person being vouched for reads over the writer's shoulder, and no via would write
       // an honest one twice.
+      //
+      // ⚠ **The status reported is the via's decision, and never the target's answer**
+      // (#166). `accepted` and `target_declined` both read back as `passed_on`, so a
+      // requester cannot tell a target who refused from one who has not got to it yet.
+      // That is the same rule that keeps a via's decline invisible to the target, one
+      // person along: somebody who can be seen refusing cannot safely refuse, and an
+      // introduction is worth nothing if the person receiving it is under obligation.
+      // An acceptance is still learned — it discloses itself, by connecting — which is the
+      // target's own act rather than this read's disclosure. `responded_at` is absent here
+      // for the same reason, since a timestamp appearing on the row would say it just as
+      // loudly as a status would.
       const { rows } = await sql<IntroOutboxRow>`
         with ${viewerWorld(viewerId)}
         select r.id                    as intro_request_id,
-               r.status                as status,
+               case
+                 when r.status in (
+                        ${INTRO_REQUEST_STATUS.accepted}::text,
+                        ${INTRO_REQUEST_STATUS.targetDeclined}::text
+                      )
+                 then ${INTRO_REQUEST_STATUS.passedOn}::text
+                 else r.status
+               end                     as status,
                r.target_id             as target_id,
                r.created_at            as created_at,
                r.decided_at            as decided_at,
@@ -390,10 +472,12 @@ async function appendOutboxEvent(
       // to grow one — a notification consumer would love to quote the vouch — and it is
       // exactly the one that must not.
       //
-      // ⚠ **An `IntroDeclined` row names the target and no consumer may tell them.** The
-      // fact happened and the audit trail is entitled to it; the delivery is what must
-      // not exist. The identifier is here because a consumer routing an `IntroPassedOn`
-      // needs it, and one payload shape for three events beats three that could drift.
+      // ⚠ **An `IntroDeclined` row names the target and no consumer may tell them**, and
+      // an `IntroTargetDeclined` row names the requester and no consumer may tell *them*
+      // (#166). In both cases the fact happened and the audit trail is entitled to it;
+      // the delivery is what must not exist. The identifiers are here because a consumer
+      // routing an `IntroPassedOn` — or forming a connection from an `IntroAccepted` —
+      // needs them, and one payload shape for five events beats five that could drift.
       //
       // Passed as an object, not a `JSON.stringify`d string: the generated type for a
       // `jsonb` column is `Json`, so a string type-checks and stores a JSON *scalar*

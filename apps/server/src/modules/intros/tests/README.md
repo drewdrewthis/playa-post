@@ -10,12 +10,14 @@ all. Nothing here needs `pnpm db:start`.
 
 | Directory | Suite | Feature-file scenarios |
 |---|---|---|
-| `integration/` | `intro-requests-migration.integration.test.ts` | `app.intro_requests`' and `app.intro_via_candidates`' catalog shape — RLS backstop and exactly one policy, table and EXECUTE grants (both halves), `SECURITY INVOKER`, `SET search_path = ''`, `STABLE`, the verbatim-migration pairing, the four CHECKs, the partial open-per-pair index, and the no-tsvector and no-index facts about both note columns |
+| `integration/` | `intro-requests-migration.integration.test.ts` | `app.intro_requests`' and `app.intro_via_candidates`' catalog shape — RLS backstop and exactly one policy, table and EXECUTE grants (both halves), `SECURITY INVOKER`, `SET search_path = ''`, `STABLE`, the verbatim-migration pairing, the five CHECKs (#166 adds `intro_requests_responded_at` and widens two), the partial open-per-pair index, and the no-tsvector and no-index facts about both note columns and `responded_at` |
 | `integration/` | `intro-via-candidates.integration.test.ts` | the eligibility set itself — the eligible A—B—C shape, several shared vias, §6a projection of a `limited` via, and nine ineligible shapes that must each be an **empty set rather than an error** |
-| `integration/` | `request-an-intro.integration.test.ts` | `request-an-intro.feature` — every `@integration` scenario: lifecycle, the seven-way refusal matrix, the open-per-pair rule and both concurrency races, decide authorization, lapsed eligibility, the two privacy invariants, both consent inversions, content-before-eligibility ordering, outbox atomicity and minimisation, the requester's own record, and #175's required via note |
+| `integration/` | `request-an-intro.integration.test.ts` | `request-an-intro.feature` — every `@integration` scenario: lifecycle, the seven-way refusal matrix, the open-per-pair rule and both concurrency races, decide authorization, lapsed eligibility, the two privacy invariants, both consent inversions, content-before-eligibility ordering, outbox atomicity and minimisation, the requester's own record, #175's required via note, and #166's target answer — including the **connection itself**, formed by delivering `IntroAccepted` to `modules/connections`' own consumer |
 | `unit/` | `intro-note.policy.unit.test.ts` | `request-an-intro.feature` › "The intro note is trimmed, bounded, and never empty", and #175's "Passing an intro on requires a note of the via's own" / "A decline carries no note" — `validateViaNote` is the one function that branches on the decision |
 | `unit/` | `decide-intro.input.unit.test.ts` | the wire half of #175: a discriminated union on `decision`, whose decline arm is a `strictObject` so a note there is **refused rather than stripped**, and `decideIntroCommandFields` omitting the key entirely rather than passing `undefined` |
-| `unit/` | `intro-request.events.unit.test.ts` | the three event builders carry four identifiers and never either note, take their timestamps from the committed row, and refuse to describe an undecided row as decided |
+| `unit/` | `intro-request.events.unit.test.ts` | the four event builders carry four identifiers and never either note, take their timestamps from the committed row (`introResponded` from `responded_at`, never the via's `decided_at`), and each refuses a row the other one owns |
+| `unit/` | `intro-response.unit.test.ts` | #166's vocabulary — `INTRO_RESPONSE` disjoint from `INTRO_DECISION`, `STATUS_FOR_RESPONSE` total and producing statuses no via decision produces, `ANSWERED_STATUSES` derived rather than restated, and `INTRO_UNAVAILABLE` still the one refusal, wording nothing |
+| `unit/` | `respond-to-intro.input.unit.test.ts` | the wire half of #166: one `strictObject` with an enum rather than a union, refusing a note, a self-named `status`, a via's `pass_on`, and every spelling of an actor identifier |
 | `unit/` | `intro-via-candidates-sql-composition.unit.test.ts` | the checked-in `persistence/sql/intro-via-candidates.sql` composes `app.visible_people` on **both** sides, joins neither `app.connections` nor `app.users`, gates the target at degree 2 and the candidate at degree 1, and inner-joins the two sides |
 
 **Three assertion shapes carry most of the weight, and none of them is "an error was
@@ -55,6 +57,24 @@ test, so the intro row is already inserted when the event write fails — a gree
 "zero rows, zero events" is then evidence of a rollback rather than of a refusal. The
 constraint is dropped in a `finally`, and the same write is re-run afterwards to prove the
 path was not left broken.
+
+**The connection an acceptance forms is asserted here, in another module's table, and the
+delivery is driven by hand.** Decision D12 routes it through the `IntroAccepted` outbox
+event, so this suite constructs `modules/connections`' consumer and offers it **every**
+stored event — a consumer that had started acting on `IntroTargetDeclined` would connect
+people, and offering it only the acceptance would never find that out. Two things the hand
+delivery cannot prove, and their homes:
+
+| Claim | Where it is proved |
+|---|---|
+| The composition root actually registers that consumer | `apps/server/src/composition/container-notification-wiring.integration.test.ts` — its absence is silent: the acceptance still records, nothing throws, and the two people are simply never connected |
+| The payload is read as a pair or refused, never guessed | `modules/connections/tests/domain/introduced-pair.unit.test.ts` |
+
+⚠ **`connectionsBetween(a, b)` rather than a bare `app.connections` count.**
+`seedSymmetricWorld()` lays down four connections of its own, so a table-wide count would
+be measuring the fixture; the pair query is order-agnostic for the same reason
+`app.visible_people` walks both directions. A separate `connectionCount()` covers "and
+nowhere else either".
 
 **The eligibility gate has no unit suite, deliberately.** "May these three people be
 introduced" is one `WHERE EXISTS` over `app.intro_via_candidates` inside the insert, and

@@ -65,6 +65,11 @@ export function describeIntroStanding(
     return { kind: 'none' };
   }
 
+  // ⚠ **Do not add an arm for `accepted` or `target_declined`** (#166). They exist in the
+  // status vocabulary and never reach this read: `intros.listOutbox` reports the *via's*
+  // decision, because a target who could be seen refusing cannot safely refuse. An
+  // acceptance still reaches the requester — as a connection on their graph, which is the
+  // target's own disclosure rather than this line's.
   return latest.status === INTRO_REQUEST_STATUS.declined
     ? { kind: 'declined', line: INTRO_NOT_PASSED_ON_LINE }
     : { kind: 'passed-on', line: INTRO_PASSED_ON_LINE };

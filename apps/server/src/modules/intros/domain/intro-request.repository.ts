@@ -1,4 +1,4 @@
-import type { IntroDecision, IntroRequest } from './intro-request';
+import type { IntroDecision, IntroRequest, IntroResponse } from './intro-request';
 
 /** What requesting an intro is given. The note has already been through the policy. */
 export interface NewIntroRequest {
@@ -38,6 +38,21 @@ export interface IntroDecisionWrite {
    */
   readonly viaNote?: string;
   readonly decidedAt: Date;
+}
+
+/** What answering an introduction is given (issue #166). */
+export interface IntroResponseWrite {
+  readonly introRequestId: string;
+  /**
+   * The target, taken from the resolved `Actor`.
+   *
+   * ⚠ A *predicate* on the update, exactly as {@link IntroDecisionWrite.actorId} is: the
+   * statement's `where target_id = <actor>` is what makes "only the target may answer"
+   * true, and no path here writes an actor anywhere.
+   */
+  readonly actorId: string;
+  readonly response: IntroResponse;
+  readonly respondedAt: Date;
 }
 
 /**
@@ -98,4 +113,35 @@ export interface IntroRequestRepository {
    *   eligible" are one answer.
    */
   decide(write: IntroDecisionWrite): Promise<IntroRequest>;
+
+  /**
+   * Answer a passed-on introduction as its named target, and write the matching event,
+   * atomically (issue #166).
+   *
+   * ⚠ **`where target_id = <actor> and status = 'passed_on'` is the whole authorization,
+   * and both halves matter.** The first makes "only the target may answer" true — the
+   * requester, the via and a stranger each match zero rows, exactly as an id naming
+   * nothing does. The second makes "only after the via passed it on" true, and doubles as
+   * the terminal-once rule and the concurrency control: two simultaneous answers block on
+   * the row, and the loser re-evaluates against the committed status, matches nothing, and
+   * is refused.
+   *
+   * ⚠ **Eligibility is deliberately not re-checked, unlike a pass-on.** The graph question
+   * a pass-on asks — may this requester be disclosed to this target — was already answered
+   * when the introduction was made, and the target has since *read* it. Refusing the
+   * answer now would withdraw nothing (they have already seen everything) while leaving
+   * somebody unable to act on an introduction they were given, which is the failure mode
+   * D3's asymmetry exists to avoid. Accepting is also consent in its own right: the target
+   * is choosing this connection, not being placed in one.
+   *
+   * ⚠ **The connection is not written here.** An acceptance emits `IntroAccepted` and
+   * `modules/connections` forms the edge from it (decision D12) — so this module names no
+   * table it does not own, and a crash between the two leaves a delivery still owed rather
+   * than an accepted introduction with no connection and no way to retry.
+   *
+   * @throws {import('./intro-request.errors').IntroUnavailableError} when the statement
+   *   updated no row — "no such request", "not yours to answer", "not passed on yet",
+   *   "the via declined it", and "already answered" are one answer.
+   */
+  respond(write: IntroResponseWrite): Promise<IntroRequest>;
 }

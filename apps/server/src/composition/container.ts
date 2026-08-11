@@ -346,6 +346,13 @@ export function buildAppContainer(
   // statements compose that function in turn — so there is no TypeScript edge here and
   // none may be added. Injecting a graph repository would put a second definition of
   // reachability one convenience method away (issue #89, ADR-0002 §6).
+  //
+  // ⚠ It takes nothing from `connections` either, although accepting an introduction is
+  // what creates a connection (issue #166). That seam is the `IntroAccepted` outbox event
+  // and `connections.connectIntroducedPair` below — decision D12 — so the acceptance and
+  // its event are one transaction and the edge is written by the module that owns the
+  // table. A dependency here would be the two-transaction version, whose failure is
+  // unrecoverable because answering an introduction is terminal-once.
   const intros = createIntrosModule({ database });
   const moderation = createModerationModule({
     database,
@@ -411,6 +418,13 @@ export function buildAppContainer(
       // out does not delay a notification — it means the notification never exists, and
       // nothing errors. `container-notification-wiring.unit.test.ts` holds the line.
       toDrainerConsumer(notifications.deliverNotePinned),
+      // ⚠ The whole of "accepting an introduction connects you" (issue #166, decision
+      // D12), and its absence is silent in the same way: `modules/intros` would still
+      // record the acceptance, nothing would throw, and the two people would simply never
+      // become connected. Passed straight through rather than adapted — this consumer is
+      // built in `modules/connections/persistence/`, which those boundary rules leave free
+      // to name the drainer's own port, so there is no second declaration to reconcile.
+      connections.connectIntroducedPair,
     ],
     // ⚠ The other half of the notifications wiring, and the half whose absence is
     // silent: these rows are read by the grouping-window flush started in `main.ts`,

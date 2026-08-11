@@ -17,14 +17,17 @@ import { IntroInbox } from './intro-inbox';
 import { INTRO_NOTE_MAX_LENGTH } from './intro-note-draft';
 
 /**
- * The via's inbox at the top of `/graph` (issues #89 and #175).
+ * The dual-role intro inbox at the top of `/graph` (issues #89, #175 and #166).
  *
  * ⚠ jsdom, by the per-file pragma above: the `unit` project runs in `node`.
  *
- * Two shapes, and #175 gave each of them a rule the other must not acquire: a `via` row's
- * Pass on opens a **required** note field and submits the decision and the note together,
- * while a `target` row renders **two** notes under **two** authors' cards and offers no
- * control at all.
+ * Two shapes, and each has rules the other must not acquire. A `via` row's Pass on opens a
+ * **required** note field and submits the decision and the note together (#175); a
+ * `target` row renders **two** notes under **two** authors' cards and answers a different
+ * procedure — `intros.respond`, accept or decline, one press and no field (#166). The
+ * cross-checks below are the load-bearing ones: a control that appeared on the wrong row
+ * would submit an action the server refuses, and a decline that reached `intros.decide`
+ * would answer somebody else's ask.
  */
 
 const LENA: IntroPerson = { userId: 'lena-id', disclosure: 'full', displayName: 'Lena' };
@@ -67,10 +70,12 @@ afterEach(async () => {
 async function mountInbox(
   rows: readonly IntroInboxRow[],
   decide: (input: unknown) => unknown = () => ({}),
+  respond: (input: unknown) => unknown = () => ({}),
 ): Promise<FakeApi> {
   const api = createFakeApi({
     'intros.listInbox': () => rows,
     'intros.decide': decide,
+    'intros.respond': respond,
   });
 
   tree = await mountWithApi(<IntroInbox />, api);
@@ -305,18 +310,123 @@ describe('the intro inbox', () => {
   describe('a row that is an introduction already made to this viewer', () => {
     /*
      * ⚠ Branching on `role` is a rule, not a layout preference: the server refuses a
-     * decision from anybody but the named via, so Pass on / Decline here would be controls
-     * whose only outcome is `INTRO_UNAVAILABLE`.
+     * *decision* from anybody but the named via, so Pass on here would be a control whose
+     * only outcome is `INTRO_UNAVAILABLE`. What this row offers instead is the target's own
+     * pair of answers (#166), which reach a different procedure entirely.
      */
-    it('shows who was introduced and their note, and offers no decision', async () => {
+    it('shows who was introduced, their note, and the target’s own two answers', async () => {
       await mountInbox([TARGET_ROW]);
 
       const row = requireElement(mounted().container, '[data-testid="intro-inbox-target-row"]');
 
       expect(row.textContent).toContain('Lena');
       expect(row.textContent).toContain('I heard you fix bikes.');
+      expect(row.querySelector('[data-testid="intro-accept-button"]')).not.toBeNull();
+      expect(row.querySelector('[data-testid="intro-target-decline-button"]')).not.toBeNull();
+
+      // ⚠ And none of the via's controls. `intro-decline-button` is deliberately a
+      // different id from `intro-target-decline-button`: one answers somebody else's ask
+      // and the other answers an introduction, and a shared id would let a walk that meant
+      // one silently press the other.
       expect(row.querySelector('[data-testid="intro-pass-on-button"]')).toBeNull();
       expect(row.querySelector('[data-testid="intro-decline-button"]')).toBeNull();
+    });
+
+    /*
+     * ⚠ **Load-bearing copy, not decoration.** An introduction arrives from somebody the
+     * reader knows, about somebody they do not, and the pressure to be polite is what
+     * turns an intro product into an obligation. Saying plainly that a refusal reaches
+     * nobody is what makes "no" a real option.
+     */
+    it('says what each answer does, and that declining tells nobody', async () => {
+      await mountInbox([TARGET_ROW]);
+
+      const row = requireElement(mounted().container, '[data-testid="intro-inbox-target-row"]');
+
+      expect(row.textContent).toContain('Accepting connects you');
+      expect(row.textContent).toContain('Declining tells nobody');
+    });
+
+    it('accepts in one press, with no note field and nothing else on the wire', async () => {
+      const api = await mountInbox([TARGET_ROW]);
+
+      await press('intro-accept-button');
+
+      expect(api.calls.filter((call) => call.kind === 'mutate')).toEqual([
+        {
+          kind: 'mutate',
+          path: 'intros.respond',
+          input: { introRequestId: 'request-2', response: 'accept' },
+        },
+      ]);
+
+      // ⚠ The confirmation does not claim the connection already exists. The server
+      // records the answer and forms the edge from it moments later (decision D12), so
+      // "you are now connected" would be false for as long as that takes and would send
+      // somebody to a graph that has not caught up.
+      const confirmation = requireElement(
+        mounted().container,
+        '[data-testid="intro-inbox-confirmation"]',
+      );
+
+      expect(confirmation.textContent).toContain('being connected');
+      expect(confirmation.getAttribute('role')).toBe('status');
+    });
+
+    it('declines in one press, and says who was told', async () => {
+      const api = await mountInbox([TARGET_ROW]);
+
+      await press('intro-target-decline-button');
+
+      expect(api.calls.filter((call) => call.kind === 'mutate')).toEqual([
+        {
+          kind: 'mutate',
+          path: 'intros.respond',
+          input: { introRequestId: 'request-2', response: 'decline' },
+        },
+      ]);
+
+      // The answer is "nobody", and it is the piece of information that makes the control
+      // safe to press — so it is on screen after the press as well as before it.
+      expect(
+        requireElement(mounted().container, '[data-testid="intro-inbox-confirmation"]').textContent,
+      ).toContain('Nobody is told');
+    });
+
+    it('never reaches intros.decide, whichever answer is pressed', async () => {
+      // ⚠ The regression this pins: `intros.decide`'s `decline` and `intros.respond`'s
+      // `decline` are the same word for two different acts by two different people. A
+      // target row wired to the via's mutation would answer somebody else's ask — and
+      // would be refused by the server for a reason no message here could explain.
+      for (const control of ['intro-accept-button', 'intro-target-decline-button']) {
+        const api = await mountInbox([TARGET_ROW]);
+
+        await press(control);
+
+        expect(
+          api.calls.filter((call) => call.kind === 'mutate').map((call) => call.path),
+        ).toEqual(['intros.respond']);
+
+        await mounted().unmount();
+        tree = null;
+      }
+    });
+
+    it('says an answer was refused without explaining why', async () => {
+      await mountInbox([TARGET_ROW], undefined, () => {
+        throw Object.assign(new Error('refused'), {
+          data: { code: 'NOT_FOUND', applicationCode: 'INTRO_UNAVAILABLE' },
+        });
+      });
+
+      await press('intro-accept-button');
+
+      // ⚠ One flat sentence for every reason — including "the via declined it", which is
+      // the case a message here must never distinguish. Elaborating would let a target
+      // detect a decline by trying to accept.
+      expect(
+        requireElement(mounted().container, '[data-testid="intro-inbox-error"]').textContent,
+      ).toBe('That introduction is not available.');
     });
 
     /*
@@ -371,7 +481,7 @@ describe('the intro inbox', () => {
       expect(container.innerHTML).not.toContain(WITHHELD_VIA.userId);
     });
 
-    it('sits beside an ask without borrowing its controls', async () => {
+    it('sits beside an ask without either row borrowing the other’s controls', async () => {
       await mountInbox([VIA_ROW, TARGET_ROW]);
 
       const container = mounted().container;
@@ -379,6 +489,12 @@ describe('the intro inbox', () => {
       expect(allElements(container, '[data-testid="intro-inbox-via-row"]')).toHaveLength(1);
       expect(allElements(container, '[data-testid="intro-inbox-target-row"]')).toHaveLength(1);
       expect(allElements(container, '[data-testid="intro-pass-on-button"]')).toHaveLength(1);
+      // One of each answer, on the one row entitled to it — the two roles on screen
+      // together is the arrangement where a shared component would show.
+      expect(allElements(container, '[data-testid="intro-accept-button"]')).toHaveLength(1);
+      expect(
+        allElements(container, '[data-testid="intro-target-decline-button"]'),
+      ).toHaveLength(1);
     });
   });
 

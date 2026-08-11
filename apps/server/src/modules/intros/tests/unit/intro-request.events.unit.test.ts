@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { INTRO_REQUEST_STATUS, type IntroRequest } from '../../domain/intro-request';
 import {
+  INTRO_ACCEPTED,
   INTRO_DECLINED,
   INTRO_PASSED_ON,
   INTRO_REQUESTED,
+  INTRO_TARGET_DECLINED,
   introDecided,
   introRequested,
+  introResponded,
 } from '../../domain/intro-request.events';
 
 /**
@@ -53,6 +56,19 @@ describe('intro request events (issue #89, ADR-0006)', () => {
     ...open,
     status: INTRO_REQUEST_STATUS.declined,
     decidedAt,
+  };
+
+  /** The target's own timestamp, deliberately not the via's (issue #166). */
+  const respondedAt = new Date('2026-08-11T18:45:00.000Z');
+  const accepted: IntroRequest = {
+    ...passedOn,
+    status: INTRO_REQUEST_STATUS.accepted,
+    respondedAt,
+  };
+  const targetDeclined: IntroRequest = {
+    ...passedOn,
+    status: INTRO_REQUEST_STATUS.targetDeclined,
+    respondedAt,
   };
 
   describe('introRequested', () => {
@@ -134,6 +150,83 @@ describe('intro request events (issue #89, ADR-0006)', () => {
       // mistake rather than a refusal — and silently emitting an `IntroDeclined` for an
       // undecided row would be worse than a 500.
       expect(() => introDecided(open)).toThrow(/carries no decision/);
+    });
+
+    it('refuses an answered row rather than calling it a decline (#166)', () => {
+      // ⚠ The regression this pins is the shape the builder used to have: "passed on,
+      // else declined". Since #166 a decided row can also be `accepted` — the target
+      // answered a request the via had passed on — and the negative form would have
+      // announced an `IntroDeclined` the via never made, to consumers routing on it.
+      expect(() => introDecided(accepted)).toThrow(/not a via decision/);
+      expect(() => introDecided(targetDeclined)).toThrow(/not a via decision/);
+    });
+  });
+
+  describe('introResponded (issue #166)', () => {
+    it('names the actor as the target — neither the requester nor the via answers', () => {
+      expect(introResponded(accepted).actorId).toBe(open.targetId);
+      expect(introResponded(targetDeclined).actorId).toBe(open.targetId);
+    });
+
+    it('reads its type from the stored status rather than from a second argument', () => {
+      expect(introResponded(accepted).type).toBe(INTRO_ACCEPTED);
+      expect(introResponded(targetDeclined).type).toBe(INTRO_TARGET_DECLINED);
+    });
+
+    it('takes occurredAt from responded_at and never from the via’s decided_at', () => {
+      // ⚠ The two timestamps belong to two different people. An acceptance stamped with
+      // the via's decision time would tell every consumer — the audit trail included —
+      // that the target answered before they were shown anything.
+      expect(introResponded(accepted).occurredAt).toBe(respondedAt);
+      expect(introResponded(accepted).occurredAt).not.toBe(decidedAt);
+    });
+
+    it('carries the identifiers modules/connections needs to form the edge', () => {
+      // The seam decision D12 rests on: the connection is written from this payload, so
+      // the two people it names are the whole contract. Nothing was added for it — these
+      // are the same identifiers every intro event has carried since #89.
+      expect(introResponded(accepted)).toEqual({
+        type: INTRO_ACCEPTED,
+        occurredAt: respondedAt,
+        introRequestId: open.id,
+        requesterId: open.requesterId,
+        viaId: open.viaId,
+        targetId: open.targetId,
+        actorId: open.targetId,
+      });
+    });
+
+    it('carries the same identifiers for a decline as for an acceptance', () => {
+      const { type: _acceptedType, ...acceptedPayload } = introResponded(accepted);
+      const { type: _declinedType, ...declinedPayload } = introResponded(targetDeclined);
+
+      // ⚠ Identical payloads, exactly as the via's two decisions have. The row that must
+      // never be *delivered* to the requester is `IntroTargetDeclined`, and that is a
+      // consumer's rule rather than a payload one — there is no consumer for it at all.
+      expect(declinedPayload).toEqual(acceptedPayload);
+    });
+
+    it('carries neither note, on either answer', () => {
+      // Same assertion shape and the same reason as the via's events: an answered row
+      // still carries both notes, and an outbox row is durable and widely read.
+      for (const event of [introResponded(accepted), introResponded(targetDeclined)]) {
+        expect(JSON.stringify(event)).not.toContain(DISTINCTIVE_PHRASE);
+        expect(JSON.stringify(event)).not.toContain(DISTINCTIVE_VIA_PHRASE);
+      }
+    });
+
+    it('refuses to build an event for a row nobody has answered', () => {
+      expect(() => introResponded(open)).toThrow(/carries no answer/);
+      expect(() => introResponded(passedOn)).toThrow(/carries no answer/);
+    });
+
+    it('refuses a via decision rather than calling it an answer', () => {
+      // The mirror of `introDecided`'s guard: a row whose `responded_at` was set while its
+      // status stayed `passed_on` is unreachable through the gated update and would be a
+      // fact about the wrong person if it were ever built.
+      expect(() => introResponded({ ...passedOn, respondedAt })).toThrow(
+        /not a target answer/,
+      );
     });
   });
 });

@@ -16,6 +16,7 @@ import type {
   IntroRequestReceipt,
   IntroViaCandidatesRequest,
   RequestIntroRequest,
+  RespondToIntroRequest,
 } from './intros';
 import type {
   HiddenBulletin,
@@ -119,6 +120,7 @@ export interface PlayaPostApi {
   'intros.listInbox': QuerySpec<void, readonly IntroInboxRow[]>;
   'intros.listOutbox': QuerySpec<void, readonly IntroOutboxRow[]>;
   'intros.decide': MutationSpec<DecideIntroRequest, IntroRequestReceipt>;
+  'intros.respond': MutationSpec<RespondToIntroRequest, IntroRequestReceipt>;
 
   'sync.submitMutations': MutationSpec<SubmitMutationsRequest, MutationBatch>;
 

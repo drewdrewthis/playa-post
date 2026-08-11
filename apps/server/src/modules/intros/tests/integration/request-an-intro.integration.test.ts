@@ -12,10 +12,12 @@ import {
   type SupabaseSigningKeyPair,
 } from '@playa-post/testing';
 
+import type { OutboxConsumer } from '../../../../entrypoints/outbox-drainer/outbox-consumer';
 import { authenticateRequest } from '../../../../shared/auth/authenticate-request';
 import { createSupabaseJwtVerifier } from '../../../../shared/auth/supabase-jwt-verifier';
 import type { RequestContext } from '../../../../shared/trpc/request-context';
 import { createCallerFactory, router } from '../../../../shared/trpc/trpc';
+import { createConnectionsModule } from '../../../connections/connections.module';
 import { createIdentityModule } from '../../../identity/identity.module';
 import { INTRO_NOTE_MAX_LENGTH } from '../../domain/intro-note';
 import { createIntrosModule, type IntrosModule } from '../../intros.module';
@@ -45,8 +47,15 @@ import { createIntrosModule, type IntrosModule } from '../../intros.module';
  * Issue #175 added the fourth shape rather than a fourth suite: **two distinctive
  * phrases**, one per note, so every "the text never reaches here" assertion has to hold
  * for the via's vouch as well as the requester's ask.
+ *
+ * Issue #166 adds the fifth, and it spans two modules on purpose: **the connection row
+ * itself**. Accepting an introduction is what forms it, through the `IntroAccepted` outbox
+ * event and `modules/connections`' own consumer (decision D12) — so "accepted" and
+ * "connected" are two different claims and the scenarios below assert the second one, by
+ * delivering the event the way the drainer does and then reading `app.connections`. A
+ * suite that stopped at the status would go green against a seam that was never wired.
  */
-describe('request an intro (request-an-intro.feature, #89 and #175)', () => {
+describe('request an intro (request-an-intro.feature, #89, #175 and #166)', () => {
   let testDatabase: PostgresTestDatabase;
   let database: DatabaseConnection;
   let signingKey: SupabaseSigningKeyPair;
@@ -163,14 +172,103 @@ describe('request an intro (request-an-intro.feature, #89 and #175)', () => {
     readonly via_note: string | null;
     readonly status: string;
     readonly decided_at: Date | null;
+    readonly responded_at: Date | null;
   }
 
   async function introRequestRows(): Promise<readonly StoredIntroRequest[]> {
     const { rows } = await testDatabase.client.query<StoredIntroRequest>(
-      `select id, requester_id, via_id, target_id, note, via_note, status, decided_at
+      `select id, requester_id, via_id, target_id, note, via_note, status,
+              decided_at, responded_at
          from app.intro_requests order by created_at, id`,
     );
     return rows;
+  }
+
+  interface StoredConnection {
+    readonly user_a_id: string;
+    readonly user_b_id: string;
+    readonly status: string;
+    readonly a_discloses_to_b_level: string;
+    readonly b_discloses_to_a_level: string;
+    readonly created_at: Date;
+  }
+
+  /**
+   * The stored connection between two people, in whichever order it was written.
+   *
+   * Scoped to a pair rather than reading the whole table, because `seedSymmetricWorld`
+   * lays down four connections of its own: a bare `app.connections` count would be
+   * measuring the fixture. The **order-agnostic** match matters too — the application
+   * writes the pair in lexical order, so asserting one order would pass or fail on where
+   * two random UUIDs happened to sort.
+   */
+  async function connectionsBetween(
+    oneUserId: string,
+    otherUserId: string,
+  ): Promise<readonly StoredConnection[]> {
+    const { rows } = await testDatabase.client.query<StoredConnection>(
+      `select user_a_id, user_b_id, status,
+              a_discloses_to_b_level, b_discloses_to_a_level, created_at
+         from app.connections
+        where (user_a_id = $1 and user_b_id = $2) or (user_a_id = $2 and user_b_id = $1)`,
+      [oneUserId, otherUserId],
+    );
+    return rows;
+  }
+
+  /** How many connections exist at all — for "and nowhere else either". */
+  async function connectionCount(): Promise<number> {
+    const { rows } = await testDatabase.client.query<{ count: string }>(
+      'select count(*)::text as count from app.connections',
+    );
+    return Number(rows[0]?.count ?? '-1');
+  }
+
+  /**
+   * Hand every stored outbox row to a consumer, exactly as the drainer would (#166).
+   *
+   * ⚠ **This is the half of the feature that lives in another module**, and delivering it
+   * by hand here rather than asserting a connection appeared by itself is deliberate: the
+   * seam is an at-least-once delivery, so a suite that waited on the real poller would be
+   * timing-dependent, and one that skipped delivery entirely would prove nothing about
+   * decision D12. The real *registration* — that `buildAppContainer` gives this consumer to
+   * the drainer at all — is `composition/container-notification-wiring.integration.test.ts`'s
+   * job, and nothing here can substitute for it.
+   *
+   * Every row is offered, not just the interesting one: a consumer must be a no-op for the
+   * event types it does not subscribe to, and offering it only `IntroAccepted` would never
+   * discover that it had started acting on `IntroTargetDeclined`.
+   */
+  async function deliverEveryEventTo(consumer: OutboxConsumer): Promise<void> {
+    const { rows } = await testDatabase.client.query<{
+      event_id: string;
+      event_type: string;
+      occurred_at: Date;
+      actor_id: string | null;
+      aggregate_id: string;
+      payload: Record<string, unknown>;
+      attempts: number;
+    }>(
+      `select event_id, event_type, occurred_at, actor_id, aggregate_id, payload, attempts
+         from app.outbox_events order by occurred_at, event_id`,
+    );
+
+    for (const row of rows) {
+      await consumer.handle({
+        eventId: row.event_id,
+        eventType: row.event_type,
+        occurredAt: row.occurred_at,
+        actorId: row.actor_id,
+        aggregateId: row.aggregate_id,
+        payload: row.payload,
+        attempts: row.attempts,
+      });
+    }
+  }
+
+  /** `modules/connections`' `IntroAccepted` consumer — the other end of decision D12. */
+  function introducedPairConsumer(): OutboxConsumer {
+    return createConnectionsModule({ database }).connectIntroducedPair;
   }
 
   async function outboxRows(): Promise<
@@ -1105,6 +1203,553 @@ describe('request an intro (request-an-intro.feature, #89 and #175)', () => {
       // a join to `app.users` (ADR-0002 §6a).
       expect(forCleo[0]?.via?.disclosure).toBe('full');
       expect(forCleo[0]?.via?.displayName).toBe(bruno.handle);
+    });
+  });
+
+  describe('Scenario: Accepting a passed-on introduction connects the target to the requester (@integration, #166, AC1/AC2)', () => {
+    it('records the answer, emits IntroAccepted, and the event is what makes the connection', async () => {
+      const { alice, bruno, cleo, cass } = await seedSymmetricWorld();
+      const { callerFor } = makeCallers();
+      const callerAlice = await callerFor(alice.authUserId);
+      const callerBruno = await callerFor(bruno.authUserId);
+      const callerCleo = await callerFor(cleo.authUserId);
+      const callerCass = await callerFor(cass.authUserId);
+
+      const created = await callerAlice.intros.request({
+        targetUserId: cleo.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      const decided = await callerBruno.intros.decide(passOn(created.id));
+
+      const answered = await callerCleo.intros.respond({
+        introRequestId: created.id,
+        response: 'accept',
+      });
+
+      expect(answered.status).toBe('accepted');
+      expect(answered.respondedAt).toBeDefined();
+      // ⚠ The via's timestamp is untouched. It says when the introduction was *made*, and
+      // an acceptance that overwrote it would erase the only record of that.
+      expect(answered.decidedAt).toBe(decided.decidedAt);
+
+      const stored = await introRequestRows();
+      expect(stored).toHaveLength(1);
+      expect(stored[0]?.status).toBe('accepted');
+      expect(stored[0]?.responded_at?.toISOString()).toBe(answered.respondedAt);
+      expect(stored[0]?.decided_at?.toISOString()).toBe(decided.decidedAt);
+      // ⚠ The vouch survives the status change, which is the half of the migration that
+      // would otherwise fail silently: `intro_requests_via_note` was written when
+      // `passed_on` was terminal, and the un-widened form refuses this very UPDATE.
+      expect(stored[0]?.via_note).toBe(VIA_NOTE);
+
+      const events = await outboxRows();
+      const accepted = events.find((event) => event.event_type === 'IntroAccepted');
+      // The target acted, so the target is the actor — not the via, whose name is on the
+      // row and travels only for routing.
+      expect(accepted?.actor_id).toBe(cleo.userId);
+      expect(accepted?.aggregate_id).toBe(created.id);
+      expect(accepted?.payload).toEqual({
+        introRequestId: created.id,
+        requesterId: alice.userId,
+        viaId: bruno.userId,
+        targetId: cleo.userId,
+      });
+      // Neither note, on the event that a consumer would most like to quote.
+      expect(JSON.stringify(events)).not.toContain(DISTINCTIVE_PHRASE);
+      expect(JSON.stringify(events)).not.toContain(DISTINCTIVE_VIA_PHRASE);
+
+      // ⚠ **Nothing is connected yet, and that is decision D12 rather than a bug.** The
+      // acceptance and its event are one transaction; the edge is written by
+      // `modules/connections` from that event. Asserting the gap makes the next assertion
+      // evidence that the seam works rather than evidence that something, somewhere, wrote
+      // a row.
+      const seededConnections = await connectionCount();
+      expect(await connectionsBetween(alice.userId, cleo.userId)).toEqual([]);
+
+      await deliverEveryEventTo(introducedPairConsumer());
+
+      const connections = await connectionsBetween(alice.userId, cleo.userId);
+      expect(connections).toHaveLength(1);
+      // Exactly one row appeared, and it is that one: a consumer that also connected the
+      // via to somebody would satisfy the pair assertion above on its own.
+      expect(await connectionCount()).toBe(seededConnections + 1);
+      const [userAId, userBId] =
+        alice.userId < cleo.userId ? [alice.userId, cleo.userId] : [cleo.userId, alice.userId];
+      expect(connections[0]?.user_a_id).toBe(userAId);
+      expect(connections[0]?.user_b_id).toBe(userBId);
+      // ⚠ **An accepted invite's own semantics, taken from the columns' defaults rather
+      // than restated here** — `full` both ways, `accepted`. An intro-formed connection
+      // that disclosed less than an invite-formed one would be a second connection model
+      // nobody chose.
+      expect(connections[0]?.status).toBe('accepted');
+      expect(connections[0]?.a_discloses_to_b_level).toBe('full');
+      expect(connections[0]?.b_discloses_to_a_level).toBe('full');
+      // Dated by when the target accepted, never by when the event was delivered.
+      expect(connections[0]?.created_at.toISOString()).toBe(answered.respondedAt);
+
+      const connectionEvent = (await outboxRows()).find(
+        (event) => event.event_type === 'ConnectionAccepted',
+      );
+      // Correlated to the introduction rather than to an invite, because there was none.
+      expect(connectionEvent?.actor_id).toBe(cleo.userId);
+      expect(connectionEvent?.payload).toMatchObject({ introRequestId: created.id });
+      expect(Object.keys(connectionEvent?.payload ?? {})).not.toContain('invitationId');
+
+      // ⚠ The connection is real, not merely a row: the one authorized-people definition
+      // now answers with each of them on the other's graph at degree 1 (ADR-0002 §6).
+      const { rowCount } = await testDatabase.client.query(
+        `select 1 from app.visible_people($1) where user_id = $2 and degree = 1`,
+        [alice.userId, cleo.userId],
+      );
+      expect(rowCount).toBe(1);
+
+      // And the introduction leaves the inbox — an inbox is what is waiting on you, and
+      // nothing is. Answered looks exactly like never-asked here, as it does for a via.
+      expect(await callerCleo.intros.listInbox()).toEqual(await callerCass.intros.listInbox());
+      expect(await callerCass.intros.listInbox()).toEqual([]);
+    });
+  });
+
+  describe('Scenario: Declining a passed-on introduction connects nobody (@integration, #166, AC3)', () => {
+    it('records the decline distinguishably, and delivering every event connects nobody', async () => {
+      const { alice, bruno, cleo, dana } = await seedSymmetricWorld();
+      const { callerFor } = makeCallers();
+      const callerAlice = await callerFor(alice.authUserId);
+      const callerBruno = await callerFor(bruno.authUserId);
+      const callerCleo = await callerFor(cleo.authUserId);
+
+      const toCleo = await callerAlice.intros.request({
+        targetUserId: cleo.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      await callerBruno.intros.decide(passOn(toCleo.id));
+
+      // A second introduction nobody answers, so "declined" is measured against "left
+      // alone" rather than only against "accepted".
+      const toDana = await callerAlice.intros.request({
+        targetUserId: dana.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      await callerBruno.intros.decide(passOn(toDana.id));
+
+      const answered = await callerCleo.intros.respond({
+        introRequestId: toCleo.id,
+        response: 'decline',
+      });
+
+      // ⚠ `target_declined`, and not the via's `declined`. The two are different facts by
+      // different people, and the stored history has to be able to tell them apart — AC3.
+      expect(answered.status).toBe('target_declined');
+      expect(answered.respondedAt).toBeDefined();
+
+      const stored = await introRequestRows();
+      const declinedRow = stored.find((row) => row.id === toCleo.id);
+      const untouchedRow = stored.find((row) => row.id === toDana.id);
+      expect(declinedRow?.status).toBe('target_declined');
+      expect(untouchedRow?.status).toBe('passed_on');
+      expect(untouchedRow?.responded_at).toBeNull();
+
+      // The fact happened and the audit trail is entitled to it.
+      const events = await outboxRows();
+      expect(events.filter((event) => event.event_type === 'IntroTargetDeclined')).toHaveLength(1);
+      expect(events.filter((event) => event.event_type === 'IntroAccepted')).toHaveLength(0);
+
+      // ⚠ Every event is offered, including the decline and the two pass-ons. A consumer
+      // that had started acting on anything but `IntroAccepted` would connect people here.
+      const seededConnections = await connectionCount();
+      await deliverEveryEventTo(introducedPairConsumer());
+
+      expect(await connectionsBetween(alice.userId, cleo.userId)).toEqual([]);
+      // And the unanswered one connects nobody either — "declined" is measured against
+      // "left alone", so neither may be the thing that wrote a row.
+      expect(await connectionsBetween(alice.userId, dana.userId)).toEqual([]);
+      expect(await connectionCount()).toBe(seededConnections);
+      expect(
+        (await outboxRows()).filter((event) => event.event_type === 'ConnectionAccepted'),
+      ).toEqual([]);
+    });
+  });
+
+  describe('Scenario: Only the target may answer a passed-on introduction (@integration, #166, AC4)', () => {
+    it('refuses the requester, the via and a fourth party identically, changing nothing', async () => {
+      const { alice, bruno, cleo, dana } = await seedSymmetricWorld();
+      const { callerFor } = makeCallers();
+      const callerAlice = await callerFor(alice.authUserId);
+      const callerBruno = await callerFor(bruno.authUserId);
+
+      const created = await callerAlice.intros.request({
+        targetUserId: cleo.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      await callerBruno.intros.decide(passOn(created.id));
+
+      const refusals: ObservedRefusal[] = [];
+      for (const impostor of [alice, bruno, dana]) {
+        const caller = await callerFor(impostor.authUserId);
+        refusals.push(
+          await refusalOf(
+            async () =>
+              caller.intros.respond({ introRequestId: created.id, response: 'accept' }),
+            `${impostor.handle} answering somebody else's introduction`,
+          ),
+        );
+      }
+      // An introduction that never existed answers the same way, which is what stops
+      // `respond` being a probe for "is there an introduction with this id".
+      const callerCleo = await callerFor(cleo.authUserId);
+      refusals.push(
+        await refusalOf(
+          async () => callerCleo.intros.respond({ introRequestId: randomUUID(), response: 'accept' }),
+          'answering an introduction that does not exist',
+        ),
+      );
+
+      expect(new Set(refusals.map((refusal) => JSON.stringify(refusal))).size).toBe(1);
+      expect(refusals[0]?.code).toBe('NOT_FOUND');
+      expect(refusals[0]?.applicationCode).toBe('INTRO_UNAVAILABLE');
+
+      const stored = await introRequestRows();
+      expect(stored).toHaveLength(1);
+      expect(stored[0]?.status).toBe('passed_on');
+      expect(stored[0]?.responded_at).toBeNull();
+
+      // Refused **and nothing written**: no answer event, and therefore no connection even
+      // once every event is delivered.
+      const seededConnections = await connectionCount();
+      await deliverEveryEventTo(introducedPairConsumer());
+      expect(await connectionsBetween(alice.userId, cleo.userId)).toEqual([]);
+      expect(await connectionCount()).toBe(seededConnections);
+    });
+  });
+
+  describe('Scenario: An introduction is answered once, and only after it has been passed on (@integration, #166, AC5)', () => {
+    it('refuses a second answer in either direction without moving responded_at', async () => {
+      const { alice, bruno, cleo } = await seedSymmetricWorld();
+      const { callerFor } = makeCallers();
+      const callerAlice = await callerFor(alice.authUserId);
+      const callerBruno = await callerFor(bruno.authUserId);
+      const callerCleo = await callerFor(cleo.authUserId);
+
+      const created = await callerAlice.intros.request({
+        targetUserId: cleo.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      await callerBruno.intros.decide(passOn(created.id));
+      const answered = await callerCleo.intros.respond({
+        introRequestId: created.id,
+        response: 'accept',
+      });
+
+      for (const response of ['accept', 'decline'] as const) {
+        await expect(
+          callerCleo.intros.respond({ introRequestId: created.id, response }),
+        ).rejects.toMatchObject({
+          code: 'NOT_FOUND',
+          cause: expect.objectContaining({ code: 'INTRO_UNAVAILABLE' }),
+        });
+      }
+
+      const stored = await introRequestRows();
+      expect(stored[0]?.status).toBe('accepted');
+      expect(stored[0]?.responded_at?.toISOString()).toBe(answered.respondedAt);
+      // One request, one decision, one answer: the two refused attempts wrote nothing.
+      expect(await outboxRows()).toHaveLength(3);
+    });
+
+    it('leaves exactly one winner when two answers race', async () => {
+      const { alice, bruno, cleo } = await seedSymmetricWorld();
+      const { callerFor } = makeCallers();
+      const callerAlice = await callerFor(alice.authUserId);
+      const callerBruno = await callerFor(bruno.authUserId);
+      const callerCleo = await callerFor(cleo.authUserId);
+
+      const created = await callerAlice.intros.request({
+        targetUserId: cleo.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      await callerBruno.intros.decide(passOn(created.id));
+
+      // Opposite answers, in flight together. `where status = 'passed_on'` is the
+      // concurrency control: the loser blocks on the row, re-evaluates against the
+      // committed status, matches nothing, and is refused — so the two can never both
+      // write, and a connection can never be formed by a race the target did not win.
+      const outcomes = await Promise.allSettled([
+        callerCleo.intros.respond({ introRequestId: created.id, response: 'accept' }),
+        callerCleo.intros.respond({ introRequestId: created.id, response: 'decline' }),
+      ]);
+
+      expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
+      const rejected = outcomes.find((outcome) => outcome.status === 'rejected');
+      expect(rejected?.status === 'rejected' ? observe(rejected.reason).applicationCode : null).toBe(
+        'INTRO_UNAVAILABLE',
+      );
+      expect(await outboxRows()).toHaveLength(3);
+    });
+
+    it('refuses an answer to an open request and to one the via declined, identically', async () => {
+      const { alice, bruno, cleo, cass, dana } = await seedSymmetricWorld();
+      const { callerFor } = makeCallers();
+      const callerAlice = await callerFor(alice.authUserId);
+      const callerBruno = await callerFor(bruno.authUserId);
+
+      // Still open — nobody has passed it on, so the target has been told nothing.
+      const open = await callerAlice.intros.request({
+        targetUserId: cleo.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      // Declined by the via — the target must never learn it existed.
+      const viaDeclined = await callerAlice.intros.request({
+        targetUserId: cass.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      await callerBruno.intros.decide({ introRequestId: viaDeclined.id, decision: 'decline' });
+
+      const refusals: ObservedRefusal[] = [
+        await refusalOf(
+          async () =>
+            (await callerFor(cleo.authUserId)).intros.respond({
+              introRequestId: open.id,
+              response: 'accept',
+            }),
+          'answering an introduction that was never passed on',
+        ),
+        await refusalOf(
+          async () =>
+            (await callerFor(cass.authUserId)).intros.respond({
+              introRequestId: viaDeclined.id,
+              response: 'accept',
+            }),
+          'answering an introduction the via declined',
+        ),
+        // The control that makes the two above mean something: an id naming nothing.
+        await refusalOf(
+          async () =>
+            (await callerFor(dana.authUserId)).intros.respond({
+              introRequestId: randomUUID(),
+              response: 'accept',
+            }),
+          'answering an introduction that does not exist',
+        ),
+      ];
+
+      // ⚠ **One element, and the second refusal is why this matters most.** If "the via
+      // declined it" answered differently from "there is no such introduction", a target
+      // could detect a decline simply by trying to accept — which is precisely the
+      // indistinguishability that makes declining safe for the via (ADR-0002 §10, B17).
+      expect(new Set(refusals.map((refusal) => JSON.stringify(refusal))).size).toBe(1);
+      expect(refusals[0]?.applicationCode).toBe('INTRO_UNAVAILABLE');
+
+      const stored = await introRequestRows();
+      expect(stored.map((row) => row.status).sort()).toEqual(['declined', 'requested']);
+      expect(stored.every((row) => row.responded_at === null)).toBe(true);
+    });
+  });
+
+  describe('Scenario: A target’s answer is the target’s to disclose (@integration, #166, AC3)', () => {
+    it('reads a decline and an unanswered introduction identically on the requester’s record', async () => {
+      const { alice, bruno, cleo, dana } = await seedSymmetricWorld();
+      const { callerFor } = makeCallers();
+      const callerAlice = await callerFor(alice.authUserId);
+      const callerBruno = await callerFor(bruno.authUserId);
+      const callerCleo = await callerFor(cleo.authUserId);
+
+      const toCleo = await callerAlice.intros.request({
+        targetUserId: cleo.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      const toDana = await callerAlice.intros.request({
+        targetUserId: dana.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      await callerBruno.intros.decide(passOn(toCleo.id));
+      await callerBruno.intros.decide(passOn(toDana.id));
+
+      await callerCleo.intros.respond({ introRequestId: toCleo.id, response: 'decline' });
+
+      const outbox = await callerAlice.intros.listOutbox();
+
+      /**
+       * Everything but what two different introductions are *allowed* to differ in.
+       *
+       * `decidedAt` is set aside with the id, the person and the creation time because the
+       * two pass-ons were two separate writes at two separate moments — a difference about
+       * the *via*, which both rows are entitled to report. The comparison is still total
+       * over everything else, including any key one row grew and the other did not, which
+       * is where a leaked `respondedAt` or a `target_declined` status would land.
+       */
+      function comparable(row: (typeof outbox)[number] | undefined): unknown {
+        if (row === undefined) {
+          throw new Error('the requester’s record is missing a row it must carry');
+        }
+
+        const {
+          id: _id,
+          targetUserId: _targetUserId,
+          createdAt: _createdAt,
+          decidedAt: _decidedAt,
+          ...rest
+        } = row;
+
+        return rest;
+      }
+
+      const refused = outbox.find((row) => row.id === toCleo.id);
+
+      // The set-aside fields are set aside, not missing: both rows report when the via
+      // decided, so dropping `decidedAt` from the comparison hides no absence.
+      expect(outbox.every((row) => row.decidedAt !== undefined)).toBe(true);
+
+      // ⚠ **Byte-for-byte identical once the id and the person are set aside.** The same
+      // rule that keeps a via's decline invisible to the target, one person along:
+      // somebody who can be seen refusing cannot safely refuse. A status, a timestamp, or
+      // an extra key on one of these two rows is enough to tell them apart.
+      expect(comparable(refused)).toEqual(
+        comparable(outbox.find((row) => row.id === toDana.id)),
+      );
+      expect(refused?.status).toBe('passed_on');
+      expect(Object.keys(refused ?? {})).not.toContain('respondedAt');
+
+      // The control of the control: the read is not empty everywhere, and it still says
+      // the via passed both on.
+      expect(outbox).toHaveLength(2);
+      expect(outbox.every((row) => row.via?.userId === bruno.userId)).toBe(true);
+    });
+
+    it('reads an acceptance the same way — it discloses itself by connecting instead', async () => {
+      const { alice, bruno, cleo, dana } = await seedSymmetricWorld();
+      const { callerFor } = makeCallers();
+      const callerAlice = await callerFor(alice.authUserId);
+      const callerBruno = await callerFor(bruno.authUserId);
+      const callerCleo = await callerFor(cleo.authUserId);
+
+      const toCleo = await callerAlice.intros.request({
+        targetUserId: cleo.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      const toDana = await callerAlice.intros.request({
+        targetUserId: dana.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      await callerBruno.intros.decide(passOn(toCleo.id));
+      await callerBruno.intros.decide(passOn(toDana.id));
+
+      await callerCleo.intros.respond({ introRequestId: toCleo.id, response: 'accept' });
+      await deliverEveryEventTo(introducedPairConsumer());
+
+      // ⚠ The requester's own record says nothing about the answer even when the answer
+      // was yes — the read is uniform, so it cannot be read backwards to find the noes.
+      // What tells them is the connection, which is the target's own act.
+      const outbox = await callerAlice.intros.listOutbox();
+      expect(outbox.find((row) => row.id === toCleo.id)?.status).toBe('passed_on');
+      expect(JSON.stringify(outbox)).not.toContain('accepted');
+      expect(await connectionsBetween(alice.userId, cleo.userId)).toHaveLength(1);
+      // The one nobody answered stays unconnected, so the read above is uniform because
+      // the rule is uniform rather than because nothing happened.
+      expect(await connectionsBetween(alice.userId, dana.userId)).toEqual([]);
+    });
+  });
+
+  describe('Scenario: Connecting from an introduction happens once, however often delivered (@integration, #166, AC2)', () => {
+    it('writes one connection and one ConnectionAccepted across a redelivery', async () => {
+      const { alice, bruno, cleo } = await seedSymmetricWorld();
+      const { callerFor } = makeCallers();
+      const callerAlice = await callerFor(alice.authUserId);
+      const callerBruno = await callerFor(bruno.authUserId);
+      const callerCleo = await callerFor(cleo.authUserId);
+
+      const created = await callerAlice.intros.request({
+        targetUserId: cleo.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      await callerBruno.intros.decide(passOn(created.id));
+      await callerCleo.intros.respond({ introRequestId: created.id, response: 'accept' });
+
+      const consumer = introducedPairConsumer();
+      await deliverEveryEventTo(consumer);
+      // ⚠ At-least-once is the guarantee, so a second delivery is an ordinary event rather
+      // than an error. The receipt is what makes it a no-op — inserted first, so the
+      // unique violation abandons the transaction before the connection insert is even
+      // attempted.
+      await deliverEveryEventTo(consumer);
+
+      expect(await connectionsBetween(alice.userId, cleo.userId)).toHaveLength(1);
+      expect(
+        (await outboxRows()).filter((event) => event.event_type === 'ConnectionAccepted'),
+      ).toHaveLength(1);
+
+      const { rows: receipts } = await testDatabase.client.query<{ count: string }>(
+        `select count(*)::text as count from app.consumer_receipts
+          where consumer_name = 'ConnectIntroducedPairHandler'`,
+      );
+      expect(receipts[0]?.count).toBe('1');
+    });
+
+    it('adds no second row when the pair is already connected', async () => {
+      const { alice, bruno, cleo } = await seedSymmetricWorld();
+      const { callerFor } = makeCallers();
+      const callerAlice = await callerFor(alice.authUserId);
+      const callerBruno = await callerFor(bruno.authUserId);
+      const callerCleo = await callerFor(cleo.authUserId);
+
+      const created = await callerAlice.intros.request({
+        targetUserId: cleo.userId,
+        viaUserId: bruno.userId,
+        note: NOTE,
+      });
+      await callerBruno.intros.decide(passOn(created.id));
+      await callerCleo.intros.respond({ introRequestId: created.id, response: 'accept' });
+
+      const consumer = introducedPairConsumer();
+      await deliverEveryEventTo(consumer);
+
+      // A *different* event for the same pair — a distinct receipt, so the receipt gate
+      // cannot be what saves this. What does is the insert's `on conflict do nothing`, and
+      // the absence of a second `ConnectionAccepted` is the proof that no new fact was
+      // announced for something that had already happened.
+      const secondEventId = randomUUID();
+      await testDatabase.client.query(
+        `insert into app.outbox_events
+           (event_id, event_type, occurred_at, actor_id, aggregate_id, payload)
+         values ($1, 'IntroAccepted', now(), $2, $3, $4::jsonb)`,
+        [
+          secondEventId,
+          cleo.userId,
+          created.id,
+          JSON.stringify({
+            introRequestId: created.id,
+            requesterId: alice.userId,
+            viaId: bruno.userId,
+            targetId: cleo.userId,
+          }),
+        ],
+      );
+
+      await deliverEveryEventTo(consumer);
+
+      expect(await connectionsBetween(alice.userId, cleo.userId)).toHaveLength(1);
+      expect(
+        (await outboxRows()).filter((event) => event.event_type === 'ConnectionAccepted'),
+      ).toHaveLength(1);
+      // The receipt for the second delivery still lands: it *was* processed, and the
+      // outcome was "nothing to do".
+      const { rows: receipts } = await testDatabase.client.query<{ count: string }>(
+        `select count(*)::text as count from app.consumer_receipts
+          where consumer_name = 'ConnectIntroducedPairHandler'`,
+      );
+      expect(receipts[0]?.count).toBe('2');
     });
   });
 
