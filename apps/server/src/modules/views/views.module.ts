@@ -1,12 +1,14 @@
 import type { DatabaseConnection } from '@playa-post/database';
 
 import { createDeleteSavedViewService } from './application/delete-saved-view.service';
+import type { DeletedSavedViewsRepository } from './application/deleted-saved-views.repository';
 import { createListSavedViewsQuery } from './application/list-saved-views.query';
 import type { NotifyMeQueryDirectory } from './application/notify-me-query.directory';
 import { createRenameSavedViewService } from './application/rename-saved-view.service';
 import { createSaveViewService } from './application/save-view.service';
 import { createSetSavedViewNotifyService } from './application/set-saved-view-notify.service';
 import { createUpdateNotifyMeQueryService } from './application/update-notify-me-query.service';
+import { createPostgresDeletedSavedViewsRepository } from './persistence/postgres-deleted-saved-views.repository';
 import { createPostgresNotifyMeQueryRepository } from './persistence/postgres-notify-me-query.repository';
 import { createPostgresSavedViewRepository } from './persistence/postgres-saved-view.repository';
 import { createViewsRouter, type ViewsRouter } from './transport/views.router';
@@ -59,6 +61,15 @@ export interface ViewsModule {
    * repository means a consumer gets the projection and no way to reach a write.
    */
   readonly notifyMeQueries: NotifyMeQueryDirectory;
+  /**
+   * This module's half of the retention sweep (issue #169) — hard-deletes saved views
+   * whose soft delete is older than the configured window.
+   *
+   * Exposed unstarted and unscheduled, the way `AppContainer.outboxDrainer` is: *when*
+   * it runs is `entrypoints/purge/start-purge-poller.ts`'s job. A module that scheduled
+   * its own housekeeping would be a module that knows about the runtime (ADR-0009).
+   */
+  readonly deletedSavedViews: DeletedSavedViewsRepository;
 }
 
 /**
@@ -115,5 +126,12 @@ export function createViewsModule(dependencies: ViewsModuleDependencies): ViewsM
       setSavedViewNotify: createSetSavedViewNotifyService({ savedViews }),
     }),
     notifyMeQueries,
+    // A third repository over the same connection, and separate from `savedViews` on
+    // purpose: that object's every statement names an owner, and a retention sweep names
+    // none. Keeping them apart is also what lets composition hand the purge entrypoint a
+    // capability that cannot read or write anybody's views — see the port's own note.
+    deletedSavedViews: createPostgresDeletedSavedViewsRepository({
+      database: dependencies.database,
+    }),
   };
 }

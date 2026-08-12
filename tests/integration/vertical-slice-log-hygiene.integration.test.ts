@@ -66,6 +66,8 @@ describe('The captured logs from a full slice run contain no sensitive data (ver
       // which reads the locally generated key pair. The container still needs the value
       // to build its own, and building it opens no socket.
       supabaseUrl: 'http://127.0.0.1:1/unused-by-this-suite',
+      // Never swept: nothing here starts the purge poller, and no fixture is old enough.
+      purgeRetentionDays: 30,
       webPush: null,
     };
 

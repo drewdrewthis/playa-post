@@ -32,6 +32,7 @@ const configuration: Configuration = {
   logLevel: 'silent',
   databaseUrl: 'postgres://app_rw@127.0.0.1:1/nothing_listening_here',
   supabaseUrl: 'https://project-that-does-not-exist.supabase.co',
+  purgeRetentionDays: 30,
   webPush: null,
 };
 

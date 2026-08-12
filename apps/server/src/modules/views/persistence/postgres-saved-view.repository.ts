@@ -56,6 +56,15 @@ export interface PostgresSavedViewRepositoryDependencies {
  * redundant.** While there was one row per owner, scoping to the owner selected the same
  * single row whatever else was written; a person may now hold several, so a statement
  * missing its `source_view_id` would silently reach every bell they have lit.
+ *
+ * ⚠ **And every statement here that touches `app.saved_views` carries
+ * `deleted_at is null`** (issue #169). Deleting a view is a soft delete, so the row a
+ * person removed is still on the table and every one of these five statements would find
+ * it: the list would render it, the cap would count it, a rename would revive it under a
+ * new name, and `setNotify` would light a bell on a card nobody can see. This being the
+ * only file allowed to name the table is what makes that one predicate in five places
+ * rather than a rule spread across the codebase — and it is why there is no
+ * `deleted_at is null` anywhere else to forget.
  */
 export function createPostgresSavedViewRepository(
   dependencies: PostgresSavedViewRepositoryDependencies,
@@ -71,6 +80,7 @@ export function createPostgresSavedViewRepository(
           .selectFrom('app.saved_views')
           .selectAll()
           .where('owner_id', '=', ownerId)
+          .where('deleted_at', 'is', null)
           // Oldest first — the comp lists views in the order they were saved, and a
           // stable order is what stops a card moving under a thumb between renders.
           // `id` breaks a tie so two views saved in the same millisecond do not swap.
@@ -89,6 +99,11 @@ export function createPostgresSavedViewRepository(
           .selectFrom('app.saved_views')
           .select(({ fn }) => fn.countAll<string>().as('count'))
           .where('owner_id', '=', write.ownerId)
+          // The cap bounds the list somebody can see, so it counts the rows that are on
+          // it. Counting soft-deleted rows too would let a person exhaust their own cap
+          // by deleting views, and leave them at a refusal telling them to remove one —
+          // pointing at cards none of which would free a slot for up to thirty days.
+          .where('deleted_at', 'is', null)
           .executeTakeFirstOrThrow();
 
         if (Number(saved.count) >= SAVED_VIEW_LIMIT_PER_OWNER) {
@@ -130,13 +145,20 @@ export function createPostgresSavedViewRepository(
         .where('id', '=', write.viewId)
         .where('owner_id', '=', write.ownerId)
         .where('version', '=', write.expectedVersion)
+        // A deleted view is not renameable, and this predicate is what makes that a
+        // property of the statement rather than of whichever caller read the list first.
+        // Without it a client holding a stale list could rename a view out of its own
+        // deletion, and the row would come back to the Saved screen (#169).
+        .where('deleted_at', 'is', null)
         .returningAll()
         .executeTakeFirst();
 
       if (row === undefined) {
         // Deliberately incurious about which predicate failed. Re-reading to tell "wrong
         // version" from "not your view" would answer, for an actor who owns nothing,
-        // whether somebody else's view carries the version they guessed.
+        // whether somebody else's view carries the version they guessed. A view this
+        // owner deleted answers the same way, which is the honest reading of a rename
+        // aimed at something that is not there.
         throw new SavedViewConflictError();
       }
 
@@ -145,10 +167,18 @@ export function createPostgresSavedViewRepository(
 
     async delete(write: DeleteSavedView): Promise<boolean> {
       return database.transaction().execute(async (transaction) => {
-        // ⚠ First, and not optional: `notify_me_queries_source_view_fkey` refuses the
-        // delete below while a designation still points here. That refusal is the
-        // backstop — the reason this clear happens at all is that the bell which turned
-        // these notifications on is about to stop existing.
+        // ⚠ **The designation is still deleted outright, and only the view is softened**
+        // (issue #169). A soft delete is about being able to recover a person's own
+        // content and about giving a purge something finite to remove; a Notify Me query
+        // is neither — it is a live instruction to push notifications at somebody, and
+        // leaving one stamped `deleted_at` on a table nothing filters would keep sending
+        // them. The bell that switched them on lived on the card that is now gone, so
+        // there is no surface left to reach it from.
+        //
+        // The FK is no longer what forces this order — a soft-deleted view row still
+        // satisfies `notify_me_queries_source_view_fkey` — which is exactly why it is
+        // written here as the deliberate act it always was rather than left to a
+        // constraint that would now stay silent.
         //
         // `returning('id')` rather than a row count, because the event has to name the
         // query that went (D16) and the only honest source for that is the statement that
@@ -160,10 +190,18 @@ export function createPostgresSavedViewRepository(
           .returning('id')
           .executeTakeFirst();
 
+        // ⚠ **An UPDATE that reads exactly like the DELETE it replaced.** The `owner_id`
+        // predicate is still what makes M5-AC16 true, and `deleted_at is null` is what
+        // keeps the operation idempotent now that the row survives it: a second delete
+        // matches nothing and answers `false`, exactly as it did when the first one took
+        // the row away. Both cases — already deleted, never yours — remain one answer,
+        // which is the anti-oracle property `DeleteSavedViewService` documents.
         const removed = await transaction
-          .deleteFrom('app.saved_views')
+          .updateTable('app.saved_views')
+          .set({ deleted_at: write.deletedAt })
           .where('id', '=', write.viewId)
           .where('owner_id', '=', write.ownerId)
+          .where('deleted_at', 'is', null)
           .executeTakeFirst();
 
         if (cleared !== undefined) {
@@ -173,7 +211,7 @@ export function createPostgresSavedViewRepository(
           );
         }
 
-        return removed.numDeletedRows > 0n;
+        return removed.numUpdatedRows > 0n;
       });
     },
 
@@ -191,9 +229,16 @@ export function createPostgresSavedViewRepository(
           .select(['source_text', 'ast', 'ast_version'])
           .where('id', '=', write.viewId)
           .where('owner_id', '=', write.ownerId)
+          // A deleted view has no card, so it has no bell — in either direction. Without
+          // this predicate `notify: true` would designate a query nothing on screen could
+          // ever switch off again, and the FK would not object, because the row is still
+          // there (#169).
+          .where('deleted_at', 'is', null)
           .executeTakeFirst();
 
         if (view === undefined) {
+          // The same refusal a view id naming nothing gets, and now also the one a view
+          // this owner deleted gets. Three cases, one answer (M5-AC16).
           throw new SavedViewUnavailableError();
         }
 

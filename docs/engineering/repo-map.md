@@ -122,9 +122,20 @@ apps/server/     The modular monolith.
   composition/   The ONLY place that knows about the object graph, and the only place that reads
                  process.env (ADR-0003). config.ts · container.ts · request-scope.ts ·
                  supabase-jwks-url.ts; registrations.ts arrives with the first module.
-  entrypoints/   http/ · outbox-drainer/ · notification-flush/ (ADR-0006 — two in-process pollers,
-                 no separate queue or cron facility; ADR-0009 retired the Cloudflare dual-target this
-                 line used to describe). The ONLY place that knows about the runtime (ADR-0009).
+  entrypoints/   http/ · outbox-drainer/ · notification-flush/ · purge/ (ADR-0006 — three in-process
+                 pollers, no separate queue or cron facility; ADR-0009 retired the Cloudflare
+                 dual-target this line used to describe). The ONLY place that knows about the
+                 runtime (ADR-0009). purge/ is the soft-delete retention sweep (#169, decision D17,
+                 closing the gap #118 named): hourly, and it knows only "targets" — each module
+                 declares its own purge port and composition/container.ts's targets array is the one
+                 place that knows which tables carry a soft delete, exactly as its consumers array is
+                 for the drainer. Its SQL therefore lives in the owning modules'
+                 persistence/ (modules/views' postgres-deleted-saved-views.repository.ts,
+                 modules/bulletins' postgres-removed-bulletins.repository.ts), and a purged
+                 bulletin's reports and dismissals go by ON DELETE CASCADE rather than by a
+                 statement here reaching into modules/moderation's tables. Only the retention
+                 WINDOW is configurable (PURGE_RETENTION_DAYS, default 30); the cadence is a
+                 constant, because every setting of it would produce the same retention.
   modules/       identity · connections · graph · bulletins · notes · intros · views · notifications ·
                  moderation · sync · storage · audit. Each: transport/ application/ domain/ persistence/ tests/
                  plus a <name>.module.ts. (Addendum §4 — a module only grows the directories it needs:

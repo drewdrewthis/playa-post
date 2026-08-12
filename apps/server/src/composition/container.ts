@@ -7,6 +7,10 @@ import { createDatabaseConnection, type DatabaseConnection } from '@playa-post/d
 import { createLogger, DEFAULT_ALLOWED_LOG_FIELDS, type Logger } from '@playa-post/observability';
 
 import { createOutboxDrainer, type OutboxDrainer } from '../entrypoints/outbox-drainer/outbox-drainer';
+import {
+  createSoftDeletedRowPurge,
+  type SoftDeletedRowPurge,
+} from '../entrypoints/purge/purge-soft-deleted-rows';
 import { createAuditModule } from '../modules/audit/audit.module';
 import type { CreateBulletinService } from '../modules/bulletins/application/create-bulletin.service';
 import type { FindVisibleBulletinAuthor } from '../modules/bulletins/application/find-visible-bulletin-author.query';
@@ -266,6 +270,17 @@ export interface AppContainer {
    */
   readonly notificationFlush: SendGroupedPushHandler | null;
   /**
+   * `purgeOnce({ now })` hard-deletes every soft-deleted row older than
+   * `PURGE_RETENTION_DAYS` (issue #169). Exposed here, unstarted, for the same reason
+   * {@link outboxDrainer} is — *when* it runs is
+   * `entrypoints/purge/start-purge-poller.ts`'s job.
+   *
+   * Never `null`, unlike {@link notificationFlush}: there is no configuration in which a
+   * retention sweep has nothing it could do, and a deployment that quietly skipped it
+   * would keep every deleted row forever, which is the whole of what #169 fixes.
+   */
+  readonly softDeletePurge: SoftDeletedRowPurge;
+  /**
    * Release every long-lived resource. Idempotent is not promised — call it once,
    * from the entrypoint's shutdown path.
    */
@@ -454,6 +469,26 @@ export function buildAppContainer(
     // revisit if that changes later.
     drainerId: randomUUID(),
   });
+  // ⚠ **The one place that knows which tables carry a soft delete.** The sweep itself
+  // knows only "targets"; each module knows only its own rows; this line is where the two
+  // meet, exactly as `consumers` above is for the drainer. A third deletable entity
+  // arrives as a third entry here and changes nothing in `entrypoints/purge/`.
+  //
+  // `modules/notes` is deliberately absent: notes have no delete at all (decision D17,
+  // and D6's "no lifecycle" corollary that D14 kept), so there is no soft-deleted row for
+  // a target to sweep. A target over `app.notes` would be a statement that can only ever
+  // match zero rows — the empty abstraction §4 forbids, run hourly forever.
+  //
+  // The names are stable labels for the round's log line and are chosen here rather than
+  // inside the modules, because they describe what an operator is reading rather than
+  // what a module calls itself.
+  const softDeletePurge = createSoftDeletedRowPurge({
+    retentionDays: configuration.purgeRetentionDays,
+    targets: [
+      { name: 'removed bulletins', purge: (before) => bulletins.removedBulletins.purge(before) },
+      { name: 'deleted saved views', purge: (before) => views.deletedSavedViews.purge(before) },
+    ],
+  });
 
   return {
     configuration,
@@ -490,6 +525,7 @@ export function buildAppContainer(
     // The flush is always *built* — the module wires it either way, so nothing about it
     // rots while push is unconfigured. Only its schedulability is conditional.
     notificationFlush: isPushDeliveryConfigured(pushTransport) ? notifications.sendGroupedPush : null,
+    softDeletePurge,
     dispose: () => database.destroy(),
   };
 }

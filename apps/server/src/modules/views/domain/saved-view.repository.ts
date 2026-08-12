@@ -45,8 +45,11 @@ export interface DeleteSavedView {
   /**
    * When it happened — carried in, not read from the clock inside the transaction.
    *
-   * Deleting the designated Notify Me view emits a `NotifyMeQueryCleared`, and that
-   * event's `occurredAt` is the one thing a caller has to be able to pin in a test.
+   * ⚠ **Stored, since #169.** It was only ever the `occurredAt` of the
+   * `NotifyMeQueryCleared` a deletion emits; it is now also `app.saved_views.deleted_at`
+   * itself, which is what the purge measures its retention window from. Two facts from
+   * one reading, deliberately: a row whose stamp disagreed with its own event would be
+   * a row nobody could date.
    */
   readonly deletedAt: Date;
 }
@@ -115,10 +118,16 @@ export interface SavedViewRepository {
   /**
    * Remove one of the acting owner's own views.
    *
+   * ⚠ **A soft delete since #169**: the row is stamped `deleted_at` and vanishes from
+   * every read this port offers, and the purge hard-deletes it once it is older than the
+   * configured retention window. Nothing above this interface can tell the difference —
+   * "removed" is still total from every surface a person or a client has.
+   *
    * ⚠ **Clears this view's Notify Me query first, if it has one**, inside the same
    * transaction, and leaves the owner's other queries alone. Keeping it would push
    * notifications for a query whose only off-switch — the bell on this card — has just
-   * been deleted.
+   * been deleted. That clear stays a **hard** delete: a designation is a live instruction
+   * to notify somebody, not content of theirs to keep recoverable.
    *
    * Idempotent, and **the one operation here that does not raise
    * {@link import('./saved-view.errors').SavedViewUnavailableError} for an id that is not

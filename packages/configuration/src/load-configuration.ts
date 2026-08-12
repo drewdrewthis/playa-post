@@ -64,6 +64,7 @@ function toConfiguration(environment: ValidatedEnvironment): Configuration {
     logLevel: environment.LOG_LEVEL,
     databaseUrl: environment.DATABASE_URL,
     supabaseUrl: environment.SUPABASE_URL,
+    purgeRetentionDays: environment.PURGE_RETENTION_DAYS,
     webPush: toWebPushConfiguration(environment),
   };
 }

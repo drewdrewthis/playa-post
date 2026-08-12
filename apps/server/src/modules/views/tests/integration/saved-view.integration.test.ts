@@ -124,12 +124,38 @@ describe('saved views (issue #45, #172, M5-AC16, D16)', () => {
     return rows.map((row) => row.event_type);
   }
 
+  /**
+   * The views that are still there.
+   *
+   * ⚠ **`deleted_at is null`, since #169**, and it is what keeps the two assertions using
+   * this helper meaning what they were written to mean: a delete no longer removes a row,
+   * so a helper reading the whole table would report a *stamped* row as present and a
+   * leaked `owner_id` predicate would pass unnoticed.
+   */
   async function savedViewRows(): Promise<readonly { id: string; owner_id: string; name: string }[]> {
     const { rows } = await testDatabase.client.query<{
       id: string;
       owner_id: string;
       name: string;
-    }>(`select id, owner_id, name from app.saved_views order by created_at, id`);
+    }>(
+      `select id, owner_id, name from app.saved_views
+        where deleted_at is null order by created_at, id`,
+    );
+    return rows;
+  }
+
+  /** The rows a delete left behind, which is the whole of what a soft delete is (#169). */
+  async function deletedSavedViewRows(): Promise<
+    readonly { id: string; name: string; deleted_at: Date }[]
+  > {
+    const { rows } = await testDatabase.client.query<{
+      id: string;
+      name: string;
+      deleted_at: Date;
+    }>(
+      `select id, name, deleted_at from app.saved_views
+        where deleted_at is not null order by deleted_at, id`,
+    );
     return rows;
   }
 
@@ -261,13 +287,15 @@ describe('saved views (issue #45, #172, M5-AC16, D16)', () => {
       // ⚠ Pins `delete`'s `.where('id', ...)` predicate, and deliberately with **no bell
       // lit anywhere**. Every other delete assertion runs against an owner holding one
       // view, where dropping that predicate selects the identical row. Unscoped, this
-      // becomes "delete all my views" while `numDeletedRows > 0n` still reports success
-      // — silent, total, unrecoverable loss.
+      // becomes "delete all my views" while `numUpdatedRows > 0n` still reports success
+      // — silent, total, and recoverable only by a DBA within the retention window.
       //
-      // The no-bell shape is the point: with a designation lit on another view,
-      // `notify_me_queries_source_view_fkey` aborts the transaction and the predicate
-      // would look pinned when it is only being masked by the FK. Nothing catches it
-      // here but the assertion below.
+      // ⚠ The no-bell shape used to be the point, because a designation on another view
+      // made `notify_me_queries_source_view_fkey` abort the transaction and mask the
+      // missing predicate. **That masking is gone since #169** — a soft-deleted view row
+      // still satisfies the composite FK, so nothing aborts and nothing but the assertion
+      // below would notice. The shape is kept: it is now the plainest case rather than
+      // the only honest one.
       const owner = await seedOnboardedUser('dusty_views_delete_scope');
       const { save, remove, list } = services();
 
@@ -337,6 +365,184 @@ describe('saved views (issue #45, #172, M5-AC16, D16)', () => {
       await expect(
         save.save({ actorId: owner, name: 'One too many', sourceText: 'type:request' }),
       ).rejects.toBeInstanceOf(SavedViewLimitReachedError);
+    });
+  });
+
+  /**
+   * Deleting a saved view is a **soft** delete (issue #169, decision D17).
+   *
+   * The claim under test is two-sided and the second half is the one that can rot: the
+   * row survives so a purge has something finite to remove, **and nothing above the
+   * repository can tell**. Every assertion below is therefore either "the row is still
+   * there, stamped" — read with raw SQL, because no service will admit to it — or "the
+   * surface behaves exactly as it did when the row went away".
+   *
+   * The purge that eventually removes these rows is
+   * `tests/integration/soft-delete-purge.integration.test.ts`; it is not here because it
+   * spans two modules and is addressed by a clock rather than by an owner.
+   */
+  describe('Scenario: deleting a saved view soft-deletes it (#169, D17)', () => {
+    it('keeps the row, stamped with when it was deleted, and shows it to nobody', async () => {
+      const owner = await seedOnboardedUser('dusty_views_soft_delete');
+      const deletedAt = new Date('2026-08-12T09:30:00.000Z');
+      const savedViews = createPostgresSavedViewRepository({ database });
+      const save = createSaveViewService({ savedViews });
+      const remove = createDeleteSavedViewService({ savedViews, now: () => deletedAt });
+
+      const view = await save.save({ actorId: owner, name: 'Gone', sourceText: 'type:request' });
+
+      await expect(remove.delete({ actorId: owner, viewId: view.id })).resolves.toEqual({
+        viewId: view.id,
+        deleted: true,
+      });
+
+      // Absent from the one read the API offers…
+      expect((await createListSavedViewsQuery({ savedViews }).list({ viewerId: owner })).views).toEqual(
+        [],
+      );
+      // …and still on the table, carrying the instant the caller supplied. Pinned, because
+      // that stamp is what the retention window is measured from: a `now()` default here
+      // would date the row to whenever the statement ran rather than to when the person
+      // acted.
+      expect(await deletedSavedViewRows()).toEqual([
+        { id: view.id, name: 'Gone', deleted_at: deletedAt },
+      ]);
+    });
+
+    it('reports the second delete as a no-op without moving the original stamp', async () => {
+      // Idempotency survives the change of mechanism, and the stamp is the new thing it
+      // could get wrong: an UPDATE missing `deleted_at is null` would happily re-stamp,
+      // answer `deleted: true` a second time, and slide the row's purge date forward
+      // every time a client retried.
+      const owner = await seedOnboardedUser('dusty_views_soft_delete_twice');
+      const first = new Date('2026-08-12T09:30:00.000Z');
+      const second = new Date('2026-08-12T10:30:00.000Z');
+      const savedViews = createPostgresSavedViewRepository({ database });
+      const save = createSaveViewService({ savedViews });
+
+      const view = await save.save({ actorId: owner, name: 'Gone', sourceText: 'type:request' });
+
+      await createDeleteSavedViewService({ savedViews, now: () => first }).delete({
+        actorId: owner,
+        viewId: view.id,
+      });
+      await expect(
+        createDeleteSavedViewService({ savedViews, now: () => second }).delete({
+          actorId: owner,
+          viewId: view.id,
+        }),
+      ).resolves.toEqual({ viewId: view.id, deleted: false });
+
+      expect(await deletedSavedViewRows()).toEqual([
+        { id: view.id, name: 'Gone', deleted_at: first },
+      ]);
+    });
+
+    it('frees the name immediately — a kept row is not a kept claim on anything', async () => {
+      const owner = await seedOnboardedUser('dusty_views_soft_delete_name');
+      const { save, remove, list } = services();
+
+      const first = await save.save({ actorId: owner, name: 'Rides', sourceText: 'type:offer' });
+      await remove.delete({ actorId: owner, viewId: first.id });
+
+      const second = await save.save({ actorId: owner, name: 'Rides', sourceText: 'type:offer' });
+
+      expect(second.id).not.toBe(first.id);
+      expect((await list.list({ viewerId: owner })).views.map((each) => each.name)).toEqual(['Rides']);
+    });
+
+    it('frees the cap slot immediately, so deleting a view is not a way to lock yourself out', async () => {
+      // ⚠ The cap's count carries `deleted_at is null`, and this is what pins it. Without
+      // that predicate somebody who curated their Saved screen for a month would hit the
+      // limit holding a handful of live views, and be told to remove one — pointing at
+      // cards none of which could free a slot for up to thirty days.
+      const owner = await seedOnboardedUser('dusty_views_soft_delete_cap');
+      const { save, remove } = services();
+
+      const first = await save.save({ actorId: owner, name: 'View 0', sourceText: 'type:request' });
+      for (let index = 1; index < SAVED_VIEW_LIMIT_PER_OWNER; index += 1) {
+        // Sequential: the cap is counted per transaction, so firing these concurrently
+        // would be testing the race rather than the bound.
+        await save.save({
+          actorId: owner,
+          name: `View ${String(index)}`,
+          sourceText: 'type:request',
+        });
+      }
+
+      await expect(
+        save.save({ actorId: owner, name: 'One too many', sourceText: 'type:request' }),
+      ).rejects.toBeInstanceOf(SavedViewLimitReachedError);
+
+      await remove.delete({ actorId: owner, viewId: first.id });
+
+      await expect(
+        save.save({ actorId: owner, name: 'Now it fits', sourceText: 'type:request' }),
+      ).resolves.toMatchObject({ name: 'Now it fits' });
+    });
+
+    it('cannot be renamed back into existence by a client holding a stale list', async () => {
+      // A rename that matched a deleted row would put the card back on the Saved screen —
+      // a resurrection nobody asked for, from a request that looks like an edit.
+      const owner = await seedOnboardedUser('dusty_views_soft_delete_rename');
+      const { save, remove, rename, list } = services();
+
+      const view = await save.save({ actorId: owner, name: 'Old', sourceText: 'type:request' });
+      await remove.delete({ actorId: owner, viewId: view.id });
+
+      await expect(
+        rename.rename({
+          actorId: owner,
+          viewId: view.id,
+          name: 'New',
+          expectedVersion: view.version,
+        }),
+      ).rejects.toBeInstanceOf(SavedViewConflictError);
+
+      expect((await list.list({ viewerId: owner })).views).toEqual([]);
+      expect((await deletedSavedViewRows())[0]?.name).toBe('Old');
+    });
+
+    it('cannot have its bell lit, and answers exactly as an invented id does', async () => {
+      const owner = await seedOnboardedUser('dusty_views_soft_delete_notify');
+      const { save, remove, setNotify } = services();
+
+      const view = await save.save({ actorId: owner, name: 'Gone', sourceText: 'type:offer' });
+      await remove.delete({ actorId: owner, viewId: view.id });
+
+      await expect(
+        setNotify.set({ actorId: owner, viewId: view.id, notify: true }),
+      ).rejects.toBeInstanceOf(SavedViewUnavailableError);
+      // Same refusal for an id naming nothing at all — the deleted row is not a thing the
+      // caller can detect the existence of (M5-AC16).
+      await expect(
+        setNotify.set({ actorId: owner, viewId: randomUUID(), notify: true }),
+      ).rejects.toBeInstanceOf(SavedViewUnavailableError);
+
+      expect(await notifyMeRows()).toEqual([]);
+    });
+
+    it('takes its own bell away for good — the designation is deleted, never softened', async () => {
+      // ⚠ The one thing about a delete that is NOT soft, and deliberately: a Notify Me
+      // query is a live instruction to push at somebody, not content of theirs to keep
+      // recoverable. Stamped instead of deleted, it would sit on a table nothing filters
+      // and keep sending — with the only off-switch on a card that no longer exists.
+      const owner = await seedOnboardedUser('dusty_views_soft_delete_bell');
+      const { save, setNotify, remove } = services();
+
+      const view = await save.save({ actorId: owner, name: 'Rides', sourceText: 'type:offer' });
+      await setNotify.set({ actorId: owner, viewId: view.id, notify: true });
+
+      await expect(remove.delete({ actorId: owner, viewId: view.id })).resolves.toEqual({
+        viewId: view.id,
+        deleted: true,
+      });
+
+      expect(await notifyMeRows()).toEqual([]);
+      expect(await outboxEventTypes()).toEqual(['NotifyMeQueryChanged', 'NotifyMeQueryCleared']);
+      // The view row itself is still there — the two halves of the same transaction, kept
+      // apart on purpose.
+      expect((await deletedSavedViewRows()).map((each) => each.id)).toEqual([view.id]);
     });
   });
 
@@ -831,11 +1037,12 @@ describe('saved views (issue #45, #172, M5-AC16, D16)', () => {
         deleted: false,
       });
 
-      // `delete` clears the designation *before* removing the row, because the FK refuses
-      // the delete while a designation still points there. Scoped to the actor that clear
-      // matches nothing here; unscoped it matches on `source_view_id` alone — so C, who
-      // cannot delete the view and does not, silently switches A's notifications off and
-      // lands a `NotifyMeQueryCleared` attributed to C.
+      // `delete` clears the designation outright before stamping the row — a deliberate
+      // act since #169 rather than something the FK forces, because a soft-deleted view
+      // would satisfy that constraint. Scoped to the actor, the clear matches nothing
+      // here; unscoped it matches on `source_view_id` alone — so C, who cannot delete the
+      // view and does not, silently switches A's notifications off and lands a
+      // `NotifyMeQueryCleared` attributed to C.
       expect(await notifyMeRows()).toEqual([
         {
           owner_id: ownerA,

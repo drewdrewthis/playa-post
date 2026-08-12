@@ -44,6 +44,8 @@ describe('buildAppContainer outbox consumer registration', () => {
       // Never fetched: nothing here authenticates a request, and building the verifier
       // opens no socket.
       supabaseUrl: 'http://127.0.0.1:1/unused-by-this-suite',
+      // Never swept: nothing here starts the purge poller, and no fixture is old enough.
+      purgeRetentionDays: 30,
       // Unconfigured on purpose. This suite's subject is *which consumers are
       // registered*, and `null` composes the no-op push transport, so draining a real
       // row cannot reach for a network this suite has not got. Which transport the
