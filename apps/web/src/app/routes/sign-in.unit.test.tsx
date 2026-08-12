@@ -65,6 +65,50 @@ async function mountCodeForm(): Promise<MountedTree> {
   return tree;
 }
 
+async function mountSignedOut(): Promise<MountedTree> {
+  tree = await mountWithApi(
+    <SessionProvider authClient={createAnonymousAuthClient()}>
+      <SignInRoute />
+    </SessionProvider>,
+    createFakeApi({}),
+  );
+
+  return tree;
+}
+
+/**
+ * Pins the PWA install hint (#203): the sign-in screen must tell a new user that the
+ * app installs to a home screen and how, on every platform. iOS Safari has no install
+ * prompt API, so these static instructions are the only universal path — losing them
+ * in a refactor would silently strand exactly the users the PWA build exists for.
+ */
+describe('SignInRoute install hint', () => {
+  it('offers the install disclosure, collapsed so the form stays first', async () => {
+    const mounted = await mountSignedOut();
+
+    const hint = requireElement<HTMLDetailsElement>(
+      mounted.container,
+      '[data-testid="pwa-install-hint"]',
+    );
+
+    expect(hint.open).toBe(false);
+    expect(hint.textContent).toContain('Add The Playa Post to your home screen');
+  });
+
+  it('covers all three install paths: iOS Safari, Android Chrome, desktop', async () => {
+    const mounted = await mountSignedOut();
+
+    const hint = requireElement<HTMLDetailsElement>(
+      mounted.container,
+      '[data-testid="pwa-install-hint"]',
+    );
+
+    expect(hint.textContent).toContain('Add to Home Screen');
+    expect(hint.textContent).toContain('Install app');
+    expect(hint.textContent).toContain('address bar');
+  });
+});
+
 describe('SignInRoute code entry', () => {
   it('accepts codes six to eight digits wide, never capping below what prod sends', async () => {
     const mounted = await mountCodeForm();
