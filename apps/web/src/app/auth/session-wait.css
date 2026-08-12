@@ -3,9 +3,20 @@
    fast spinner ticking through that long a wait reads as stuck harder than
    still text would. */
 
+/* Everything on the wait screen sits dead centre — `.screen--centred` only centres
+   the stack vertically; the cross axis and the text need it too. */
+.session-wait__screen {
+  align-items: center;
+  text-align: center;
+}
+
+/* A third of the screen: a third of the column on phones (where the column is the
+   viewport), capped by height so landscape or a short window never lets the mark
+   crowd out its own caption. */
 .session-wait__mark {
-  width: 96px;
-  height: 96px;
+  width: min(33%, 33vh);
+  height: auto;
+  aspect-ratio: 1;
   border-radius: 50%;
   margin-bottom: 16px;
   animation:

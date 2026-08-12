@@ -24,14 +24,14 @@ export function SessionWait({
   return (
     <div className="app-frame">
       <main className="app-column">
-        <div className="screen screen--fill screen--centred">
+        <div className="screen screen--fill screen--centred session-wait__screen">
           <img
             className="session-wait__mark"
             src="/pwa-192x192.png"
             alt=""
             aria-hidden="true"
-            width={96}
-            height={96}
+            width={192}
+            height={192}
             data-testid="session-wait-mark"
           />
           <p className="screen__notice" role="status">
