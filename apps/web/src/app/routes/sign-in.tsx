@@ -4,6 +4,8 @@ import { Navigate } from 'react-router';
 import { useSession } from '../auth/session-provider';
 import { describeSignInFailure } from '../auth/sign-in-failure';
 
+import './sign-in.css';
+
 /**
  * Sign-in: an email address, then either a magic link or the one-time code the same
  * email carries — still no password to store, no second factor to build, ADR-0008's
@@ -159,6 +161,35 @@ export function SignInRoute(): JSX.Element {
               {failure}
             </p>
           )}
+
+          {/* Static instructions, not an install button: iOS Safari has no
+              `beforeinstallprompt`, so a prompt-driven button would be invisible on
+              exactly the platform that most needs telling where the install lives
+              (#203). Collapsed by default so the front door stays about signing in. */}
+          <details className="install-hint" data-testid="pwa-install-hint">
+            <summary className="install-hint__summary">
+              Add The Playa Post to your home screen
+            </summary>
+            <ul className="install-hint__steps">
+              <li>
+                <strong>iPhone or iPad</strong> — open this page in Safari, tap the Share
+                button, then choose &ldquo;Add to Home Screen&rdquo;.
+              </li>
+              <li>
+                <strong>Android</strong> — open this page in Chrome, tap the &#8942; menu,
+                then choose &ldquo;Install app&rdquo; (on some phones, &ldquo;Add to Home
+                screen&rdquo;).
+              </li>
+              <li>
+                <strong>Computer</strong> — in Chrome or Edge, click the install icon at
+                the right end of the address bar.
+              </li>
+            </ul>
+            <p className="install-hint__aside">
+              Installed, The Playa Post opens full-screen from its own icon and keeps you
+              signed in.
+            </p>
+          </details>
         </div>
       </main>
     </div>
