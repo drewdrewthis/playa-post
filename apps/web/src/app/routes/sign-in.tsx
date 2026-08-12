@@ -72,7 +72,7 @@ export function SignInRoute(): JSX.Element {
               <p className="screen__notice" data-testid="sign-in-link-sent">
                 Check your email for a sign-in link.
               </p>
-              <p className="screen__lede">Or enter the 6-digit code from the same email.</p>
+              <p className="screen__lede">Or enter the code from the same email.</p>
               <form
                 className="form"
                 onSubmit={(event) => {
@@ -80,14 +80,19 @@ export function SignInRoute(): JSX.Element {
                 }}
               >
                 <label className="form__field">
-                  <span className="form__label">6-digit code</span>
+                  <span className="form__label">Sign-in code</span>
+                  {/* 6–8, not exactly 6: the code's length is the auth provider's
+                      setting, not this form's — production issues 8 digits
+                      (`mailer_otp_length: 8`) while the local stack defaults to 6, and
+                      a `maxLength` shorter than the emailed code silently truncates it
+                      so no correct entry can ever reach the server (#199). */}
                   <input
                     className="form__input"
                     type="text"
                     inputMode="numeric"
                     autoComplete="one-time-code"
-                    pattern="[0-9]{6}"
-                    maxLength={6}
+                    pattern="[0-9]{6,8}"
+                    maxLength={8}
                     required
                     value={code}
                     onChange={(event) => setCode(event.target.value)}

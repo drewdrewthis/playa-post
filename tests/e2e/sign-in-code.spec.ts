@@ -3,7 +3,9 @@ import { expect, test, type Page } from '@playwright/test';
 /**
  * The one-time code alternative to the magic link (issue #179): a magic link opens the
  * system browser, which never hands a session back to an installed PWA, so the same
- * sign-in email also carries a six-digit code the screen itself can verify.
+ * sign-in email also carries a one-time code the screen itself can verify. Production
+ * issues 8-digit codes (`mailer_otp_length: 8`) while the local stack defaults to 6,
+ * so the success case types 8 digits — the length the form once truncated (#199).
  *
  * Wire-level interception, like the rate-limited case in `report-abuse-sheet.spec.ts`:
  * `VITE_SUPABASE_URL` points at an unreachable address (`playwright.config.ts`), so
@@ -98,7 +100,10 @@ test.describe('signing in with the emailed code', () => {
 
     await requestCode(page);
 
-    await page.getByTestId('sign-in-code-input').fill('123456');
+    // 8 digits, and all 8 must survive the input: `maxLength={6}` used to truncate
+    // production's 8-digit codes to a 6-digit prefix the server could only refuse.
+    await page.getByTestId('sign-in-code-input').fill('12345678');
+    await expect(page.getByTestId('sign-in-code-input')).toHaveValue('12345678');
     await capture(page, 'sign-in-code-entry');
     await page.getByTestId('sign-in-code-submit-button').click();
 
