@@ -23,8 +23,8 @@ export interface SaveNotifyMeQuery {
   /**
    * The version the caller believes is stored, or absent for a first save.
    *
-   * ADR-0005:98 — mismatch is a conflict. Absent means "I believe there is no query
-   * yet"; a row already existing is itself the mismatch.
+   * ADR-0005:98 — mismatch is a conflict. Absent means "I believe I have no untied query
+   * yet"; one already existing is itself the mismatch.
    */
   readonly expectedVersion?: number | undefined;
 }
@@ -33,19 +33,40 @@ export interface SaveNotifyMeQuery {
  * The Notify Me query port.
  *
  * Declared here in `domain/` and implemented in `persistence/` (addendum §2).
+ *
+ * ⚠ **Everything behind this port addresses the actor's *untied* query — the one row of
+ * theirs whose `source_view_id` is `NULL` — and after D16 that is a real narrowing rather
+ * than a description of the only row there was.** A person may now hold several queries,
+ * one per view whose bell they lit plus this one; the per-view rows are
+ * `views.saved.setNotify`'s and are reached through
+ * {@link import('./saved-view.repository').SavedViewRepository}. `views.notifyMe.update`
+ * still names no row and needs to name none, because "your query that belongs to no view"
+ * is addressable from the actor alone.
  */
 export interface NotifyMeQueryRepository {
   /**
-   * Write the actor's own query and its `NotifyMeQueryChanged` event, **atomically**.
+   * Write the actor's own untied query and its `NotifyMeQueryChanged` event, **atomically**.
    *
    * One transaction covering both writes, because a saved query nobody was told about
    * and an announcement about a query that was not saved are both worse than neither
    * (addendum §10, ADR-0006).
    *
+   * ⚠ **It leaves the actor's designated queries alone**, and that is D16 changing what
+   * this call means. Under D1 there was one query per person, so writing one here
+   * necessarily took it away from whichever view it had been designated from; a person now
+   * has an untied query *and* their lit bells, independently, so this write touches
+   * neither the bells nor the rows behind them.
+   *
+   * ⚠ **Uncapped, and that is not an oversight.**
+   * {@link import('./notify-me-query').NOTIFY_ME_QUERY_LIMIT_PER_OWNER} bounds the bells,
+   * which a person adds one per saved view; this row is held at one per person by the
+   * unique key, so there is nothing for a count to bound. Somebody with every bell lit can
+   * still save the query they came here for.
+   *
    * @throws {import('./notify-me-query.errors').NotifyMeQueryConflictError} when
-   *   `expectedVersion` does not match what is stored for this owner — including the
-   *   case where nothing is stored at all, which is how an actor supplying somebody
-   *   else's version is refused without reading that somebody's row.
+   *   `expectedVersion` does not match the actor's stored untied query — including the
+   *   case where they have none, which is how an actor supplying somebody else's version
+   *   is refused without reading that somebody's row.
    */
   save(write: SaveNotifyMeQuery): Promise<NotifyMeQuery>;
 }

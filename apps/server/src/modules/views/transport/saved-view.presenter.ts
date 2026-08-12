@@ -27,18 +27,19 @@ export interface PresentedSavedView {
   readonly updatedAt: string;
 }
 
-/** `views.saved.list`'s answer: the views, and which one the bell is lit on. */
+/** `views.saved.list`'s answer: the views, and which of them have a bell lit. */
 export interface PresentedSavedViewListing {
   readonly views: readonly PresentedSavedView[];
   /**
-   * The {@link PresentedSavedView.id} the caller's Notify Me query was designated from,
-   * or `null` when no card's bell is lit.
+   * Every {@link PresentedSavedView.id} one of the caller's Notify Me queries was
+   * designated from. Empty when no card's bell is lit.
    *
-   * Served here rather than as a `notify` flag per view because there is exactly one
-   * (D1) — a per-view boolean would let a client render two lit bells, which is a state
-   * the database cannot hold and the UI should therefore be unable to draw.
+   * ⚠ Still served here rather than as a `notify` flag per view, even though D16 now
+   * allows several: a boolean on the view row would be a second answer to a question
+   * `app.notify_me_queries` already answers, and the two would disagree the first time
+   * either was written without the other. That argument never rested on the count.
    */
-  readonly notifyingViewId: string | null;
+  readonly notifyingViewIds: readonly string[];
 }
 
 /** Project one saved view onto the wire. */
@@ -57,6 +58,6 @@ export function presentSavedView(view: SavedView): PresentedSavedView {
 export function presentSavedViewListing(listing: SavedViewListing): PresentedSavedViewListing {
   return {
     views: listing.views.map(presentSavedView),
-    notifyingViewId: listing.notifyingViewId,
+    notifyingViewIds: listing.notifyingViewIds,
   };
 }

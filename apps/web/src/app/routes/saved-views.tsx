@@ -10,6 +10,7 @@ import {
   matchNowLabel,
   MATCH_COUNT_UNAVAILABLE_LABEL,
   notifyToast,
+  setNotifyFailureMessage,
 } from '../views/saved-view-list';
 
 import '../views/saved-views.css';
@@ -27,11 +28,16 @@ import '../views/saved-views.css';
  * Those reads go out together and `httpBatchLink` folds them into one HTTP request, so a
  * list of views costs one round trip rather than one each.
  *
- * ⚠ **The bell is one designation, not a flag per card.** Product decision D1: there is
- * exactly one Notify Me query per user, and lighting the bell on view B moves it off view
- * A. `notifyingViewId` is therefore server state this screen renders rather than a local
- * toggle it tracks — the server's answer to `setNotify` names where the bell ended up, so
- * a race cannot leave two cards looking lit.
+ * ⚠ **The bells are independent, and any number of them may be lit** (decision D16, issue
+ * #172, which supersedes D1's one-query rule). `notifyingViewIds` is still server state
+ * this screen renders rather than a local set it tracks: the answer to `setNotify` is the
+ * whole set the server now holds, not the card that was tapped, so another device's change
+ * lands here on the next answer instead of being overwritten by what this tab believed.
+ *
+ * ⚠ **Switching a bell on can be refused**, which D1 made impossible — there is a cap on
+ * how many notifications one person may have running, because the server reads every one
+ * of them against every new bulletin. That refusal is reported in the words the server
+ * chose (`setNotifyFailureMessage`), never as a connectivity problem.
  *
  * There is deliberately **no rename control**: the comp draws none, and tapping a card's
  * name opens it on the board. `views.saved.rename` exists behind the API for the client
@@ -56,7 +62,10 @@ export function SavedViewsRoute(): JSX.Element {
   });
 
   const views = saved.data?.views ?? [];
-  const notifyingViewId = saved.data?.notifyingViewId ?? null;
+  // A `Set` rather than the array itself so the card's question reads as what it is —
+  // `notifyingViewIds.has(view.id)`, membership. At six elements the cost is not the
+  // argument; `.includes` would be just as fast and says less.
+  const notifyingViewIds = new Set(saved.data?.notifyingViewIds ?? []);
 
   const counts = useQueries({
     queries: views.map((view) => ({
@@ -77,10 +86,10 @@ export function SavedViewsRoute(): JSX.Element {
     mutationFn: (input: { viewId: string; notify: boolean; name: string }) =>
       api.mutate('views.saved.setNotify', { viewId: input.viewId, notify: input.notify }),
     onSuccess: async (result, input) => {
-      // Reported from the server's answer rather than from what was requested: the bell
-      // may have ended up somewhere else entirely if another device moved it first.
+      // Reported from the server's answer rather than from what was requested: this tap
+      // may have raced another device switching the same bell the other way.
       setStatus({
-        message: notifyToast(result.notifyingViewId === input.viewId, input.name),
+        message: notifyToast(result.notifyingViewIds.includes(input.viewId), input.name),
         failed: false,
       });
       await refresh();
@@ -88,11 +97,8 @@ export function SavedViewsRoute(): JSX.Element {
     // ⚠ `retry: false` is the app-wide default, so this is the only attempt. Without it
     // a failed tap re-renders as the state it was already in, which reads as "the tap
     // did not register" — and the next tap is the same request failing the same way.
-    onError: (_error, input) => {
-      setStatus({
-        message: `Notifications for ${input.name} could not be changed. Check your connection and try again.`,
-        failed: true,
-      });
+    onError: (error, input) => {
+      setStatus({ message: setNotifyFailureMessage(error, input.name), failed: true });
     },
   });
 
@@ -156,7 +162,7 @@ export function SavedViewsRoute(): JSX.Element {
       ) : (
         <ul className="saved-view-list">
           {views.map((view, index) => {
-            const notifying = view.id === notifyingViewId;
+            const notifying = notifyingViewIds.has(view.id);
             const countQuery = counts[index];
             const count = countQuery?.data ?? null;
             const countLabel = matchNowLabel(typeof count === 'number' ? count : null);

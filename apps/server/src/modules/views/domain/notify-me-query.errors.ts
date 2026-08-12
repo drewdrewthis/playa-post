@@ -1,5 +1,7 @@
 import { ApplicationError } from '../../../shared/errors/application-error';
 
+import { NOTIFY_ME_QUERY_LIMIT_PER_OWNER } from './notify-me-query';
+
 /**
  * The saved query you were editing is not the one that is stored.
  *
@@ -25,5 +27,37 @@ export class NotifyMeQueryConflictError extends ApplicationError {
       'Your saved Notify Me query has changed since you loaded it.',
     );
     this.name = 'NotifyMeQueryConflictError';
+  }
+}
+
+/**
+ * You already have bells lit on as many saved views as this product evaluates.
+ *
+ * ⚠ **It names the bound and the remedy, and echoes nothing.** The same rule
+ * {@link import('./saved-view.errors').SavedViewLimitReachedError} follows: a message
+ * carrying the query text somebody typed is one log line away from being a leak, and a
+ * refusal that does not say what to do instead gets retried until it is reported as a bug.
+ *
+ * ⚠ **It says "saved views" rather than "saved queries", and the difference is the
+ * remedy's honesty.** The cap counts the *designated* queries — the bells on cards — and
+ * not the untied query `views.notifyMe.update` writes, which the unique key already holds
+ * at one per person. If the untied row counted, this message would tell somebody to switch
+ * a bell off when the slot was being held by something no card can free.
+ *
+ * Raised only by `views.saved.setNotify`, and only for a bell that is not already lit:
+ * re-lighting one is an upsert onto a row the owner already holds and grows no count.
+ * `views.notifyMe.update` cannot reach it at all.
+ *
+ * See {@link NOTIFY_ME_QUERY_LIMIT_PER_OWNER} for why the number is what it is.
+ */
+export class NotifyMeQueryLimitReachedError extends ApplicationError {
+  static readonly code = 'NOTIFY_ME_QUERY_LIMIT_REACHED';
+
+  constructor() {
+    super(
+      NotifyMeQueryLimitReachedError.code,
+      `You can have notifications on for up to ${String(NOTIFY_ME_QUERY_LIMIT_PER_OWNER)} saved views. Switch one off to add another.`,
+    );
+    this.name = 'NotifyMeQueryLimitReachedError';
   }
 }

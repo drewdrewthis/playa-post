@@ -20,6 +20,12 @@ reinstates them as a separate module — so a brief that reads only D1–D3 will
 should not exist. What D2 still governs is the *shape*: `bulletins.create` refuses the value `note`, which
 is PDF §6's constraint and is untouched by D6.
 
+⚠ **The same trap now exists on D1.** D1 fixed Notify Me at one saved query per person;
+**D16 supersedes that count for [#172](https://github.com/drewdrewthis/playa-post/issues/172)** — several
+bells may be lit at once, capped per person — so a brief that reads only D1 will build a designation that
+moves. What D1 still governs is again the *shape*: the bell designates a saved view, `app.saved_views`
+carries no notify flag, and `app.notify_me_queries` is the one answer to "who gets notified".
+
 ## Rule for implementation briefs
 
 **Every implementation brief for M2 work must cite the scenario name(s) it makes pass**, not just the
@@ -63,7 +69,7 @@ per-module for independent module-level suites — this is deliberate duplicatio
 | `graph-visibility.feature` | First-degree graph rendering + disclosure | 1 e2e, 2 integration |
 | `bulletin-request-lifecycle.feature` | Request create/archive, atomicity | 1 e2e, 5 integration |
 | `board-visibility-query.feature` | Board listing + restricted grammar | 2 e2e, 2 integration, 4 unit |
-| `notify-me.feature` | Single Notify Me query, grouped push, outbox | 2 e2e, 8 integration |
+| `notify-me.feature` | Notify Me on any number of saved views, grouped push, outbox (#172, D16) | 2 e2e, 12 integration, 1 unit |
 | `moderation-report-dismiss.feature` | Private report + viewer-local dismissal; the Dismissed category and un-dismissal (#170) | 2 e2e, 15 integration |
 | `offline-replay.feature` | Mutation envelope replay, actorship precedence | 1 e2e, 2 integration |
 | `vertical-slice-e2e.feature` | Composite M2-AC1 proof + log hygiene | 1 e2e, 1 integration |
@@ -71,10 +77,10 @@ per-module for independent module-level suites — this is deliberate duplicatio
 | `pin-a-note.feature` | Private person-to-person notes, degree-1 gated (#88, D6); the expanded view and answering one (#176, D14) | 1 e2e, 16 integration, 9 unit |
 | `request-an-intro.feature` | One-hop introductions: eligibility, the pass-on, and the target's answer (#89, #166, #175, D11, D12) | 25 integration, 4 unit |
 | `edit-display-name.feature` | Editing your own display name; the handle stays immutable (#177, D15) | 1 e2e, 11 integration, 6 unit |
-| **Total** | | **15 e2e, 109 integration, 29 unit — 150 scenarios** |
+| **Total** | | **15 e2e, 113 integration, 30 unit — 155 scenarios** |
 
-The three numbers sum to 153, not 150, and the gap is not an arithmetic slip: three scenarios in
-`request-an-intro.feature` (lines 172, 182, 259) carry `@unit @integration` together, so each is
+The three numbers sum to 158, not 155, and the gap is not an arithmetic slip: three scenarios in
+`request-an-intro.feature` (lines 170, 180, 257) carry `@unit @integration` together, so each is
 counted at both levels and once in the total. They are the standing exception to the one-tag rule
 above, and they are counted here rather than quietly rounded away — a total that disagrees with its
 own columns invites exactly the drift the last recount found.

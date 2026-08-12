@@ -66,10 +66,15 @@ import { createPostgresSavedViewRepository } from '../../apps/server/src/modules
  * `modules/views/tests/integration/saved-view.integration.test.ts`'s identical scenario.
  *
  * `notifyMe.update` has the same "fail-closed by construction" shape for a different
- * reason: `app.notify_me_queries` is keyed on `owner_id` alone (D1, ADR-0007:79), so
- * there is no query-identifying field an unrelated actor could name — B14 forbids a
- * client-suppliable `ownerId`, and `UpdateNotifyMeQueryCommand` takes `actorId` from
- * the resolved `Actor` only. `update-notify-me-query.service.ts`'s own doc comment
+ * reason: **the procedure carries no query-identifying field at all**, so there is
+ * nothing for an unrelated actor to name — B14 forbids a client-suppliable `ownerId`,
+ * and `UpdateNotifyMeQueryCommand` takes `actorId` from the resolved `Actor` only. What
+ * makes that addressable was the primary key on `owner_id` (D1, ADR-0007:79) until
+ * **decision D16 reopened D1** (#172); the procedure now writes the actor's row whose
+ * `source_view_id` is `NULL`, held to one per person by
+ * `UNIQUE NULLS NOT DISTINCT (owner_id, source_view_id)`. The property this block
+ * exercises is unaffected — an unrelated actor still cannot name a row, whichever
+ * constraint is doing the addressing. `update-notify-me-query.service.ts`'s own doc comment
  * states the resulting property: an actor supplying somebody else's
  * `expectedVersion` mismatches their **own** absent row and is refused before a
  * column of anybody else's row is read (`NotifyMeQueryConflictError`, which carries

@@ -48,11 +48,13 @@ export interface SavedView {
 /**
  * `views.saved.list` output.
  *
- * ⚠ **The bell is one id, not a flag per view.** Product decision D1: there is exactly
- * one Notify Me query per user, and the per-view bell designates which view's query that
- * is — so a `notify: boolean` on {@link SavedView} would let a client draw two lit bells,
- * a state the database cannot hold. `null` means no card's bell is lit, which covers both
- * "no Notify Me query" and "one saved directly through `views.notifyMe.update`".
+ * ⚠ **The lit bells are a set of ids, not a flag per view.** Decision D16 (which
+ * supersedes D1's single-query rule) lets a person notify on several views at once, and
+ * this is still not a `notify: boolean` on {@link SavedView}: whether a view is notifying
+ * is a fact about `app.notify_me_queries`, and a boolean on the view would be a second
+ * answer to the same question that could disagree with the first. An empty array means no
+ * card's bell is lit — which still covers a query saved directly through
+ * `views.notifyMe.update`, because that one belongs to no view and appears on no card.
  *
  * ⚠ **No match counts.** The "N match now" line on a card is `bulletins.board({ query })`
  * called per view, so the number is provably the one the board shows when the same card
@@ -60,7 +62,7 @@ export interface SavedView {
  */
 export interface SavedViewListing {
   readonly views: readonly SavedView[];
-  readonly notifyingViewId: string | null;
+  readonly notifyingViewIds: readonly string[];
 }
 
 /** `views.saved.save` input — the board query you are looking at, under a name. */
@@ -116,11 +118,14 @@ export interface SetSavedViewNotifyRequest {
 }
 
 /**
- * `views.saved.setNotify` output — the view the one bell is now lit on, or `null`.
+ * `views.saved.setNotify` output — every view the caller's bells are now lit on.
  *
- * Setting it on one view clears it on whichever view had it (D1), so the answer names
- * the result rather than leaving a client to infer it from the request it just sent.
+ * ⚠ **The whole set, not the view that was just toggled.** Under D16 a toggle changes one
+ * membership in a set the client renders as a screenful of bells, and a client that was
+ * told only about its own request would have to reconstruct the rest from what it
+ * believed a moment ago — which is wrong the instant another device changed one. The same
+ * answer `views.saved.list` gives, so the two surfaces cannot disagree.
  */
 export interface NotifyMeDesignation {
-  readonly notifyingViewId: string | null;
+  readonly notifyingViewIds: readonly string[];
 }

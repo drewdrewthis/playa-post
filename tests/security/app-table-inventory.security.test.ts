@@ -37,7 +37,11 @@ const INVENTORY = [
   // The named board queries the Saved tab lists (issue #45, ADR-0007:77, ADR-0016).
   // Pulled forward from M5's A6 — the tab shipped in M2 and pointed at a placeholder.
   // The per-view bell does NOT live here: it is a pointer on `notify_me_queries`, so
-  // D1's "exactly one Notify Me query per user" stays a primary key.
+  // "which views am I notified about" has one answer and not two. That was D1's primary
+  // key on `owner_id`; since #172 reopened D1 it is D16's
+  // `unique nulls not distinct (owner_id, source_view_id)`, over a set instead of a
+  // singleton. No table was added or removed by that change — the reason this list is
+  // untouched by it, and the reason the note is here rather than nowhere.
   'saved_views',
   // Per-recipient panel state — a dismissal is the one durable fact behind
   // `notifications.list`'s `unread` flag. Its own table rather than a column on

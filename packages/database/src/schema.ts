@@ -199,15 +199,19 @@ export interface AppNotifyMeQueries {
    */
   ast: Json;
   ast_version: number;
+  /**
+   * The aggregate identity of one saved Notify Me query (D16). Server-internal: it is what app.outbox_events.aggregate_id carries for NotifyMeQueryChanged/Cleared, and it never reaches a client — the API names a designation by the saved view its bell sits on.
+   */
+  id: Generated<string>;
   owner_id: string;
   source_text: string;
   /**
-   * The app.saved_views row this query was designated from, or NULL when it was written directly through views.notifyMe.update. D1: there is at most one Notify Me query per user, so lighting the bell on a second view MOVES the designation rather than adding one — which is this table's primary key on owner_id doing the enforcing, not a check some service performs first.
+   * The app.saved_views row this query was designated from, or NULL when it was written directly through views.notifyMe.update. D16: a person may light the bell on several views at once, so this is what tells their queries apart — one row per (owner, view), with the NULL row reserved for the query that belongs to no view. Cross-owner designation is refused by notify_me_queries_source_view_fkey, which is unchanged.
    */
   source_view_id: string | null;
   updated_at: Timestamp;
   /**
-   * ADR-0005 optimistic-concurrency version. notifyMe.update is expectedVersion: yes — mismatch is a conflict, never a silent overwrite of a deliberate change.
+   * ADR-0005 optimistic-concurrency version, per query rather than per person (D16). notifyMe.update is expectedVersion: yes and addresses the untied row — a mismatch is a conflict, never a silent overwrite of a deliberate change.
    */
   version: Generated<number>;
 }

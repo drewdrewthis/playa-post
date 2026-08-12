@@ -1,13 +1,19 @@
-Feature: Notify Me — single saved-query notification
-  As a user with a Notify Me query
+Feature: Notify Me — saved-query notifications
+  As a user with Notify Me switched on
   I want to be notified, grouped and privacy-safe, when a matching bulletin appears
   So that I learn about relevant bulletins without leaking their content off-device
 
-  # M2 scope: one Notify Me query (D1); Web Push subscribe; EvaluateNotifyMeHandler on
-  # BulletinCreated; one grouped push via a 60s window; delivery-time authorization
-  # re-check + identifier-only payloads (ADR-0002 §11).
+  # M2 scope: Web Push subscribe; EvaluateNotifyMeHandler on BulletinCreated; one grouped
+  # push via a 60s window; delivery-time authorization re-check + identifier-only payloads
+  # (ADR-0002 §11).
   # Cut to M5: grouping across event families, cross-device dedup, subscription expiry,
   # preferences, the query-change combined notification.
+  #
+  # ⚠ **This file said "single saved-query" until issue #172.** Decision D1 read the PDF's
+  # one Notify Me query against the comp's bell-on-every-card and kept the PDF's count;
+  # **decision D16 reopens it** at the owner's direction — several bells may be lit at
+  # once, bounded per person because each new bulletin can read up to all of a person's
+  # switched-on queries. A brief that reads only D1 will build the wrong thing.
 
   @e2e
   # @ac:M2-AC1
@@ -98,3 +104,56 @@ Feature: Notify Me — single saved-query notification
     Then the response is a structured error
     And zero rows change on the Notify Me query
     And zero rows are written to outbox_events
+
+  @integration
+  # @ac:172-AC1
+  # Decision D16, reopening D1. Under D1 the second bell put the first one out; the
+  # assertion is on the stored queries rather than on the answer, because a bell that
+  # "lit" by overwriting its neighbour looks identical from the outside.
+  Scenario: A second saved view can be notified on without switching the first off
+    Given a viewer with Notify Me switched on for a saved view
+    When that viewer switches Notify Me on for a second saved view
+    Then both saved views are notifying
+    And each notifying view carries its own saved query
+
+  @integration
+  # @ac:172-AC2
+  Scenario: Switching one saved view's notifications off leaves the others on
+    Given a viewer with Notify Me switched on for three saved views
+    When that viewer switches Notify Me off for one of them
+    Then the other two are still notifying
+    And exactly one notification is announced as cleared
+
+  @integration
+  # @ac:172-AC4
+  # The bound D1's primary key used to provide: on every BulletinCreated the evaluator
+  # reads a person's switched-on queries until one matches — worst case all of them — so
+  # the count per person has to stop somewhere.
+  Scenario: Switching on more notifications than the per-person cap is refused
+    Given a viewer already at the Notify Me cap
+    When that viewer switches Notify Me on for one more saved view
+    Then the response is a structured error naming the cap
+    And the views that were notifying are still notifying
+
+  @unit
+  # @ac:172-AC1
+  # The corollary that makes several bells safe: matches are per person, not per query.
+  # Without it a person is pushed the same bulletin once per bell they lit.
+  #
+  # ⚠ @unit rather than @integration, and the wording follows the proof. This is settled
+  # at the point of evaluation — `EvaluateNotifyMeHandler` records one match per person —
+  # so it is provable without a database, and the grouped delivery downstream of it is
+  # already pinned by the two window scenarios above.
+  Scenario: A bulletin matching two of one viewer's queries is matched once
+    Given a viewer with Notify Me switched on for two saved views
+    And a bulletin is created that matches both of their queries
+    When the bulletin is evaluated against the saved Notify Me queries
+    Then exactly one match is recorded for that viewer
+
+  @integration
+  # @ac:172-AC3
+  Scenario: An existing single-notify user keeps their notification through the migration
+    Given a stored Notify Me query from before multiple notifications were allowed
+    When the migration that allows several is applied
+    Then that query still exists, designated from the same saved view
+    And that viewer can switch a second one on with no further migration

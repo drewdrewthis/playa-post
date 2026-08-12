@@ -16,7 +16,11 @@ import type { BoardQuery } from '../domain/board-query-grammar';
  * `VisiblePerson`.
  */
 export interface SavedNotifyMeQuery {
-  /** `app.users.id` of the person who saved it, and who would be notified. */
+  /**
+   * `app.users.id` of the person who saved it, and who would be notified.
+   *
+   * ⚠ **Not unique across the result** — see {@link NotifyMeQueryDirectory.findAllCurrent}.
+   */
   readonly ownerId: string;
   /** The validated AST, already narrowed to the current grammar's shape. */
   readonly query: BoardQuery;
@@ -40,6 +44,13 @@ export interface NotifyMeQueryDirectory {
    * (ADR-0007:70-72). A future grammar ships with a migration that re-validates the
    * stored ASTs; until it runs, the honest behaviour is to notify nobody rather than
    * to guess at a shape this evaluator does not understand.
+   *
+   * ⚠ **One `ownerId` may appear several times** — decision D16 lets a person notify on
+   * several saved views at once, and each is its own query with its own filter. A caller
+   * that turns each element into a notification would send somebody the same bulletin once
+   * per bell they had lit; `EvaluateNotifyMeHandler` settles a person at their first match
+   * for exactly that reason. There is no per-owner grouping here because grouping is a
+   * decision about notifications and this is a read of stored filters.
    *
    * @returns Empty when nobody has saved a query — the common case early on.
    */
