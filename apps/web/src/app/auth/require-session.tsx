@@ -8,6 +8,7 @@ import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
 import { hasSeenWelcome } from '../welcome/welcome-steps';
 
 import { useSession } from './session-provider';
+import { SessionWait } from './session-wait';
 
 const ONBOARDING_PATH = '/onboarding';
 const SIGN_IN_PATH = '/signin';
@@ -38,9 +39,10 @@ const WELCOME_PATH = '/welcome';
 /**
  * A one-line status where a whole screen would otherwise be.
  *
- * Framed like every other screen rather than left as a bare paragraph: these three
- * states (restoring, offline, loading) are the first thing a user sees on a cold or bad
- * start, and unstyled text on a white page reads as a crash rather than as a wait.
+ * Framed like every other screen rather than left as a bare paragraph: it is what the
+ * offline state shows on a bad start, and unstyled text on a white page reads as a
+ * crash rather than as a wait. The two *waiting* states use `SessionWait` instead —
+ * offline is an answer, not a wait, so it gets still text and no spinner (#200).
  */
 function SessionNotice({ children }: { readonly children: ReactNode }): JSX.Element {
   return (
@@ -74,7 +76,7 @@ export function RequireSession({ children }: { readonly children: ReactNode }): 
   }, [rejected, clearRejectedSession]);
 
   if (status === 'loading') {
-    return <SessionNotice>Restoring your session…</SessionNotice>;
+    return <SessionWait headline="Restoring your session…" />;
   }
 
   if (status === 'anonymous') {
@@ -110,5 +112,13 @@ export function RequireSession({ children }: { readonly children: ReactNode }): 
     return <>{children}</>;
   }
 
-  return <SessionNotice>Loading…</SessionNotice>;
+  // The probe is in flight — on the free hosting tier this is where a server cold
+  // start is spent, so the copy owns the wait instead of leaving "Loading…" to
+  // take the blame (#200).
+  return (
+    <SessionWait
+      headline="Warming up the press…"
+      detail="The server may be waking up — the first load can take a moment."
+    />
+  );
 }
