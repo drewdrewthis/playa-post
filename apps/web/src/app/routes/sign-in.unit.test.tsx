@@ -93,6 +93,10 @@ describe('SignInRoute install hint', () => {
 
     expect(hint.open).toBe(false);
     expect(hint.textContent).toContain('Add The Playa Post to your home screen');
+
+    // Signed out, the email form is the only form on the screen.
+    const form = requireElement<HTMLFormElement>(mounted.container, 'form');
+    expect(form.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('covers all three install paths: iOS Safari, Android Chrome, desktop', async () => {
@@ -103,9 +107,17 @@ describe('SignInRoute install hint', () => {
       '[data-testid="pwa-install-hint"]',
     );
 
-    expect(hint.textContent).toContain('Add to Home Screen');
-    expect(hint.textContent).toContain('Install app');
-    expect(hint.textContent).toContain('address bar');
+    const steps = Array.from(hint.querySelectorAll('li')).map((li) => li.textContent ?? '');
+    expect(steps).toHaveLength(3);
+    const stepFor = (platform: string) => {
+      const step = steps.find((text) => text.includes(platform));
+      if (!step) throw new Error(`no install step mentions ${platform}`);
+      return step;
+    };
+
+    expect(stepFor('iPhone or iPad')).toContain('Add to Home Screen');
+    expect(stepFor('Android')).toContain('Install app');
+    expect(stepFor('Computer')).toContain('address bar');
   });
 });
 

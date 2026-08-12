@@ -21,7 +21,9 @@
 }
 
 .install-hint__summary:focus-visible {
-  outline: 2px solid var(--pp-ink);
+  /* Same accent ring as every other control (screens.css), since `summary`
+     is missing from the app-wide :where() focus list. */
+  outline: 2px solid var(--pp-accent);
   outline-offset: 2px;
 }
 
