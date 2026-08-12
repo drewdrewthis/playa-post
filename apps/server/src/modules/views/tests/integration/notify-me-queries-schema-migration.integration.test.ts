@@ -251,12 +251,7 @@ describe('Scenario: an existing Notify Me user survives the key swap (#172 AC3, 
 
     // The world as D1 left it: one person, one saved view, one Notify Me query keyed on
     // `owner_id` alone and designated from that view. No `id` column exists yet to supply.
-    const { rows: userRows } = await database.client.query<{ id: string }>(
-      `insert into app.users (auth_user_id, handle, display_name, created_at)
-       values ($1, 'dusty_pre_172', 'dusty_pre_172', now()) returning id`,
-      [randomUUID()],
-    );
-    ownerId = userRows[0]?.id ?? '';
+    ownerId = await seedOwner(database, 'dusty_pre_172');
 
     const { rows: viewRows } = await database.client.query<{ id: string }>(
       `insert into app.saved_views
@@ -265,7 +260,13 @@ describe('Scenario: an existing Notify Me user survives the key swap (#172 AC3, 
        returning id`,
       [ownerId, JSON.stringify({ types: ['offer'], text: ['truck'] })],
     );
-    viewId = viewRows[0]?.id ?? '';
+    const seededViewId = viewRows[0]?.id;
+    if (seededViewId === undefined) {
+      // An empty string here would surface later as Postgres refusing a non-UUID, naming
+      // a type rather than the seeding step that broke — fail where it happened.
+      throw new Error('pre-#172 seed: saved-view insert returned no row');
+    }
+    viewId = seededViewId;
 
     await database.client.query(
       `insert into app.notify_me_queries
@@ -328,7 +329,10 @@ describe('Scenario: an existing Notify Me user survives the key swap (#172 AC3, 
        returning id`,
       [ownerId, JSON.stringify({ types: ['request'], text: [] })],
     );
-    const second = viewRows[0]?.id ?? '';
+    const second = viewRows[0]?.id;
+    if (second === undefined) {
+      throw new Error('second-bell seed: saved-view insert returned no row');
+    }
 
     await database.client.query(
       `insert into app.notify_me_queries

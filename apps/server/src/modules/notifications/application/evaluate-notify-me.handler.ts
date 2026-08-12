@@ -59,9 +59,10 @@ export type EvaluateNotifyMeHandler = OutboxConsumer;
  * given, and the window that groups them cannot tell a genuine second bulletin from the
  * same one counted twice.
  *
- * That also bounds the work: a person whose queries match costs one read, because the scan
- * of theirs stops at the first one that does. Only a person nothing matches pays for all
- * of theirs, which is what `NOTIFY_ME_QUERY_LIMIT_PER_OWNER` caps.
+ * That also bounds the work: the scan of a person's queries stops at the first one that
+ * matches, but it reads every non-matching one before it — so a match on the last query,
+ * or no match at all, costs the whole of theirs. `NOTIFY_ME_QUERY_LIMIT_PER_OWNER` is the
+ * cap on that worst case.
  *
  * The author is skipped: a push telling somebody about their own bulletin is noise,
  * and they are the one person guaranteed to already know.

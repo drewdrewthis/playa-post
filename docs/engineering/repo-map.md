@@ -136,8 +136,9 @@ apps/server/     The modular monolith.
                  comp's per-view bell modelled as a pointer FROM app.notify_me_queries so "who gets
                  notified" has one answer and not two: ADR-0016. Issue #172 / decision D16 reopened
                  D1's count — several bells may be lit at once — and the pointer survived it: the
-                 constraint carrying the rule is now unique (owner_id, source_view_id) rather than a
-                 primary key on owner_id.)
+                 constraint carrying the rule is now unique nulls not distinct
+                 (owner_id, source_view_id) rather than a primary key on owner_id — the NULL
+                 semantics are load-bearing, holding the untied query at one per owner, D16.)
                  A module MAY also grow an infrastructure/ for a
                  non-persistence adapter — modules/connections/infrastructure/ holds the node:crypto
                  CSPRNG behind the invite-token port, and modules/notifications/infrastructure/ holds

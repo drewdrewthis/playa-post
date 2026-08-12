@@ -12,8 +12,8 @@ Feature: Notify Me — saved-query notifications
   # ⚠ **This file said "single saved-query" until issue #172.** Decision D1 read the PDF's
   # one Notify Me query against the comp's bell-on-every-card and kept the PDF's count;
   # **decision D16 reopens it** at the owner's direction — several bells may be lit at
-  # once, bounded per person because the evaluator reads every switched-on query against
-  # every new bulletin. A brief that reads only D1 will build the wrong thing.
+  # once, bounded per person because each new bulletin can read up to all of a person's
+  # switched-on queries. A brief that reads only D1 will build the wrong thing.
 
   @e2e
   # @ac:M2-AC1
@@ -126,8 +126,9 @@ Feature: Notify Me — saved-query notifications
 
   @integration
   # @ac:172-AC4
-  # The bound D1's primary key used to provide: the evaluator reads every switched-on
-  # query on every BulletinCreated, so the count per person has to stop somewhere.
+  # The bound D1's primary key used to provide: on every BulletinCreated the evaluator
+  # reads a person's switched-on queries until one matches — worst case all of them — so
+  # the count per person has to stop somewhere.
   Scenario: Switching on more notifications than the per-person cap is refused
     Given a viewer already at the Notify Me cap
     When that viewer switches Notify Me on for one more saved view
