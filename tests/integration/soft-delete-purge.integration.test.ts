@@ -167,7 +167,7 @@ describe('soft-deleted rows are purged after the retention window (#169, D17)', 
       expect(rows).toEqual([{ is_nullable: 'YES', data_type: 'timestamp with time zone' }]);
     });
 
-    it('cascades a bulletin’s reports and dismissals, so a purge cannot be refused by them', async () => {
+    it("cascades a bulletin's reports and dismissals, so a purge cannot be refused by them", async () => {
       // ⚠ Without this the sweep wedges *permanently and silently*: one `NOT NULL`
       // dependent refuses the `DELETE`, every round, and a purge that throws every hour
       // is indistinguishable from one with nothing to do. `confdeltype` is PostgreSQL's
@@ -192,7 +192,7 @@ describe('soft-deleted rows are purged after the retention window (#169, D17)', 
       ]);
     });
 
-    it('indexes each sweep’s predicate, partially — live rows are not part of the question', async () => {
+    it("indexes each sweep's predicate, partially — live rows are not part of the question", async () => {
       const { rows } = await testDatabase.client.query<{ indexname: string }>(
         `select indexname from pg_catalog.pg_indexes
           where schemaname = 'app'
@@ -222,7 +222,14 @@ describe('soft-deleted rows are purged after the retention window (#169, D17)', 
         const result = await container.softDeletePurge.purgeOnce({ now: NOW });
 
         expect(await bulletinTitles()).toEqual(['never removed', 'removed 29 days ago']);
-        expect(result.purged).toContainEqual({ name: 'removed bulletins', rows: 1 });
+        // The cutoff is asserted alongside the count because each target carries its own
+        // window: this is where `configuration.purgeRetentionDays` reaching *this* target
+        // is observable, rather than a round-wide number that happened to be right.
+        expect(result.purged).toContainEqual({
+          name: 'removed bulletins',
+          deletedBefore: daysAgo(30),
+          rows: 1,
+        });
       } finally {
         await container.dispose();
       }
@@ -239,7 +246,11 @@ describe('soft-deleted rows are purged after the retention window (#169, D17)', 
         const result = await container.softDeletePurge.purgeOnce({ now: NOW });
 
         expect(await savedViewNames()).toEqual(['deleted 29 days ago', 'never deleted']);
-        expect(result.purged).toContainEqual({ name: 'deleted saved views', rows: 1 });
+        expect(result.purged).toContainEqual({
+          name: 'deleted saved views',
+          deletedBefore: daysAgo(30),
+          rows: 1,
+        });
       } finally {
         await container.dispose();
       }
@@ -311,7 +322,11 @@ describe('soft-deleted rows are purged after the retention window (#169, D17)', 
 
         const result = await container.softDeletePurge.purgeOnce({ now: NOW });
 
-        expect(result.purged).toContainEqual({ name: 'removed bulletins', rows: 1 });
+        expect(result.purged).toContainEqual({
+          name: 'removed bulletins',
+          deletedBefore: daysAgo(30),
+          rows: 1,
+        });
         expect(await bulletinTitles()).toEqual([]);
         expect(await countOf('app.bulletin_reports')).toBe(0);
         expect(await countOf('app.bulletin_dismissals')).toBe(0);
@@ -320,7 +335,7 @@ describe('soft-deleted rows are purged after the retention window (#169, D17)', 
       }
     });
 
-    it('leaves a retained bulletin’s report and dismissal exactly where they were', async () => {
+    it("leaves a retained bulletin's report and dismissal exactly where they were", async () => {
       // The other side of the cascade, and the one that would fail silently: a sweep that
       // deleted moderation rows by its own predicate rather than by the bulletin's would
       // un-hide a bulletin somebody had reported, on their board, with no trace.
@@ -383,7 +398,11 @@ describe('soft-deleted rows are purged after the retention window (#169, D17)', 
 
         const result = await container.softDeletePurge.purgeOnce({ now: NOW });
 
-        expect(result.purged).toContainEqual({ name: 'deleted saved views', rows: 1 });
+        expect(result.purged).toContainEqual({
+          name: 'deleted saved views',
+          deletedBefore: daysAgo(30),
+          rows: 1,
+        });
         expect(await savedViewNames()).toEqual([]);
         expect(await countOf('app.notify_me_queries')).toBe(0);
       } finally {
@@ -393,7 +412,7 @@ describe('soft-deleted rows are purged after the retention window (#169, D17)', 
   });
 
   describe('what the purge does not do', () => {
-    it('publishes nothing — retention housekeeping is not a fact about anybody’s state', async () => {
+    it("publishes nothing — retention housekeeping is not a fact about anybody's state", async () => {
       const container = containerWithRetention(30);
       try {
         const author = await seedUser('dusty_purge_outbox');

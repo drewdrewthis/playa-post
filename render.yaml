@@ -62,6 +62,18 @@ services:
         value: 0.0.0.0
       - key: LOG_LEVEL
         value: info
+      # How many days a soft-deleted row survives before the hourly retention
+      # sweep removes it for good (issue #169, decision D17). The schema defaults
+      # this to 30, so the deploy works without the line — it is declared anyway
+      # because it is a DATA RETENTION POLICY, and the whole point of a blueprint
+      # is that a decision like that is reviewable in a pull request instead of
+      # being an unwritten default nobody can see. Same reasoning as LOG_LEVEL.
+      #
+      # ⚠ Lowering this shortens the window in which a removal can be undone by a
+      # DBA — after the sweep the rows are gone, and there is no undelete (D17).
+      # The schema's floor is 1; zero would make every delete immediate.
+      - key: PURGE_RETENTION_DAYS
+        value: 30
       # PORT is deliberately absent — Render injects it and the configuration
       # schema coerces it. Declaring it here would fight the platform.
       #

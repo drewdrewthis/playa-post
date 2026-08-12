@@ -25,6 +25,22 @@ export interface PurgeTarget {
    */
   readonly name: string;
   /**
+   * How many days this store keeps a soft-deleted row before it goes.
+   *
+   * **Per target, not per round.** Both of today's targets are handed
+   * `PURGE_RETENTION_DAYS` and so share a window, but they are not required to: ADR-0006
+   * lists other retention chores with windows of their own already decided (published
+   * outbox rows at 14 days, `mutation_results` daily), and those arrive here as targets.
+   * A single round-wide window would have forced each of them to be either a second
+   * poller or a lie about how long its rows live.
+   *
+   * ⚠ **The window is the only thing about this sweep that is configurable.** How often it
+   * runs is a constant in `start-purge-poller.ts`: an operator has a policy about how long
+   * deleted data lives, and no opinion at all about poll intervals — exposing the cadence
+   * would be a knob whose every setting produces the same retention.
+   */
+  readonly retentionDays: number;
+  /**
    * Hard-delete everything soft-deleted strictly before `deletedBefore`, and answer how
    * many rows went.
    */
@@ -35,13 +51,16 @@ export interface PurgeTarget {
 export interface PurgedRows {
   /** {@link PurgeTarget.name}, unchanged. */
   readonly name: string;
+  /**
+   * The cutoff this target was swept with — the round's instant minus
+   * {@link PurgeTarget.retentionDays}. Reported per target because targets may differ.
+   */
+  readonly deletedBefore: Date;
   readonly rows: number;
 }
 
 /** What one round of the sweep did. */
 export interface PurgeRoundResult {
-  /** The cutoff this round used — `now` minus the configured retention window. */
-  readonly deletedBefore: Date;
   /** One entry per target, in the order they were swept. */
   readonly purged: readonly PurgedRows[];
   /** Every target's count, summed. Zero is the steady state. */
@@ -51,7 +70,7 @@ export interface PurgeRoundResult {
 /** The purge entrypoint's public surface (issue #169). */
 export interface SoftDeletedRowPurge {
   /**
-   * Sweep every target once, using `now` to derive the cutoff.
+   * Sweep every target once, using `now` to derive each target's cutoff.
    *
    * One call is one round. The caller decides the cadence — a poll interval on the Node
    * server (`start-purge-poller.ts`), or once per call in a test.
@@ -65,16 +84,8 @@ export interface SoftDeletedRowPurge {
 /** What {@link createSoftDeletedRowPurge} needs, injected (addendum §12). */
 export interface CreateSoftDeletedRowPurgeDependencies {
   /**
-   * How many days a soft-deleted row is kept — `PURGE_RETENTION_DAYS`, read once by the
-   * composition root and handed here.
-   *
-   * ⚠ **The window is the only thing about this sweep that is configurable.** How often
-   * it runs is a constant in `start-purge-poller.ts`: an operator has a policy about how
-   * long deleted data lives, and no opinion at all about poll intervals — exposing the
-   * cadence would be a knob whose every setting produces the same retention.
+   * Every store to sweep, each carrying its own window. Empty is legal and sweeps nothing.
    */
-  readonly retentionDays: number;
-  /** Every store to sweep. Empty is legal and sweeps nothing. */
   readonly targets: readonly PurgeTarget[];
 }
 
@@ -113,22 +124,31 @@ export interface CreateSoftDeletedRowPurgeDependencies {
 export function createSoftDeletedRowPurge(
   dependencies: CreateSoftDeletedRowPurgeDependencies,
 ): SoftDeletedRowPurge {
-  const { retentionDays, targets } = dependencies;
+  const { targets } = dependencies;
 
   return {
     async purgeOnce(command: { readonly now: Date }): Promise<PurgeRoundResult> {
-      const deletedBefore = new Date(command.now.getTime() - retentionDays * MILLISECONDS_PER_DAY);
+      // One clock reading for the whole round, subtracted per target. Each target's window
+      // is its own, but the instant they are measured back from is not: reading the clock
+      // inside the loop would let two targets sharing a window still disagree about where
+      // it starts, so a row deleted in the microseconds between could be swept from one
+      // store and kept in another.
+      const roundStartedAt = command.now.getTime();
       const purged: PurgedRows[] = [];
 
       for (const target of targets) {
-        // Every target gets the same cutoff, derived once: reading the clock per target
-        // would let two of them disagree about where the window starts, so a row deleted
-        // in the microseconds between could be swept from one store and kept in another.
-        purged.push({ name: target.name, rows: await target.purge(deletedBefore) });
+        const deletedBefore = new Date(
+          roundStartedAt - target.retentionDays * MILLISECONDS_PER_DAY,
+        );
+
+        purged.push({
+          name: target.name,
+          deletedBefore,
+          rows: await target.purge(deletedBefore),
+        });
       }
 
       return {
-        deletedBefore,
         purged,
         totalRows: purged.reduce((total, entry) => total + entry.rows, 0),
       };

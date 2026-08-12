@@ -86,11 +86,19 @@ const purgePoller = startPurgePoller({
   // What went was somebody's removed bulletin or deleted saved view, and naming one here
   // would be exactly the durable record of a person's own content that ADR-0006 and
   // M2-AC16 keep out of every payload in this system.
+  //
+  // The cutoff is per entry rather than per round because each target carries its own
+  // retention window — they happen to match today, and a single line for both would stop
+  // being true the first time one does not.
   onPurged: (result) =>
     server.log.info(
       `retention purge removed ${String(result.totalRows)} soft-deleted rows ` +
-        `(${result.purged.map((entry) => `${entry.name}: ${String(entry.rows)}`).join(', ')}) ` +
-        `deleted before ${result.deletedBefore.toISOString()}`,
+        `(${result.purged
+          .map(
+            (entry) =>
+              `${entry.name}: ${String(entry.rows)} deleted before ${entry.deletedBefore.toISOString()}`,
+          )
+          .join(', ')})`,
     ),
 });
 

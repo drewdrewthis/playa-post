@@ -77,10 +77,10 @@ per-module for independent module-level suites — this is deliberate duplicatio
 | `pin-a-note.feature` | Private person-to-person notes, degree-1 gated (#88, D6); the expanded view and answering one (#176, D14) | 1 e2e, 16 integration, 9 unit |
 | `request-an-intro.feature` | One-hop introductions: eligibility, the pass-on, and the target's answer (#89, #166, #175, D11, D12) | 25 integration, 4 unit |
 | `edit-display-name.feature` | Editing your own display name; the handle stays immutable (#177, D15) | 1 e2e, 11 integration, 6 unit |
-| `soft-delete-purge.feature` | Uniform soft delete and the configurable retention purge; notes excluded (#169, #118, D17) | 15 integration, 2 unit |
-| **Total** | | **15 e2e, 128 integration, 32 unit — 172 scenarios** |
+| `soft-delete-purge.feature` | Uniform soft delete and the configurable retention purge; notes excluded (#169, #118, D17) | 15 integration, 5 unit |
+| **Total** | | **15 e2e, 128 integration, 35 unit — 175 scenarios** |
 
-The three numbers sum to 175, not 172, and the gap is not an arithmetic slip: three scenarios in
+The three numbers sum to 178, not 175, and the gap is not an arithmetic slip: three scenarios in
 `request-an-intro.feature` (lines 170, 180, 257) carry `@unit @integration` together, so each is
 counted at both levels and once in the total. They are the standing exception to the one-tag rule
 above, and they are counted here rather than quietly rounded away — a total that disagrees with its
@@ -117,7 +117,7 @@ own columns invites exactly the drift the last recount found.
 | M2-AC24 (concurrent drainers) | `notify-me.feature` › "Two concurrent drainers claim disjoint events" |
 | M2-AC25 (handle rules) | `identity-magic-link.feature` › the six handle-rule scenarios |
 | M2-AC26 (regression) | **Not mapped — see below** |
-| Uniform soft delete + purge ([#169](https://github.com/drewdrewthis/playa-post/issues/169)) | `soft-delete-purge.feature` › the seventeen scenarios — the saved view's new soft delete and everything it must not resurrect (the name, the cap slot, the rename, the bell), the retention boundary in both directions for both stores, the window coming from configuration, the dependents a purged bulletin takes with it, and the three things the purge must never do: publish, sweep an expiry, or touch a note ([#118](https://github.com/drewdrewthis/playa-post/issues/118) is the gap it closes; D17 records why notes are out) |
+| Uniform soft delete + purge ([#169](https://github.com/drewdrewthis/playa-post/issues/169)) | `soft-delete-purge.feature` › the twenty scenarios — the saved view's new soft delete and everything it must not resurrect (the name, the cap slot, the rename, the bell), the retention boundary in both directions for both stores, the window coming from configuration and belonging to each store rather than the round, the dependents a purged bulletin takes with it (and the one-delete-site rule that makes that cascade safe), the sweep actually being scheduled by the running server, and the three things the purge must never do: publish, sweep an expiry, or touch a note ([#118](https://github.com/drewdrewthis/playa-post/issues/118) is the gap it closes; D17 records why notes are out) |
 | Editing your display name ([#177](https://github.com/drewdrewthis/playa-post/issues/177)) | `edit-display-name.feature` › the eighteen scenarios — the rename itself, the caller-follows-the-context authorization, the handle surviving untouched and a submitted handle being refused, the §6a projection returning the new name on the next read without disclosing one it withheld, and the shared bounds |
 
 ## ACs that do not map cleanly to a BDD scenario

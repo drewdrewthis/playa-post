@@ -482,11 +482,24 @@ export function buildAppContainer(
   // The names are stable labels for the round's log line and are chosen here rather than
   // inside the modules, because they describe what an operator is reading rather than
   // what a module calls itself.
+  //
+  // Both targets are handed the same window today — one operator policy, "how long does
+  // deleted data live", covers every user-facing delete this product has. They each carry
+  // it rather than the sweep holding one, because the retention chores ADR-0006 already
+  // has windows for (published outbox rows at 14 days, `mutation_results` daily) arrive
+  // here as targets whose windows are decided by that ADR, not by this environment key.
   const softDeletePurge = createSoftDeletedRowPurge({
-    retentionDays: configuration.purgeRetentionDays,
     targets: [
-      { name: 'removed bulletins', purge: (before) => bulletins.removedBulletins.purge(before) },
-      { name: 'deleted saved views', purge: (before) => views.deletedSavedViews.purge(before) },
+      {
+        name: 'removed bulletins',
+        retentionDays: configuration.purgeRetentionDays,
+        purge: (before) => bulletins.removedBulletins.purge(before),
+      },
+      {
+        name: 'deleted saved views',
+        retentionDays: configuration.purgeRetentionDays,
+        purge: (before) => views.deletedSavedViews.purge(before),
+      },
     ],
   });
 

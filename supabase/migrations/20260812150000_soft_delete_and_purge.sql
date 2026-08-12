@@ -107,9 +107,12 @@ create index bulletins_archived_at_idx
 -- ⚠ **This does not widen what any actor can delete.** Nothing but the purge deletes an
 -- `app.bulletins` row — `bulletin.archive` is an UPDATE — so the only statement these
 -- clauses can fire from is the one in
--- `modules/bulletins/persistence/postgres-bulletin-purge.repository.ts`. In particular
--- `moderation.undismiss` still deletes one dismissal by `(bulletin_id, viewer_id)` and
--- can still never reach a report (B13).
+-- `modules/bulletins/persistence/postgres-removed-bulletins.repository.ts`. That
+-- precondition is the whole of the argument above, so it is checked rather than asserted:
+-- `tests/fitness/one-bulletin-delete-site.fitness.test.ts` fails the build if a second
+-- statement deleting `app.bulletins` ever appears. In particular `moderation.undismiss`
+-- still deletes one dismissal by `(bulletin_id, viewer_id)` and can still never reach a
+-- report (B13).
 --
 -- PostgreSQL has no `ALTER CONSTRAINT ... ON DELETE`, so each is dropped and re-added
 -- under the same auto-generated name it already had.

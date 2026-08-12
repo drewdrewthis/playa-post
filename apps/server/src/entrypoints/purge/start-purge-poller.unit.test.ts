@@ -5,22 +5,22 @@ import { startPurgePoller } from './start-purge-poller';
 
 const INTERVAL_MS = 1_000;
 
+const CUTOFF = new Date('2026-07-13T12:00:00.000Z');
+
 /** A round that removed nothing — the steady state of a healthy deployment. */
 const SWEPT_NOTHING: PurgeRoundResult = {
-  deletedBefore: new Date('2026-07-13T12:00:00.000Z'),
   purged: [
-    { name: 'removed bulletins', rows: 0 },
-    { name: 'deleted saved views', rows: 0 },
+    { name: 'removed bulletins', deletedBefore: CUTOFF, rows: 0 },
+    { name: 'deleted saved views', deletedBefore: CUTOFF, rows: 0 },
   ],
   totalRows: 0,
 };
 
 /** A round that actually removed something — the only kind worth a log line. */
 const SWEPT_SOMETHING: PurgeRoundResult = {
-  deletedBefore: new Date('2026-07-13T12:00:00.000Z'),
   purged: [
-    { name: 'removed bulletins', rows: 8 },
-    { name: 'deleted saved views', rows: 4 },
+    { name: 'removed bulletins', deletedBefore: CUTOFF, rows: 8 },
+    { name: 'deleted saved views', deletedBefore: CUTOFF, rows: 4 },
   ],
   totalRows: 12,
 };
@@ -203,6 +203,56 @@ describe('startPurgePoller', () => {
       expect(onPurged).not.toHaveBeenCalled();
 
       await poller.stop();
+    });
+
+    it('does not call an observer a failed round never produced a result for', async () => {
+      const purgeOnce = vi
+        .fn<SoftDeletedRowPurge['purgeOnce']>()
+        .mockRejectedValue(new Error('connection terminated'));
+      const onPurged = vi.fn();
+      const onError = vi.fn();
+      const poller = startPurgePoller({
+        purge: { purgeOnce },
+        intervalMs: INTERVAL_MS,
+        onPurged,
+        onError,
+      });
+
+      await vi.advanceTimersByTimeAsync(INTERVAL_MS);
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onPurged).not.toHaveBeenCalled();
+
+      await poller.stop();
+    });
+
+    it('survives an observer that throws, and does not call it a failed round', async () => {
+      // `onPurged` runs outside the round it describes. Routing its failure into `onError`
+      // would log a failed sweep for a round that deleted every row it meant to; letting
+      // it propagate would reject the in-flight promise `stop()` awaits, turning a clean
+      // shutdown into a crash. So it is swallowed — and the loop keeps its interval.
+      const purgeOnce = vi
+        .fn<SoftDeletedRowPurge['purgeOnce']>()
+        .mockResolvedValue(SWEPT_SOMETHING);
+      const onError = vi.fn();
+      const onPurged = vi.fn(() => {
+        throw new Error('log transport closed');
+      });
+      const poller = startPurgePoller({
+        purge: { purgeOnce },
+        intervalMs: INTERVAL_MS,
+        onPurged,
+        onError,
+      });
+
+      await vi.advanceTimersByTimeAsync(INTERVAL_MS * 2);
+
+      expect(onPurged).toHaveBeenCalledTimes(2);
+      expect(onError).not.toHaveBeenCalled();
+      expect(purgeOnce).toHaveBeenCalledTimes(2);
+
+      // And shutdown still resolves rather than rejecting with the observer's error.
+      await expect(poller.stop()).resolves.toBeUndefined();
     });
   });
 

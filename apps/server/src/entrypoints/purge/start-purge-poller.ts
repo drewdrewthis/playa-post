@@ -36,6 +36,9 @@ export interface StartPurgePollerOptions {
    * every round would be an hourly line saying zero — noise that trains a reader to skip
    * exactly the line that matters on the day it is not zero. Omitted → counts are
    * discarded and the sweep is silent either way.
+   *
+   * ⚠ **Must not throw.** It runs outside the round it describes, so anything it raises is
+   * swallowed rather than mislabelled as a failed sweep — see {@link startPurgePoller}.
    */
   readonly onPurged?: (result: PurgeRoundResult) => void;
 }
@@ -62,11 +65,11 @@ export interface PurgePoller {
  * a second round starting underneath it would contend for the same rows and delete
  * nothing extra.
  *
- * Still not extracted into a shared helper with the other two. They now differ in what
- * they call and in nothing else, which is the third call site
- * `start-notification-flush-poller.ts` said to revisit at — and revisiting it is a change
- * to three loops' failure semantics that belongs in its own commit, not smuggled in with
- * the feature that made them three.
+ * Still not extracted into a shared helper with the other two. This is the third call site
+ * `start-notification-flush-poller.ts` said to revisit at, and it was revisited here:
+ * extraction is a change to three loops' failure and shutdown semantics at once, which
+ * belongs in its own commit rather than smuggled in with the feature that made them three.
+ * Tracked as [#198](https://github.com/drewdrewthis/playa-post/issues/198).
  *
  * Unconditional, unlike the flush: there is no configuration under which a retention
  * sweep has nothing it could do, and a deployment that skipped it would accumulate
@@ -87,16 +90,14 @@ export function startPurgePoller(options: StartPurgePollerOptions): PurgePoller 
   }
 
   async function tick(): Promise<void> {
+    let result: PurgeRoundResult | undefined;
+
     try {
-      // Read at dispatch time rather than once at start-up: `now` is what the retention
-      // cutoff is derived from, so a captured clock would freeze the window on the first
+      // Read at dispatch time rather than once at start-up: `now` is what every retention
+      // cutoff is derived from, so a captured clock would freeze the windows on the first
       // round's view of the world and stop sweeping anything new for the life of the
       // process.
-      const result = await purge.purgeOnce({ now: new Date() });
-
-      if (result.totalRows > 0) {
-        onPurged?.(result);
-      }
+      result = await purge.purgeOnce({ now: new Date() });
     } catch (error) {
       onError?.(error);
     } finally {
@@ -105,6 +106,30 @@ export function startPurgePoller(options: StartPurgePollerOptions): PurgePoller 
       // that no further round gets scheduled once it has.
       if (!stopped) {
         scheduleNext();
+      }
+    }
+
+    // ⚠ **Outside the round's `try`, in a `catch` of its own.** Two failures that look
+    // identical from in here and are not: if `onPurged` throws, the sweep still deleted
+    // every row it meant to, and routing that into `onError` would log "retention purge
+    // round failed" about a round that succeeded — sending somebody after a database
+    // problem that does not exist, and hiding a callback bug behind a story about the
+    // pool. So it cannot go there.
+    //
+    // Nor can it propagate: `tick()`'s rejection is `inFlight`'s, and `stop()` awaits
+    // `inFlight` — a throwing observer would turn a clean SIGTERM into a failed shutdown,
+    // and an unhandled rejection besides. This loop's contract is that it survives its own
+    // rounds, and an observer is not a round.
+    //
+    // Which leaves swallowing it, and the honest statement of that is: **`onPurged` must
+    // not throw.** It is handed counts and a cutoff to write somewhere; a caller that does
+    // something failable with them owns reporting it. `undefined` here means the round
+    // itself threw and `onError` has already seen it.
+    if (result !== undefined && result.totalRows > 0) {
+      try {
+        onPurged?.(result);
+      } catch {
+        // Intentionally empty — see above.
       }
     }
   }

@@ -125,10 +125,29 @@ Feature: Deleting is soft everywhere, and soft-deleted rows do not live forever
 
   @unit
   # @ac:169-AC2
-  Scenario: Every store is swept against one cutoff
-    Given a purge over two stores
+  Scenario: Two stores sharing a window are swept against one cutoff
+    Given a purge over two stores keeping rows for the same number of days
     When one round runs
     Then both stores are given the same instant to sweep before
+
+  @unit
+  # @ac:169-AC3
+  Scenario: A store keeping rows longer is swept against its own cutoff
+    Given a purge over two stores keeping rows for different numbers of days
+    When one round runs
+    Then each store is given the instant its own window puts on that round
+
+  @unit
+  # @ac:169-AC2
+  Scenario: The purge is scheduled by the running server
+    Given the server entrypoint
+    Then it starts every background loop the codebase declares, and stops each one on shutdown
+
+  @unit
+  # @ac:169-AC4
+  Scenario: Nothing but the purge deletes a bulletin
+    Given the server codebase
+    Then the retention sweep is the only statement that deletes a bulletin, so the cascade onto reports and dismissals can fire from nowhere else
 
   @integration
   # @ac:169-AC4

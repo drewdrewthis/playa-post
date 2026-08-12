@@ -76,6 +76,15 @@ export interface NotificationFlushPoller {
  * they call and in nothing else today, and a `startPoller(fn)` abstraction over two
  * call sites would remove fifteen lines while making both loops' failure semantics
  * indirect. Revisit at the third.
+ *
+ * ⚠ **Revisited at the third — `../purge/start-purge-poller.ts`, issue #169 — and
+ * deferred again.** The reasoning above still holds and the count no longer decides it:
+ * extraction changes three loops' failure and shutdown semantics at once, which is a
+ * commit of its own rather than something carried in by the feature that made them three.
+ * The purge also does not fit the shape cleanly — it reports what each round removed,
+ * which neither of these two has. Tracked as
+ * [#198](https://github.com/drewdrewthis/playa-post/issues/198); this note is here so the
+ * next reader finds a decision rather than a stale invitation.
  */
 export function startNotificationFlushPoller(
   options: StartNotificationFlushPollerOptions,
