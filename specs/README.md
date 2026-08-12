@@ -3,7 +3,7 @@
 This directory began as the milestone-M2 vertical-slice suite (`docs/engineering/implementation-plan.md`
 §"M2 — First production vertical slice", the addendum §23 flow exactly) and now also carries feature
 files for later-milestone work (`bulletin-post-types.feature`, #87; `pin-a-note.feature`, #88;
-`edit-display-name.feature`, #177). For M2
+`edit-display-name.feature`, #177; `soft-delete-purge.feature`, #169). For M2
 the completeness claim holds both ways: if a behavior is not captured in an M2 scenario below, it is not in M2 scope, and
 every M2-AC1…AC26 is captured here or explicitly named as not cleanly mappable.
 
@@ -12,7 +12,7 @@ Sources of truth, in precedence order: `docs/engineering/implementation-plan.md`
 `docs/adr/ADR-0002` (authorization/visibility), `ADR-0005` (offline idempotency), `ADR-0006` (outbox),
 `ADR-0008` (identity) → `docs/product/decisions.md` (D1–D3 for the M2 files; D5 for
 `bulletin-post-types.feature`, D6 for `pin-a-note.feature`, D15 for
-`edit-display-name.feature`) → the handoff PDF.
+`edit-display-name.feature`, D9 and D17 for `soft-delete-purge.feature`) → the handoff PDF.
 
 ⚠ **`docs/product/decisions.md` is read newest-first for the later-milestone files.** D2 cut private
 notes from v1; **D6 supersedes that for [#88](https://github.com/drewdrewthis/playa-post/issues/88)** and
@@ -77,9 +77,10 @@ per-module for independent module-level suites — this is deliberate duplicatio
 | `pin-a-note.feature` | Private person-to-person notes, degree-1 gated (#88, D6); the expanded view and answering one (#176, D14) | 1 e2e, 16 integration, 9 unit |
 | `request-an-intro.feature` | One-hop introductions: eligibility, the pass-on, and the target's answer (#89, #166, #175, D11, D12) | 25 integration, 4 unit |
 | `edit-display-name.feature` | Editing your own display name; the handle stays immutable (#177, D15) | 1 e2e, 11 integration, 6 unit |
-| **Total** | | **15 e2e, 113 integration, 30 unit — 155 scenarios** |
+| `soft-delete-purge.feature` | Uniform soft delete and the configurable retention purge; notes excluded (#169, #118, D17) | 15 integration, 5 unit |
+| **Total** | | **15 e2e, 128 integration, 35 unit — 175 scenarios** |
 
-The three numbers sum to 158, not 155, and the gap is not an arithmetic slip: three scenarios in
+The three numbers sum to 178, not 175, and the gap is not an arithmetic slip: three scenarios in
 `request-an-intro.feature` (lines 170, 180, 257) carry `@unit @integration` together, so each is
 counted at both levels and once in the total. They are the standing exception to the one-tag rule
 above, and they are counted here rather than quietly rounded away — a total that disagrees with its
@@ -116,6 +117,7 @@ own columns invites exactly the drift the last recount found.
 | M2-AC24 (concurrent drainers) | `notify-me.feature` › "Two concurrent drainers claim disjoint events" |
 | M2-AC25 (handle rules) | `identity-magic-link.feature` › the six handle-rule scenarios |
 | M2-AC26 (regression) | **Not mapped — see below** |
+| Uniform soft delete + purge ([#169](https://github.com/drewdrewthis/playa-post/issues/169)) | `soft-delete-purge.feature` › the twenty scenarios — the saved view's new soft delete and everything it must not resurrect (the name, the cap slot, the rename, the bell), the retention boundary in both directions for both stores, the window coming from configuration and belonging to each store rather than the round, the dependents a purged bulletin takes with it (and the one-delete-site rule that makes that cascade safe), the sweep actually being scheduled by the running server, and the three things the purge must never do: publish, sweep an expiry, or touch a note ([#118](https://github.com/drewdrewthis/playa-post/issues/118) is the gap it closes; D17 records why notes are out) |
 | Editing your display name ([#177](https://github.com/drewdrewthis/playa-post/issues/177)) | `edit-display-name.feature` › the eighteen scenarios — the rename itself, the caller-follows-the-context authorization, the handle surviving untouched and a submitted handle being refused, the §6a projection returning the new name on the next read without disclosing one it withheld, and the shared bounds |
 
 ## ACs that do not map cleanly to a BDD scenario

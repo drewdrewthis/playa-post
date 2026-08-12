@@ -155,6 +155,45 @@ describe('render.yaml (ADR-0009)', () => {
     }
   });
 
+  it('declares no value the configuration schema would reject at boot', () => {
+    // Every `value:` in this file is a string the server parses at startup and nothing
+    // type-checks before then, so `PURGE_RETENTION_DAYS: thirty` or `LOG_LEVEL: verbose`
+    // is a green CI run and a service that exits non-zero inside `loadConfiguration`.
+    // Defaulted keys are exactly the ones at risk here: they are optional, so the
+    // undefaulted-key check above cannot see them, and declaring one wrong is strictly
+    // worse than leaving it out.
+    //
+    // Derived from the schema rather than a list, so a key added to either side is
+    // covered without this test being touched. Keys Render owns (`NODE_VERSION`) are not
+    // in the shape and are skipped.
+    const declared = Object.fromEntries(
+      [...blueprint.matchAll(/-[ \t]*key:[ \t]*(\w+)[ \t]*\n\s*value:[ \t]*(.+?)[ \t]*$/gm)].map(
+        (match): [string, string] => [match[1] ?? '', unquote(match[2] ?? '')],
+      ),
+    );
+
+    // Non-vacuity: a formatting change that stopped this pattern matching would otherwise
+    // leave the assertion below passing against an empty environment.
+    expect(Object.keys(declared).length).toBeGreaterThan(0);
+
+    // Parsed as a whole rather than field by field, so the schema is exercised exactly as
+    // boot exercises it. Issues naming keys this file does NOT declare are somebody else's
+    // subject — `DATABASE_URL` is `sync: false` and therefore absent here by design, and
+    // the check above already couples the undefaulted keys to the blueprint.
+    const result = environmentSchema.safeParse(declared);
+    const rejected = result.success
+      ? []
+      : [
+          ...new Set(
+            result.error.issues
+              .map((issue) => String(issue.path[0]))
+              .filter((key) => key in declared),
+          ),
+        ];
+
+    expect(rejected, 'render.yaml declares a value the server would exit on').toEqual([]);
+  });
+
   it('keeps every Web Push key out of git, values in the secret store', () => {
     // `sync: false` is how a Render blueprint says "prompt for this once and keep it".
     // The private key is a genuine secret; the public key and the contact are not, and

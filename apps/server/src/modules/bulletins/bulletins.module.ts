@@ -15,7 +15,9 @@ import type { HiddenBulletinsRepository } from './application/hidden-bulletins.r
 import { createListBoardQuery } from './application/list-board.query';
 import { createListDismissedBulletinsQuery } from './application/list-dismissed-bulletins.query';
 import { createListMyBulletinsQuery } from './application/list-my-bulletins.query';
+import type { RemovedBulletinsRepository } from './application/removed-bulletins.repository';
 import { createPostgresBulletinRepository } from './persistence/postgres-bulletin.repository';
+import { createPostgresRemovedBulletinsRepository } from './persistence/postgres-removed-bulletins.repository';
 import { createBulletinsRouter, type BulletinsRouter } from './transport/bulletins.router';
 
 /** What the composition root has to hand this module. */
@@ -85,6 +87,15 @@ export interface BulletinsModule {
    * running the same use case rather than by two callers agreeing to.
    */
   readonly createBulletin: CreateBulletinService;
+  /**
+   * This module's half of the retention sweep (issue #169) — hard-deletes bulletins whose
+   * author removed them longer ago than the configured window.
+   *
+   * Exposed unstarted and unscheduled, the way `AppContainer.outboxDrainer` is: *when* it
+   * runs is `entrypoints/purge/start-purge-poller.ts`'s job, because scheduling is a fact
+   * about the runtime and a module may not know one (ADR-0009).
+   */
+  readonly removedBulletins: RemovedBulletinsRepository;
 }
 
 /**
@@ -135,5 +146,12 @@ export function createBulletinsModule(dependencies: BulletinsModuleDependencies)
     }),
     findVisibleBulletin: createFindVisibleBulletinAuthorQuery({ bulletins }),
     createBulletin,
+    // A second repository over the same connection, and separate from `bulletins` on
+    // purpose: every statement in that one is addressed by an author or a viewer, and a
+    // retention sweep is addressed by a clock. Keeping them apart is what lets
+    // composition hand the purge entrypoint something that can only delete old rows.
+    removedBulletins: createPostgresRemovedBulletinsRepository({
+      database: dependencies.database,
+    }),
   };
 }

@@ -53,6 +53,24 @@ const environmentKeys = z.object({
    */
   SUPABASE_URL: z.url(),
   /**
+   * How many days a soft-deleted row is kept before the purge hard-deletes it
+   * (issue #169) — a removed bulletin's `archived_at`, a deleted saved view's
+   * `deleted_at`.
+   *
+   * **Defaulted, and it is the rule above that earns it rather than an exception to
+   * it.** A default is right when every deployment would want the same value, and 30
+   * days is a retention window rather than an identifier: it names no external system,
+   * so there is no wrong-but-plausible value that could point this deployment at
+   * somebody else's anything. The bound is the safety property — `min(1)` refuses a
+   * zero or negative window, which would purge rows the moment they were deleted and
+   * make the sweep indistinguishable from a hard delete.
+   *
+   * `z.coerce`, because an environment variable is always a string. Deliberately not
+   * upper-bounded: "keep them for two years" is a legitimate policy choice, and a
+   * ceiling here would be this file inventing one.
+   */
+  PURGE_RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
+  /**
    * VAPID application server public key — URL-safe base64, and **not a secret**: the
    * browser needs it to subscribe, so `apps/web` ships the same string as
    * `VITE_VAPID_PUBLIC_KEY`. Optional; see {@link VAPID_KEYS}.
@@ -166,6 +184,13 @@ export interface Configuration {
   readonly databaseUrl: string;
   /** Supabase project base URL. Composition derives the JWKS endpoint from it (ADR-0011). */
   readonly supabaseUrl: string;
+  /**
+   * Days a soft-deleted row survives before the purge removes it for good (#169).
+   *
+   * At least 1. Read exactly once, by `composition/container.ts`, and handed to the
+   * purge — no module reads a retention window of its own.
+   */
+  readonly purgeRetentionDays: number;
   /**
    * VAPID credentials, or **`null` when this deployment sends no Web Push** — the
    * state every environment without the three `VAPID_*` keys is in, including every

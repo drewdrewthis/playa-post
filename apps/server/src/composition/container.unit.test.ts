@@ -19,6 +19,7 @@ const configuration: Configuration = {
   logLevel: 'silent',
   databaseUrl: 'postgres://app_rw@127.0.0.1:1/nothing_listening_here',
   supabaseUrl: 'https://project-that-does-not-exist.supabase.co',
+  purgeRetentionDays: 30,
   webPush: null,
 };
 
@@ -122,6 +123,22 @@ describe('buildAppContainer', () => {
 
     expect(container.outboxDrainer).toBeDefined();
     expect(typeof container.outboxDrainer.drainOnce).toBe('function');
+
+    return container.dispose();
+  });
+
+  it('wires the retention purge, so the poller started in main.ts has something to call (#169)', () => {
+    // Shape only — the same claim this file makes about the drainer, and for the same
+    // reason: this suite reaches no database (`databaseUrl` names a port with nothing on
+    // it), and a sweep round is two `DELETE`s. **Which** stores are in the `targets`
+    // array is the failure that matters and cannot be seen from here, so it is asserted
+    // by name in `tests/integration/soft-delete-purge.integration.test.ts` against a real
+    // container — a store left out of that array accumulates deleted rows forever with
+    // nothing thrown, nothing logged, and every module's own suite green.
+    const container = buildAppContainer(configuration);
+
+    expect(container.softDeletePurge).toBeDefined();
+    expect(typeof container.softDeletePurge.purgeOnce).toBe('function');
 
     return container.dispose();
   });

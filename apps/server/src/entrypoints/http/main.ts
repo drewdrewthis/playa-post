@@ -2,26 +2,29 @@ import { loadServerConfiguration } from '../../composition/config';
 import { buildAppContainer } from '../../composition/container';
 import { startNotificationFlushPoller } from '../notification-flush/start-notification-flush-poller';
 import { startOutboxDrainerPoller } from '../outbox-drainer/start-outbox-drainer-poller';
+import { startPurgePoller } from '../purge/start-purge-poller';
 
 import { createHttpServer } from './http-server';
 
 /**
  * Process entrypoint for the HTTP runtime.
  *
- * Composition root → container → server → listen, plus the two background loops
- * ADR-0006 asks for: the outbox-drainer poll (M2.14) and the notification
- * grouping-window flush (M2.11). ADR-0006 names "an in-process poller … no cron
- * variant, no second service" for the Node target, so both start and stop alongside
- * the HTTP server in this same file's own startup sequence rather than in a second
- * `main.ts` — the composition root is still built by a function rather than assembled
- * here, which is what let this file gain its long-lived tasks without becoming the
- * place that builds one.
+ * Composition root → container → server → listen, plus the three background loops
+ * ADR-0006 asks for: the outbox-drainer poll (M2.14), the notification grouping-window
+ * flush (M2.11), and the soft-delete retention sweep (issue #169). ADR-0006 names "an
+ * in-process poller … no cron variant, no second service" for the Node target, so all
+ * three start and stop alongside the HTTP server in this same file's own startup
+ * sequence rather than in a second `main.ts` — the composition root is still built by a
+ * function rather than assembled here, which is what let this file gain its long-lived
+ * tasks without becoming the place that builds one.
  *
- * The two are separate loops on separate intervals because they are driven by
- * different things: the drainer reacts to rows arriving, the flush reacts to time
- * passing. The flush is not one of the drainer's consumers, and the drainer is told
- * (`excludedEventTypes`, wired in the container) never to claim the rows the flush
- * owns.
+ * They are separate loops on separate intervals because they are driven by different
+ * things: the drainer reacts to rows arriving, the flush reacts to a 60-second window
+ * elapsing, and the purge reacts to a retention window measured in days. The flush is not
+ * one of the drainer's consumers, and the drainer is told (`excludedEventTypes`, wired in
+ * the container) never to claim the rows the flush owns. The purge shares nothing with
+ * either: it publishes no event, reads no outbox row, and touches only rows every other
+ * read already filters out.
  *
  * ⚠ **The flush loop is conditional.** `container.notificationFlush` is `null` when the
  * wired push transport cannot deliver — which is any deployment without the three
@@ -40,6 +43,13 @@ import { createHttpServer } from './http-server';
  * `pnpm build:server:node` writes (ADR-0009). It binds `HOST`/`PORT` from
  * configuration, which is why the blueprint sets `HOST=0.0.0.0`: the default
  * `127.0.0.1` is unreachable from outside the container.
+ *
+ * ⚠ **The purge loop is not conditional.** Unlike the flush there is no configuration
+ * under which it could have nothing to do — the retention window has a default, and a
+ * deployment that skipped the sweep would keep every deleted row forever, which is the
+ * failure issue #169 exists to end. It logs only rounds that actually removed something;
+ * an hourly line reading zero is the noise that trains a reader to skip the one line that
+ * matters.
  *
  * Configuration is loaded and the container is built **before** the signal handlers
  * are registered, so a missing `DATABASE_URL` or `SUPABASE_URL` exits non-zero within
@@ -63,6 +73,34 @@ const notificationFlushPoller =
         onError: (error) =>
           server.log.error({ err: error }, 'notification flush round failed'),
       });
+const purgePoller = startPurgePoller({
+  purge: container.softDeletePurge,
+  onError: (error) => server.log.error({ err: error }, 'retention purge round failed'),
+  // ⚠ **Counts in the message, not in fields, and that is the logger's design rather
+  // than a style choice.** `createLogger`'s allowlist drops every field not on it
+  // (M1-AC11), so `{ totalRows }` would be silently discarded and this line would say
+  // only that *something* was purged. Widening a redaction control for a housekeeping
+  // line is the wrong trade; the message string is not filtered, and these are counts.
+  //
+  // Counts and a cutoff only — never a row's, an author's, or an owner's identifier.
+  // What went was somebody's removed bulletin or deleted saved view, and naming one here
+  // would be exactly the durable record of a person's own content that ADR-0006 and
+  // M2-AC16 keep out of every payload in this system.
+  //
+  // The cutoff is per entry rather than per round because each target carries its own
+  // retention window — they happen to match today, and a single line for both would stop
+  // being true the first time one does not.
+  onPurged: (result) =>
+    server.log.info(
+      `retention purge removed ${String(result.totalRows)} soft-deleted rows ` +
+        `(${result.purged
+          .map(
+            (entry) =>
+              `${entry.name}: ${String(entry.rows)} deleted before ${entry.deletedBefore.toISOString()}`,
+          )
+          .join(', ')})`,
+    ),
+});
 
 if (notificationFlushPoller === null) {
   // Logged at startup, every boot, so the skipped loop is a visible decision rather
@@ -80,20 +118,20 @@ if (notificationFlushPoller === null) {
  * Without it the runtime is killed mid-request and the client sees a reset connection
  * rather than a response.
  *
- * Both pollers stop first: each stops scheduling further rounds and waits for its own
- * in-flight round to settle before anything downstream touches the pool it works
+ * All three pollers stop first: each stops scheduling further rounds and waits for its
+ * own in-flight round to settle before anything downstream touches the pool it works
  * through. `server.close()` next, then `container.dispose()`: draining the pool while a
- * request — or a drain round, or a flush mid-transaction — is still using it turns a
- * clean shutdown into failed queries. The order is the reverse of construction, which
- * is the only ordering discipline ADR-0003's two-scope design needs.
+ * request — or a drain round, or a flush mid-transaction, or a purge mid-`DELETE` — is
+ * still using it turns a clean shutdown into failed queries. The order is the reverse of
+ * construction, which is the only ordering discipline ADR-0003's two-scope design needs.
  *
- * The pollers are stopped sequentially rather than concurrently, and the flush goes
- * first only because it was constructed last — `?.`, because it may never have been
- * started at all (see above), and a skipped loop has nothing to stop. They share no
- * state: a flush claims its windows by inserting receipts and a half-finished round
- * rolls back whole, so stopping either one first is safe — and a flush interrupted
- * before it ran is simply retried by the next process, because its rows are still
- * `pending`.
+ * The pollers are stopped sequentially rather than concurrently, in reverse construction
+ * order — `?.` on the flush, because it may never have been started at all (see above),
+ * and a skipped loop has nothing to stop. They share no state: a flush claims its windows
+ * by inserting receipts and a half-finished round rolls back whole, and a purge round
+ * interrupted between its two targets simply finishes on the next process's first sweep,
+ * so stopping any of them first is safe — a flush interrupted before it ran is likewise
+ * retried by the next process, because its rows are still `pending`.
  *
  * `once`, not `on`: a second signal during shutdown means "stop harder", and
  * re-entering `close()` would hang instead. Render escalates to `SIGKILL` on its own
@@ -103,6 +141,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   server.log.info({ signal }, 'shutting down');
 
   try {
+    await purgePoller.stop();
     await notificationFlushPoller?.stop();
     await outboxDrainerPoller.stop();
     await server.close();

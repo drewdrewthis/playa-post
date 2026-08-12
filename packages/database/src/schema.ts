@@ -247,6 +247,10 @@ export interface AppSavedViews {
   ast: Json;
   ast_version: number;
   created_at: Timestamp;
+  /**
+   * NULL means live. A non-NULL value is the instant views.saved.delete removed it: the row is absent from every read (all of them scoped WHERE owner_id = <actor> AND deleted_at IS NULL) and is hard-deleted by the purge once it is older than PURGE_RETENTION_DAYS. Deleting a view still clears its Notify Me designation outright in the same transaction — a bell whose card is gone has no off-switch left (D16).
+   */
+  deleted_at: Timestamp | null;
   id: Generated<string>;
   name: string;
   owner_id: string;

@@ -36,6 +36,7 @@ describe('loadConfiguration', () => {
       logLevel: 'info',
       databaseUrl: REQUIRED_ENVIRONMENT.DATABASE_URL,
       supabaseUrl: REQUIRED_ENVIRONMENT.SUPABASE_URL,
+      purgeRetentionDays: 30,
       webPush: null,
     });
   });
@@ -86,7 +87,62 @@ describe('loadConfiguration', () => {
       logLevel: 'warn',
       databaseUrl: REQUIRED_ENVIRONMENT.DATABASE_URL,
       supabaseUrl: REQUIRED_ENVIRONMENT.SUPABASE_URL,
+      purgeRetentionDays: 30,
       webPush: null,
+    });
+  });
+
+  /**
+   * The retention window behind the soft-delete purge (issue #169, AC3: "configuration-
+   * driven, not hardcoded").
+   *
+   * The default is asserted twice above as part of the whole-object shape; these are the
+   * cases that make the key *configuration* rather than a constant with a longer name.
+   */
+  describe('PURGE_RETENTION_DAYS', () => {
+    it('takes the configured window, coerced from the string a process receives', () => {
+      const configuration = loadConfiguration({
+        ...REQUIRED_ENVIRONMENT,
+        PURGE_RETENTION_DAYS: '7',
+      });
+
+      expect(configuration.purgeRetentionDays).toBe(7);
+    });
+
+    it('refuses a zero window, which would purge a row the moment it was deleted', () => {
+      // A soft delete whose retention is zero is a hard delete with extra steps — and
+      // silently so, since every read already hides the row. Refusing at boot is the only
+      // place that is cheap to notice.
+      expect(() =>
+        loadConfiguration({ ...REQUIRED_ENVIRONMENT, PURGE_RETENTION_DAYS: '0' }),
+      ).toThrow(ConfigurationError);
+    });
+
+    it('refuses a negative window, which would reach forward past `now`', () => {
+      expect(() =>
+        loadConfiguration({ ...REQUIRED_ENVIRONMENT, PURGE_RETENTION_DAYS: '-1' }),
+      ).toThrow(ConfigurationError);
+    });
+
+    it('refuses a fractional or unparseable window rather than rounding it', () => {
+      expect(() =>
+        loadConfiguration({ ...REQUIRED_ENVIRONMENT, PURGE_RETENTION_DAYS: '30.5' }),
+      ).toThrow(ConfigurationError);
+      expect(() =>
+        loadConfiguration({ ...REQUIRED_ENVIRONMENT, PURGE_RETENTION_DAYS: 'thirty' }),
+      ).toThrow(ConfigurationError);
+    });
+
+    it('names the key when it is wrong, and never falls back to the default', () => {
+      let thrown: unknown;
+      try {
+        loadConfiguration({ ...REQUIRED_ENVIRONMENT, PURGE_RETENTION_DAYS: '0' });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(ConfigurationError);
+      expect((thrown as ConfigurationError).invalidKeys).toEqual(['PURGE_RETENTION_DAYS']);
     });
   });
 

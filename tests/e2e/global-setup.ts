@@ -80,6 +80,10 @@ export default async function globalSetup(_config: FullConfig): Promise<() => Pr
       'e2e_app_rw_in_a_throwaway_container',
     ),
     supabaseUrl: jwtIssuer.baseUrl,
+    // Never swept: this harness builds the container but starts no purge poller (that is
+    // `entrypoints/http/main.ts`'s job, and this file boots the HTTP server directly), and
+    // every row a browser walk creates is seconds old regardless.
+    purgeRetentionDays: 30,
     // No VAPID keys, and none needed: the override below replaces the transport
     // outright, so this harness reaches a local HTTP recorder instead of a real push
     // service. Configuring keys here would sign requests nothing verifies.

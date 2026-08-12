@@ -85,7 +85,24 @@ replaying a sequence.
 ### Scheduled (cron) work, same entrypoint family
 
 Outbox drain (1 min) · bulletin expiry sweep · notification grouping window flush ·
-`mutation_results` prune (ADR-0005, daily) · dead-event alert.
+`mutation_results` prune (ADR-0005, daily) · **soft-delete retention purge (hourly)** ·
+dead-event alert.
+
+The retention purge shipped with [#169](https://github.com/drewdrewthis/playa-post/issues/169)
+(decision D17) as the third in-process poller, `apps/server/src/entrypoints/purge/`, in the
+same shape as the other two. It hard-deletes rows whose soft delete is older than
+`PURGE_RETENTION_DAYS` (default 30) and **publishes nothing**: the state change was the
+delete, a month earlier, and it published whatever it owed then — an event here would tell a
+consumer "this was deleted" about something absent from every read since, and would durably
+record that a person deleted something long after the fact.
+
+⚠ **The two chores this ADR names for itself are still unimplemented and are not that
+poller's**: pruning `published` outbox rows at fourteen days, and the `mutation_results`
+prune. Both remain [#118](https://github.com/drewdrewthis/playa-post/issues/118)'s scope. They
+are a debugging-retention policy about infrastructure rather than a promise to a person about
+their own data, and folding them behind #169's one configuration key would make the shorter
+window impossible to state. The poller is their obvious home; each arrives as another target
+with a window of its own.
 
 ## Alternatives considered
 
