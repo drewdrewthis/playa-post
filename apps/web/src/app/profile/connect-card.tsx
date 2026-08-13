@@ -1,10 +1,21 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type JSX } from 'react';
 import QRCode from 'react-qr-code';
 
 import { useApi } from '../api/api-provider';
+import { PERSONAL_LINK_QUERY_KEY } from '../connections/connection-query-keys';
+import {
+  PERSONAL_LINK_CARD_LINE,
+  PERSONAL_LINK_ROTATED_LINE,
+  ROTATE_PERSONAL_LINK_LABEL,
+  ROTATE_PERSONAL_LINK_LINE,
+} from '../connections/connection-request-copy';
 
-import { inviteShareBlurb, inviteShareText, inviteUrl } from './invite-share';
+import {
+  personalLinkShareBlurb,
+  personalLinkShareText,
+  personalLinkUrl,
+} from './personal-link-share';
 import { RetryRow } from './retry-row';
 
 /** How long the copy button's "Copied" confirmation holds before reverting — the same
@@ -14,55 +25,77 @@ import { RetryRow } from './retry-row';
 export const COPIED_HOLD_MS = 1500;
 
 /**
- * The one spelling of the invite-card query key, the discipline
- * `graph-query-keys.ts` documents. Today this card is the only reader; the day an
- * accept path wants to invalidate it, that writer imports this name instead of
- * re-spelling the literal and failing silently, forever.
- */
-export const INVITE_QUERY_KEY = ['invite', 'mine'] as const;
-
-/**
- * The You screen's standing CONNECT card (issues #90 and #142): QR, link, consent line
- * and share button, on screen the moment the card is, with nothing to press first.
+ * The You screen's standing CONNECT card (issues #90, #142 and #206): QR, link, what the
+ * link does, a share button, and a rotate control.
  *
- * Its own component rather than a block inside `YourProfileRoute` because the card is
- * the screen's one piece with three renderable states and no dependence on the session
- * or the offline store — extracted, its loading and error branches are mountable over
- * `mount-with-api`'s fake alone, where the route as a whole would drag Dexie and
- * IndexedDB into jsdom (PR #144 review).
+ * ⚠ **It shares a personal link, not an invite token** (issue #206). The two differ in the
+ * one way that matters on this screen: an invite was spent by whoever opened it first, so a
+ * link re-sent in a group chat connected one person and gave everybody else "this invite
+ * cannot be opened" — the prod failure #206 was filed for. A personal link is an address.
+ * It never dies from use, opening it connects nobody, and the owner answers each request
+ * from the inbox on `/graph`.
+ *
+ * ⚠ **Nothing here mints an invite any more, and `connections.invitations.*` is still
+ * served.** Tokens already sitting in somebody's chat history have to keep opening; what
+ * changed is that no new one is created. Reintroducing a `create` call on this screen would
+ * put the spendable model back in front of users while the permanent one sits beside it.
+ *
+ * Its own component rather than a block inside `YourProfileRoute` because the card is the
+ * screen's one piece with three renderable states and no dependence on the session or the
+ * offline store — extracted, its loading and error branches are mountable over
+ * `mount-with-api`'s fake alone, where the route as a whole would drag Dexie and IndexedDB
+ * into jsdom (PR #144 review).
  */
 export function ConnectCard(): JSX.Element {
   const api = useApi();
+  const queryClient = useQueryClient();
 
   /*
-   * A write behind `useQuery`, deliberately. The comp's card *stands ready* — there is no
-   * "create invite" step to press — so the mint has to happen on arrival, and arrival is
-   * what a query models. What makes it safe is the *server*: `invitations.create` is
-   * get-or-create, returning the outstanding pending invite and minting only when there
-   * is none, so refetches, cache eviction, reloads, and the offline sync-drain's blanket
-   * invalidation all land on the same token instead of minting fresh ones. `staleTime:
-   * Infinity` is just politeness — it spares the network, it is not the safety mechanism.
-   * A useful side effect of eviction re-asking: once this invite is spent, the next
-   * arrival shows a live token where a purely client-owned answer showed the dead one
-   * forever.
+   * A write behind `useQuery`, deliberately — the same trade the invite card made, and safe
+   * here for a stronger reason. The comp's card *stands ready*: there is no "create my link"
+   * step to press, so the mint has to happen on arrival, and arrival is what a query models.
+   * What makes it safe is the *server*: `personalLink.ensure` is get-or-create keyed on the
+   * owner, so refetches, cache eviction, reloads, and the offline sync-drain's blanket
+   * invalidation all land on the same slug. It is the database's `on conflict (owner_id)`
+   * rather than a read-then-write, so two arrivals racing cannot mint two links.
+   *
+   * ⚠ **A second call must never rotate**, which is the one bug this arrangement could have
+   * and it would be silent: the screen would show a working link while every copy already
+   * shared stopped resolving. Rotation is the explicit control below, and nothing else.
+   *
+   * `staleTime: Infinity` is politeness — it spares the network — not the safety mechanism.
    */
-  const invite = useQuery({
-    queryKey: INVITE_QUERY_KEY,
-    queryFn: () => api.mutate('connections.invitations.create', undefined),
+  const link = useQuery({
+    queryKey: PERSONAL_LINK_QUERY_KEY,
+    queryFn: () => api.mutate('connections.personalLink.ensure', undefined),
     staleTime: Infinity,
   });
 
-  const shareUrl =
-    invite.data === undefined ? null : inviteUrl(window.location.origin, invite.data.token);
+  const [rotated, setRotated] = useState(false);
 
-  if (invite.isError) {
-    return (
-      <RetryRow message="That invite did not get created." onRetry={() => void invite.refetch()} />
-    );
+  const rotate = useMutation({
+    mutationFn: () => api.mutate('connections.personalLink.rotate', undefined),
+    onSuccess: (fresh) => {
+      /*
+       * The new link is written straight into the cache rather than invalidated into a
+       * refetch. The mutation already returned the authoritative row, and a refetch here
+       * would leave a window in which the card shows the *old* slug — a URL that no longer
+       * opens — which is the one thing a rotation must never display.
+       */
+      queryClient.setQueryData(PERSONAL_LINK_QUERY_KEY, fresh);
+      setRotated(true);
+    },
+  });
+
+  const shareUrl =
+    link.data === undefined ? null : personalLinkUrl(window.location.origin, link.data.slug);
+
+  if (link.isError) {
+    return <RetryRow message="Your link did not load." onRetry={() => void link.refetch()} />;
   }
 
   if (shareUrl === null) {
-    return <p className="profile__quiet">Minting your invite…</p>;
+    return <p className="profile__quiet">Getting your link…</p>;
   }
 
   return (
@@ -79,74 +112,121 @@ export function ConnectCard(): JSX.Element {
         (33×33 → 37×37 modules) — redundancy is cheap, a failed scan at the trash
         fence is not.
       */}
-      <div className="profile__qr" data-testid="invite-qr">
+      <div className="profile__qr" data-testid="personal-link-qr">
         <QRCode value={shareUrl} size={100} level="M" bgColor="#ffffff" fgColor="#000000" />
       </div>
 
       <div className="profile__connect-body">
         <div className="profile__invite-row">
-          <span className="profile__invite-link" data-testid="invite-link">
+          <span className="profile__invite-link" data-testid="personal-link">
             {shareUrl}
           </span>
-          <CopyLinkButton url={shareUrl} />
+          {/*
+            Sharing or copying clears the rotated banner: those are the acts of moving on
+            to the new link, and "the old one no longer opens" is stale advice once the new
+            one is in somebody's hands. Without this the banner would sit for the rest of
+            the mount.
+          */}
+          <CopyLinkButton url={shareUrl} onActivate={() => setRotated(false)} />
         </div>
-        <p className="screen__aside">
-          Scan or tap to connect. Nothing happens until you both consent.
-        </p>
+        <p className="screen__aside">{PERSONAL_LINK_CARD_LINE}</p>
         <button
           className="profile__share"
-          data-testid="invite-share-button"
+          data-testid="personal-link-share-button"
           type="button"
           onClick={() => {
-            void shareInvite(shareUrl);
+            setRotated(false);
+            void sharePersonalLink(shareUrl);
           }}
         >
-          Share invite
+          Share link
         </button>
+
+        {/*
+          The rotate control, and the sentence that makes it pressable. Both halves of
+          `ROTATE_PERSONAL_LINK_LINE` are load-bearing: people do not press a
+          destructive-looking button without knowing its blast radius, and the product
+          argument for a rotatable link is that rotating is cheap.
+
+          ⚠ No confirmation dialog, deliberately. The moment somebody most wants to rotate
+          is the moment they are being bothered through the link, and a dialog between them
+          and that is a tax on the one action this feature exists to make easy. An
+          accidental rotation costs a re-share; a slow one costs more.
+        */}
+        <p className="screen__aside profile__rotate-line">{ROTATE_PERSONAL_LINK_LINE}</p>
+        <button
+          className="button button--quiet"
+          data-testid="rotate-personal-link-button"
+          type="button"
+          disabled={rotate.isPending}
+          onClick={() => {
+            rotate.mutate();
+          }}
+        >
+          {ROTATE_PERSONAL_LINK_LABEL}
+        </button>
+
+        {rotate.isError ? (
+          <p className="form__error" role="alert" data-testid="rotate-personal-link-error">
+            That did not work. Your current link still opens.
+          </p>
+        ) : null}
+
+        {rotated ? (
+          <p className="banner banner--good" role="status" data-testid="personal-link-rotated">
+            {PERSONAL_LINK_ROTATED_LINE}
+          </p>
+        ) : null}
       </div>
     </div>
   );
 }
 
 /**
- * Hand the invite to the platform's share sheet, or to the clipboard.
+ * Hand the link to the platform's share sheet, or to the clipboard.
  *
  * ⚠ **`text` and `url` never overlap.** `navigator.share`'s `text` field carries only the
- * consent blurb; the link travels solely in `url`. Passing both fields with the link
- * folded into `text` too used to mean a share target that reads both fields verbatim —
- * the OS share sheet's own Copy action among them — pasted the link twice (issue #160).
- * The clipboard fallback has no separate `url` field to lean on, so it gets the combined,
- * self-contained form instead.
+ * blurb; the link travels solely in `url`. Passing both fields with the link folded into
+ * `text` too used to mean a share target that reads both fields verbatim — the OS share
+ * sheet's own Copy action among them — pasted the link twice (issue #160). The clipboard
+ * fallback has no separate `url` field to lean on, so it gets the combined, self-contained
+ * form instead.
  *
- * ⚠ Both branches can reject — `navigator.share` throws `AbortError` when the user
- * dismisses the sheet, and the clipboard throws when the document is not focused. Neither
- * is a failure worth interrupting anybody over, and neither leaves the app in a bad state,
- * so both are swallowed. The link is on screen either way, which is the fallback that
- * always works.
+ * ⚠ Both branches can reject — `navigator.share` throws `AbortError` when the user dismisses
+ * the sheet, and the clipboard throws when the document is not focused. Neither is a failure
+ * worth interrupting anybody over, and neither leaves the app in a bad state, so both are
+ * swallowed. The link is on screen either way, which is the fallback that always works.
  */
-async function shareInvite(url: string): Promise<void> {
+async function sharePersonalLink(url: string): Promise<void> {
   try {
     if (typeof navigator.share === 'function') {
-      await navigator.share({ text: inviteShareBlurb(), url });
+      await navigator.share({ text: personalLinkShareBlurb(), url });
       return;
     }
 
-    await navigator.clipboard.writeText(inviteShareText(url));
+    await navigator.clipboard.writeText(personalLinkShareText(url));
   } catch {
     // Deliberately silent; see above.
   }
 }
 
 /**
- * The one-tap copy affordance beside the invite link (issue #160 AC3/AC4): the app's
- * icon-button idiom — a round svg-glyph button whose accessible name carries state, the
- * same shape `ThemeToggle` uses for its own multi-state glyph — sized to sit inline
- * beside a text row instead of the header's chrome.
+ * The one-tap copy affordance beside the link (issue #160 AC3/AC4): the app's icon-button
+ * idiom — a round svg-glyph button whose accessible name carries state, the same shape
+ * `ThemeToggle` uses for its own multi-state glyph — sized to sit inline beside a text row
+ * instead of the header's chrome.
  *
  * Copies the **bare** URL, deliberately: this is the "grab the link" affordance, not the
- * share sheet's, so there is no consent blurb to carry.
+ * share sheet's, so there is no blurb to carry.
  */
-function CopyLinkButton({ url }: { readonly url: string }): JSX.Element {
+function CopyLinkButton({
+  url,
+  onActivate,
+}: {
+  readonly url: string;
+  /** Fired on every press, success or not — the press itself is the "moving on" signal. */
+  readonly onActivate?: () => void;
+}): JSX.Element {
   const [copied, setCopied] = useState(false);
 
   // Mirrors `ComposeBulletinForm`'s toast timer: setting `copied` is what schedules its
@@ -176,7 +256,7 @@ function CopyLinkButton({ url }: { readonly url: string }): JSX.Element {
       await navigator.clipboard.writeText(url);
       setCopied(true);
     } catch {
-      // Deliberately silent, matching `shareInvite` above: the link is still on screen
+      // Deliberately silent, matching `sharePersonalLink` above: the link is still on screen
       // to copy by hand, and nothing else here depends on this succeeding.
     }
   }
@@ -184,10 +264,11 @@ function CopyLinkButton({ url }: { readonly url: string }): JSX.Element {
   return (
     <button
       className={copied ? 'icon-button profile__copy profile__copy--copied' : 'icon-button profile__copy'}
-      data-testid="copy-invite-link-button"
+      data-testid="copy-personal-link-button"
       type="button"
-      aria-label={copied ? 'Copied' : 'Copy invite link'}
+      aria-label={copied ? 'Copied' : 'Copy your link'}
       onClick={() => {
+        onActivate?.();
         void onCopy();
       }}
     >

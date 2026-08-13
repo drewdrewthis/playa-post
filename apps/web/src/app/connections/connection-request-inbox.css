@@ -1,0 +1,94 @@
+/*
+ * The connection-request inbox, at the top of `/graph`'s chrome (issue #206).
+ *
+ * The same dashed accent card the intro inbox uses, because it is the same statement:
+ * something is waiting on you. Its own class prefix rather than reusing `.intro-inbox`,
+ * for the reason the two components are separate — they answer different procedures with
+ * different consequences, and a shared selector is how a restyle of one silently restyles
+ * the other's Accept button.
+ *
+ * Every colour is a token from `app/theme/tokens.css`, which declares a complete set in
+ * both palettes; a literal colour here would be a light-mode value shown on a dark screen.
+ */
+
+.request-inbox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-3);
+  padding: var(--pp-space-3);
+  border: 1px dashed var(--pp-accent);
+  border-radius: var(--pp-radius-sm);
+}
+
+.request-inbox__title {
+  margin: 0;
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+
+  /* `--pp-accent-ink`, not `--pp-accent`: tiny text, and the accent proper sits under the
+     4.5:1 AA floor on the light background (see `theme/tokens.css`). */
+  color: var(--pp-accent-ink);
+}
+
+/* The decision's receipt — same voice as the standing lines on the other surfaces. */
+.request-inbox__confirmation {
+  margin: 0;
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  color: var(--pp-accent-ink);
+}
+
+.request-inbox__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-3);
+}
+
+.request-inbox__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+}
+
+/* A dashed rule between requests, so two of them do not read as one. */
+.request-inbox__item + .request-inbox__item {
+  padding-top: var(--pp-space-3);
+  border-top: 1px dashed var(--pp-card-border);
+}
+
+.request-inbox__lede {
+  margin: 0;
+  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  line-height: 1.5;
+  color: var(--pp-ink);
+}
+
+/* What each answer does, in the same voice the intro inbox's own standing line uses. */
+.request-inbox__standing {
+  margin: 0;
+  font-weight: 500;
+  font-size: var(--pp-text-xs);
+  line-height: 1.55;
+  color: var(--pp-sub);
+}
+
+.request-inbox__actions {
+  display: flex;
+  gap: var(--pp-space-2);
+}
+
+.request-inbox__actions .button {
+  flex: 1;
+  padding: var(--pp-space-2) var(--pp-space-3);
+
+  /* 2.75rem = 44px, the WCAG 2.5.5 / platform-HIG touch-target floor: these two sit a
+     thumb-width apart and decide something irreversible. */
+  min-height: 2.75rem;
+  font-size: var(--pp-text-xs);
+}

@@ -10,23 +10,30 @@ import {
 } from '../testing/mount-with-api';
 
 import { COPIED_HOLD_MS, ConnectCard } from './connect-card';
-import { inviteShareBlurb, inviteShareText } from './invite-share';
+import { personalLinkShareBlurb, personalLinkShareText } from './personal-link-share';
 
 /**
- * The CONNECT card's three states, mounted over the fake API (PR #144 review).
+ * The CONNECT card's states, mounted over the fake API (PR #144 review, reworked for
+ * issue #206).
  *
  * ⚠ jsdom, by the per-file pragma above: the `unit` project runs in `node`, and only the
  * files that render React ask for a DOM.
  *
+ * ⚠ **The card shares a personal link now, not an invite token.** Nothing here calls
+ * `connections.invitations.create` any more, and a test that reintroduced it would be
+ * putting the spendable model back in front of users — the failure #206 was filed for.
+ *
  * The success path's *appearance* — QR visible, background pinned white in both themes —
  * is `you-screen.spec.ts`'s job, where a real renderer computes real styles. What lives
- * here is what e2e cannot hold cheaply: the loading and error branches, and the
- * mint-count invariant that remounting the card inside a warm cache does not ask the
- * server to create again.
+ * here is what e2e cannot hold cheaply: the loading and error branches, the mint-count
+ * invariant that remounting inside a warm cache does not ask the server again, and the
+ * rotation behaviour that must never happen by accident.
  */
 
-const TOKEN = 'a-token-that-came-back';
-const CREATE_PATH = 'connections.invitations.create';
+const SLUG = 'aSlugThatCameBack00000';
+const ROTATED_SLUG = 'aFreshSlugAfterRotate1';
+const ENSURE_PATH = 'connections.personalLink.ensure';
+const ROTATE_PATH = 'connections.personalLink.rotate';
 
 let tree: MountedTree | null = null;
 
@@ -40,40 +47,48 @@ afterEach(async () => {
   }
 });
 
-function createCalls(api: { readonly calls: readonly { path: string }[] }): number {
-  return api.calls.filter((call) => call.path === CREATE_PATH).length;
+function callsTo(
+  api: { readonly calls: readonly { path: string }[] },
+  path: string,
+): number {
+  return api.calls.filter((call) => call.path === path).length;
+}
+
+/** What the server answers for a link that already exists. */
+function linkPayload(slug: string): { slug: string; createdAt: string } {
+  return { slug, createdAt: '2026-08-01T00:00:00.000Z' };
 }
 
 describe('ConnectCard', () => {
-  it('shows the minting line while the invite is in flight', async () => {
+  it('shows the waiting line while the link is in flight', async () => {
     const api = createFakeApi({
       // Never settles — the card stays in flight for as long as the assertion needs.
-      [CREATE_PATH]: () => new Promise(() => {}),
+      [ENSURE_PATH]: () => new Promise(() => {}),
     });
 
     tree = await mountWithApi(<ConnectCard />, api);
 
     const quiet = requireElement(tree.container, '.profile__quiet');
-    expect(quiet.textContent).toContain('Minting your invite');
-    expect(tree.container.querySelector('[data-testid="invite-link"]')).toBeNull();
+    expect(quiet.textContent).toContain('Getting your link');
+    expect(tree.container.querySelector('[data-testid="personal-link"]')).toBeNull();
   });
 
   it('renders the refusal with a retry that asks again, and only then', async () => {
     let refuse = true;
     const api = createFakeApi({
-      [CREATE_PATH]: () => {
+      [ENSURE_PATH]: () => {
         if (refuse) {
           throw new Error('the server refused this');
         }
 
-        return { token: TOKEN, invitationId: 'inv-1', createdAt: new Date().toISOString() };
+        return linkPayload(SLUG);
       },
     });
 
     tree = await mountWithApi(<ConnectCard />, api);
 
     const alert = requireElement(tree.container, '[role="alert"]');
-    expect(alert.textContent).toContain('That invite did not get created');
+    expect(alert.textContent).toContain('Your link did not load');
 
     const retry = requireElement<HTMLButtonElement>(tree.container, 'button.profile__dial');
     expect(retry.textContent).toBe('TRY AGAIN');
@@ -83,24 +98,19 @@ describe('ConnectCard', () => {
       retry.click();
     });
 
-    const link = requireElement(tree.container, '[data-testid="invite-link"]');
-    expect(link.textContent).toContain(TOKEN);
-    // One refused, one honored — a retry that fired twice would be minting spares.
-    expect(createCalls(api)).toBe(2);
+    const link = requireElement(tree.container, '[data-testid="personal-link"]');
+    expect(link.textContent).toContain(SLUG);
+    // One refused, one honored — a retry that fired twice would be asking twice for a
+    // resource whose first call is the one that might mint.
+    expect(callsTo(api, ENSURE_PATH)).toBe(2);
   });
 
   it('does not ask the server again when the card remounts inside a warm cache', async () => {
-    const api = createFakeApi({
-      [CREATE_PATH]: () => ({
-        token: TOKEN,
-        invitationId: 'inv-1',
-        createdAt: new Date().toISOString(),
-      }),
-    });
+    const api = createFakeApi({ [ENSURE_PATH]: () => linkPayload(SLUG) });
 
     tree = await mountWithApi(<ToggleableCard />, api);
 
-    expect(createCalls(api)).toBe(1);
+    expect(callsTo(api, ENSURE_PATH)).toBe(1);
 
     const toggle = requireElement<HTMLButtonElement>(
       tree.container,
@@ -111,15 +121,95 @@ describe('ConnectCard', () => {
     await tree.run(() => {
       toggle.click();
     });
-    expect(tree.container.querySelector('[data-testid="invite-link"]')).toBeNull();
+    expect(tree.container.querySelector('[data-testid="personal-link"]')).toBeNull();
 
     await tree.run(() => {
       toggle.click();
     });
 
-    const link = requireElement(tree.container, '[data-testid="invite-link"]');
-    expect(link.textContent).toContain(TOKEN);
-    expect(createCalls(api)).toBe(1);
+    const link = requireElement(tree.container, '[data-testid="personal-link"]');
+    expect(link.textContent).toContain(SLUG);
+    expect(callsTo(api, ENSURE_PATH)).toBe(1);
+  });
+
+  /*
+   * ⚠ **The one bug this card could have, and it would be silent** (issue #206): if
+   * arriving on the screen rotated, the card would show a working link while every copy
+   * already shared stopped resolving. The server's `on conflict (owner_id)` is what
+   * prevents it; this asserts the client never asks for one either.
+   */
+  it('never calls rotate on its own — arriving on the screen is not a rotation', async () => {
+    const api = createFakeApi({
+      [ENSURE_PATH]: () => linkPayload(SLUG),
+      [ROTATE_PATH]: () => linkPayload(ROTATED_SLUG),
+    });
+
+    tree = await mountWithApi(<ToggleableCard />, api);
+    const toggle = requireElement<HTMLButtonElement>(
+      tree.container,
+      '[data-testid="toggle-card"]',
+    );
+    await tree.run(() => {
+      toggle.click();
+    });
+    await tree.run(() => {
+      toggle.click();
+    });
+
+    expect(callsTo(api, ROTATE_PATH)).toBe(0);
+  });
+
+  it('replaces the link on screen the moment a rotation lands, and says so', async () => {
+    const api = createFakeApi({
+      [ENSURE_PATH]: () => linkPayload(SLUG),
+      [ROTATE_PATH]: () => ({ ...linkPayload(ROTATED_SLUG), rotatedAt: '2026-08-13T12:00:00.000Z' }),
+    });
+
+    tree = await mountWithApi(<ConnectCard />, api);
+
+    const rotateButton = requireElement<HTMLButtonElement>(
+      tree.container,
+      '[data-testid="rotate-personal-link-button"]',
+    );
+    await tree.run(() => {
+      rotateButton.click();
+    });
+
+    // ⚠ The new slug has to be on screen *immediately*. The mutation already returned the
+    // authoritative row, so the card writes it into the cache rather than invalidating into
+    // a refetch — a refetch would leave a window showing the old, now-dead URL.
+    const link = requireElement(tree.container, '[data-testid="personal-link"]');
+    expect(link.textContent).toContain(ROTATED_SLUG);
+    expect(link.textContent).not.toContain(SLUG);
+
+    const banner = requireElement(tree.container, '[data-testid="personal-link-rotated"]');
+    expect(banner.textContent).toContain('no longer opens');
+    // One rotation per press. A second call would retire the link the user was just shown.
+    expect(callsTo(api, ROTATE_PATH)).toBe(1);
+  });
+
+  it('keeps the current link on screen when a rotation is refused', async () => {
+    const api = createFakeApi({
+      [ENSURE_PATH]: () => linkPayload(SLUG),
+      [ROTATE_PATH]: () => {
+        throw new Error('the server refused this');
+      },
+    });
+
+    tree = await mountWithApi(<ConnectCard />, api);
+
+    await tree.run(() => {
+      requireElement<HTMLButtonElement>(
+        tree?.container ?? document.body,
+        '[data-testid="rotate-personal-link-button"]',
+      ).click();
+    });
+
+    const link = requireElement(tree.container, '[data-testid="personal-link"]');
+    expect(link.textContent).toContain(SLUG);
+    const error = requireElement(tree.container, '[data-testid="rotate-personal-link-error"]');
+    expect(error.textContent).toContain('still opens');
+    expect(tree.container.querySelector('[data-testid="personal-link-rotated"]')).toBeNull();
   });
 });
 
@@ -136,7 +226,7 @@ describe('ConnectCard', () => {
  * risk breaking whatever else here reads it. The `afterEach` below removes both own
  * properties again so a stub from one test cannot leak into the next.
  */
-describe('sharing and copying the invite link', () => {
+describe('sharing and copying the personal link', () => {
   afterEach(() => {
     Reflect.deleteProperty(navigator, 'share');
     Reflect.deleteProperty(navigator, 'clipboard');
@@ -154,13 +244,7 @@ describe('sharing and copying the invite link', () => {
   }
 
   function createReadyApi(): ReturnType<typeof createFakeApi> {
-    return createFakeApi({
-      [CREATE_PATH]: () => ({
-        token: TOKEN,
-        invitationId: 'inv-1',
-        createdAt: new Date().toISOString(),
-      }),
-    });
+    return createFakeApi({ [ENSURE_PATH]: () => linkPayload(SLUG) });
   }
 
   /**
@@ -175,18 +259,18 @@ describe('sharing and copying the invite link', () => {
 
     tree = await mountWithApi(<ConnectCard />, createReadyApi());
 
-    const link = requireElement(tree.container, '[data-testid="invite-link"]');
+    const link = requireElement(tree.container, '[data-testid="personal-link"]');
     const url = link.textContent ?? '';
 
     const shareButton = requireElement<HTMLButtonElement>(
       tree.container,
-      '[data-testid="invite-share-button"]',
+      '[data-testid="personal-link-share-button"]',
     );
     await tree.run(() => {
       shareButton.click();
     });
 
-    expect(shareMock).toHaveBeenCalledWith({ text: inviteShareBlurb(), url });
+    expect(shareMock).toHaveBeenCalledWith({ text: personalLinkShareBlurb(), url });
 
     const [payload] = shareMock.mock.calls[0] as [{ text: string; url: string }];
     expect(payload.text).not.toContain(payload.url);
@@ -198,18 +282,18 @@ describe('sharing and copying the invite link', () => {
 
     tree = await mountWithApi(<ConnectCard />, createReadyApi());
 
-    const link = requireElement(tree.container, '[data-testid="invite-link"]');
+    const link = requireElement(tree.container, '[data-testid="personal-link"]');
     const url = link.textContent ?? '';
 
     const shareButton = requireElement<HTMLButtonElement>(
       tree.container,
-      '[data-testid="invite-share-button"]',
+      '[data-testid="personal-link-share-button"]',
     );
     await tree.run(() => {
       shareButton.click();
     });
 
-    expect(writeTextMock).toHaveBeenCalledWith(inviteShareText(url));
+    expect(writeTextMock).toHaveBeenCalledWith(personalLinkShareText(url));
   });
 
   /** AC3/AC4 — the standing copy affordance beside the link: bare url, transient confirmation. */
@@ -218,14 +302,14 @@ describe('sharing and copying the invite link', () => {
 
     tree = await mountWithApi(<ConnectCard />, createReadyApi());
 
-    const link = requireElement(tree.container, '[data-testid="invite-link"]');
+    const link = requireElement(tree.container, '[data-testid="personal-link"]');
     const url = link.textContent ?? '';
 
     const copyButton = requireElement<HTMLButtonElement>(
       tree.container,
-      '[data-testid="copy-invite-link-button"]',
+      '[data-testid="copy-personal-link-button"]',
     );
-    expect(copyButton.getAttribute('aria-label')).toBe('Copy invite link');
+    expect(copyButton.getAttribute('aria-label')).toBe('Copy your link');
 
     await tree.run(() => {
       copyButton.click();
@@ -245,7 +329,7 @@ describe('sharing and copying the invite link', () => {
 
     const copyButton = requireElement<HTMLButtonElement>(
       tree.container,
-      '[data-testid="copy-invite-link-button"]',
+      '[data-testid="copy-personal-link-button"]',
     );
 
     await tree.run(() => {
@@ -264,7 +348,7 @@ describe('sharing and copying the invite link', () => {
       });
     });
 
-    expect(copyButton.getAttribute('aria-label')).toBe('Copy invite link');
+    expect(copyButton.getAttribute('aria-label')).toBe('Copy your link');
   });
 });
 

@@ -4,6 +4,7 @@ import { useEffect, useState, type JSX } from 'react';
 import type { Person } from '@playa-post/contracts';
 
 import { useApi } from '../api/api-provider';
+import { ConnectionRequestInbox } from '../connections/connection-request-inbox';
 import { summariseGraph } from '../graph/graph-counts';
 import { GraphNetwork } from '../graph/graph-network';
 import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
@@ -86,11 +87,22 @@ export function GraphHomeRoute(): JSX.Element {
         )}
 
         {/*
-         * Above the canvas, because an intro is a request to add an edge to the very
-         * thing drawn below it — and because somebody has been waiting on this viewer to
-         * answer. It renders nothing at all when there is nothing waiting, so the screen
-         * is unchanged for everybody who has no ask in front of them.
+         * Above the canvas, because a connection request and an intro are both requests to
+         * add an edge to the very thing drawn below them — and because somebody has been
+         * waiting on this viewer to answer. Each renders nothing at all when there is
+         * nothing waiting, so the screen is unchanged for everybody with no ask in front
+         * of them.
+         *
+         * ⚠ Two components rather than one merged inbox, and two sections when both have
+         * rows. They answer different procedures with different consequences — accepting a
+         * request connects you *now*, accepting an introduction connects you moments later
+         * — and a merged list would need a discriminator whose only job is to keep two
+         * Accept buttons from calling each other's mutation.
+         *
+         * Connection requests sit first: they come from somebody holding this viewer's own
+         * published link, which is the more immediate thing to answer.
          */}
+        <ConnectionRequestInbox />
         <IntroInbox />
       </div>
 
@@ -100,7 +112,7 @@ export function GraphHomeRoute(): JSX.Element {
         <GraphNetwork graph={network} onOpenPerson={setSelectedPerson} />
       ) : (
         <p className="screen__empty">
-          Nobody yet. Share your invite from the You screen.
+          Nobody yet. Share your link from the You screen.
         </p>
       )}
 
