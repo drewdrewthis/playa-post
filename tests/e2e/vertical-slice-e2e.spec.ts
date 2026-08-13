@@ -1,6 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { mintInviteViaYouScreen } from './support/mint-invite';
+import {
+  acceptConnectionRequest,
+  readPersonalLinkSlug,
+  sendConnectionRequest,
+} from './support/connect-users';
 
 /**
  * `specs/features/vertical-slice-e2e.feature` › "The full addendum §23 flow passes as
@@ -23,10 +27,13 @@ import { mintInviteViaYouScreen } from './support/mint-invite';
  * | data-testid | Where | What it marks |
  * |---|---|---|
  * | `graph-home` | post-sign-in | Root container of the signed-in graph home view |
- * | `invite-link` | You screen (CONNECT card) | The invite URL, minted on arrival. Since #142/#90 there is no invite control on graph home at all, so this is the only place a token comes from — see `support/mint-invite.ts` |
- * | `invite-open-view` | `/invite/:token` | Preview of who the token invites the viewer to connect with |
- * | `invite-accept-button` | `/invite/:token` | Spend the token and accept the connection |
- * | `connection-accepted-banner` | post-accept | Confirms the connection is now active |
+ * | `personal-link` | You screen (CONNECT card) | The permanent personal-link URL, ensured on arrival. Since #142/#90 there is no connect control on graph home at all, so this is the only place a link comes from — see `support/connect-users.ts` |
+ * | `personal-link-view` | `/c/:slug` | Names the link's owner. Since [#206](https://github.com/drewdrewthis/playa-post/issues/206) this screen connects nobody: it offers a request |
+ * | `send-connection-request-button` | `/c/:slug` | Ask the owner to connect |
+ * | `connection-request-sent` | `/c/:slug` | Confirms the request is waiting, and promises no answer |
+ * | `connection-request-row` | graph home (request inbox) | One request waiting on the owner |
+ * | `connection-request-accept-button` | graph home (request inbox) | The owner's yes — writes the connection in the same transaction |
+ * | `connection-request-inbox-confirmation` | graph home (request inbox) | Confirms the answer once the row is gone |
  * | `graph-connection-node-<handle>` | graph home | One connected person's node, clickable to open their person sheet |
  * | `person-sheet-save-trust-button` | person sheet | Persists the trust slider's value |
  * | `graph-connection-edge-<handle>` | graph home | Visible edge/row proving the connection rendered for this viewer |
@@ -106,7 +113,7 @@ test.describe('The M2 vertical slice, end to end (vertical-slice-e2e.feature, M2
     const pageB = await contextB.newPage();
 
     try {
-      let inviteToken = '';
+      let personalLinkSlug = '';
       let bulletinId = '';
 
       await test.step('1. User A signs in', async () => {
@@ -114,21 +121,23 @@ test.describe('The M2 vertical slice, end to end (vertical-slice-e2e.feature, M2
         await expect(pageA.getByTestId('graph-home')).toBeVisible();
       });
 
-      // The step name is the feature table's, verbatim, and it names an act rather than a
-      // screen — which is why it survives the invite moving to the You screen (#142/#90).
-      await test.step('2. User A creates an invite', async () => {
-        inviteToken = await mintInviteViaYouScreen(pageA);
+      // The step names follow the feature table and name **acts**, not screens — which is
+      // why they survived the invite moving to the You screen (#142/#90) and survive the
+      // model changing under them now. What changed with
+      // [#206](https://github.com/drewdrewthis/playa-post/issues/206) is who performs step
+      // 4: the connection is no longer something user B can take by holding a link, so the
+      // walk now proves mutual consent rather than assuming it.
+      await test.step('2. User A shares their personal link', async () => {
+        personalLinkSlug = await readPersonalLinkSlug(pageA);
       });
 
-      await test.step('3. User B opens the invite', async () => {
+      await test.step('3. User B opens the link and asks to connect', async () => {
         await bootstrapSession(pageB, userBAccessToken);
-        await pageB.goto(`/invite/${inviteToken}`);
-        await expect(pageB.getByTestId('invite-open-view')).toBeVisible();
+        await sendConnectionRequest(pageB, personalLinkSlug);
       });
 
-      await test.step('4. User B accepts the invite', async () => {
-        await pageB.getByTestId('invite-accept-button').click();
-        await expect(pageB.getByTestId('connection-accepted-banner')).toBeVisible();
+      await test.step('4. User A accepts the request', async () => {
+        await acceptConnectionRequest(pageA);
       });
 
       await test.step('5. User A assigns private directional trust to user B', async () => {

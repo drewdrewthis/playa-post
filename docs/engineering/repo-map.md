@@ -50,7 +50,7 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  express the negation of instead of an invariant re-stated at every call site
                  (#176; it was two states, and the view toggle cleared only one of them).
                  A screen whose pieces outgrow one route file gets a sibling feature directory —
-                 src/app/{people,notifications,bulletins,graph,moderation,notes,profile}/ — holding
+                 src/app/{people,notifications,bulletins,graph,moderation,notes,profile,connections}/ — holding
                  its components, its own <feature>.css, and any pure logic worth unit-testing on its
                  own (src/app/bulletins/
                  is the board: card, detail sheet, search bar, the query builder and the relative-time
@@ -90,7 +90,16 @@ apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,conn
                  silence, named unknown-distance for what is missing rather than for waiting),
                  note-sheet-title.ts (a note has no title, so the dialog's accessible name is
                  built from who it is from and how it starts, out of the note's own author card
-                 and never the graph — a name announced is a name disclosed) — #176).
+                 and never the graph — a name announced is a name disclosed) — #176);
+                 src/app/connections/ is the personal link and the requests it produces
+                 (#206/decision D18, ADR-0018): connection-request-copy.ts holds every
+                 sentence the three surfaces share — the You screen's card, /c/:slug
+                 (routes/personal-link-open.tsx) and the owner's inbox
+                 (connection-request-inbox.tsx, which sits above the intro inbox on graph
+                 home) — precisely because the neutral refusal has to read identically on
+                 all of them; connection-query-keys.ts is the two cache keys, one of them
+                 per-slug. profile/personal-link-share.ts is the sibling of
+                 invite-share.ts and keeps #160's blurb/url non-overlap rule).
                  A feature stylesheet is imported
                  by the component that owns it, never added to screens.css.
                  ⚠ The unit project runs in environment: 'node', so a component test costs a
@@ -152,9 +161,14 @@ apps/server/     The modular monolith.
                  semantics are load-bearing, holding the untied query at one per owner, D16.)
                  A module MAY also grow an infrastructure/ for a
                  non-persistence adapter — modules/connections/infrastructure/ holds the node:crypto
-                 CSPRNG behind the invite-token port, and modules/notifications/infrastructure/ holds
+                 CSPRNG behind the invite-token port (shared since #206 with the personal-link
+                 slug), and modules/notifications/infrastructure/ holds
                  the Web Push transport, because domain/ and application/ may not import a Node builtin
-                 and persistence/ is the one directory domain/ may never import (ADR-0012). A module that
+                 and persistence/ is the one directory domain/ may never import (ADR-0012). #206's two
+                 tables live beside app.invitations, which it left untouched: app.personal_links is
+                 one permanent rotatable address per user, app.connection_requests is what opening
+                 one produces, and both are owned by modules/connections — ADR-0018/decision D18.
+                 A module that
                  owns a database function checks its source in at persistence/sql/ and carries a
                  byte-identical copy in the migration that installs it — modules/graph's
                  visible-people.sql and visible-edges.sql, modules/bulletins'
