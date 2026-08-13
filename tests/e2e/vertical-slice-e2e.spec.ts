@@ -106,11 +106,17 @@ test.describe('The M2 vertical slice, end to end (vertical-slice-e2e.feature, M2
     const userAHandle = requireEnv('E2E_USER_A_HANDLE');
     const userBHandle = requireEnv('E2E_USER_B_HANDLE');
 
-    // Given two browser contexts, one per user.
+    // Given two browser contexts, one per user — plus a third for user D, who exists
+    // solely so steps 3–4 walk the request flow on a pair that is genuinely
+    // unconnected. A—B is pre-connected by global-setup (the intro path's degree-2
+    // chain needs the edge), and a connected pair's link screen deliberately offers
+    // no send button, so the consent walk needs a requester nothing else has used.
     const contextA = await browser.newContext();
     const contextB = await browser.newContext();
+    const contextD = await browser.newContext();
     const pageA = await contextA.newPage();
     const pageB = await contextB.newPage();
+    const pageD = await contextD.newPage();
 
     try {
       let personalLinkSlug = '';
@@ -131,9 +137,13 @@ test.describe('The M2 vertical slice, end to end (vertical-slice-e2e.feature, M2
         personalLinkSlug = await readPersonalLinkSlug(pageA);
       });
 
-      await test.step('3. User B opens the link and asks to connect', async () => {
+      // User D is the requester here, not B: A—B is pre-seeded (see contexts above),
+      // and a connected pair's link screen offers no send button. B still signs in
+      // now — every step from 6 on drives pageB with a live session.
+      await test.step('3. User D opens the link and asks to connect', async () => {
         await bootstrapSession(pageB, userBAccessToken);
-        await sendConnectionRequest(pageB, personalLinkSlug);
+        await bootstrapSession(pageD, requireEnv('E2E_USER_D_ACCESS_TOKEN'));
+        await sendConnectionRequest(pageD, personalLinkSlug);
       });
 
       await test.step('4. User A accepts the request', async () => {
@@ -211,6 +221,10 @@ test.describe('The M2 vertical slice, end to end (vertical-slice-e2e.feature, M2
         '11. User A archives the bulletin, and one mutation replays from offline state',
         async () => {
           await pageA.goto('/board');
+          // The card must be on screen BEFORE the network goes away: `goto` resolves on
+          // load, not on the board query, and cutting the network mid-query leaves the
+          // view on the offline fallback with no card to open.
+          await expect(pageA.getByTestId(`board-bulletin-card-${bulletinId}`)).toBeVisible();
           await contextA.setOffline(true);
           // The sheet opens offline: its `bulletins.getById` refresh fails with no
           // network, and it falls back to the copy the board was already built from —
@@ -255,6 +269,7 @@ test.describe('The M2 vertical slice, end to end (vertical-slice-e2e.feature, M2
     } finally {
       await contextA.close();
       await contextB.close();
+      await contextD.close();
     }
   });
 });

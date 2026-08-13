@@ -99,6 +99,13 @@ export default async function globalSetup(_config: FullConfig): Promise<() => Pr
   const userA = await onboard(container, jwtIssuer, 'e2e_user_a', 'User A');
   const userB = await onboard(container, jwtIssuer, 'e2e_user_b', 'User B');
   const userC = await onboard(container, jwtIssuer, 'e2e_user_c', 'User C');
+  // D exists for `vertical-slice-e2e.spec.ts`'s consent walk and nothing else: the
+  // walk needs a pair that is genuinely unconnected when its step runs, and every
+  // other pairing is either seeded below or claimed by an earlier spec file in the
+  // same run (workers: 1, alphabetical). The personal-link screen offers a connected
+  // pair no send button at all — the anti-oracle design working as intended — so a
+  // shared requester would leave the walk nothing to press.
+  const userD = await onboard(container, jwtIssuer, 'e2e_user_d', 'User D');
 
   // The intro-request path (issue #89, AC27) needs a degree-2 pair, and a degree-2
   // pair needs two edges: A—B and B—C, giving A→C exactly two hops through B. Seeded
@@ -138,9 +145,11 @@ export default async function globalSetup(_config: FullConfig): Promise<() => Pr
   process.env['E2E_USER_A_ACCESS_TOKEN'] = userA.accessToken;
   process.env['E2E_USER_B_ACCESS_TOKEN'] = userB.accessToken;
   process.env['E2E_USER_C_ACCESS_TOKEN'] = userC.accessToken;
+  process.env['E2E_USER_D_ACCESS_TOKEN'] = userD.accessToken;
   process.env['E2E_USER_A_HANDLE'] = userA.handle;
   process.env['E2E_USER_B_HANDLE'] = userB.handle;
   process.env['E2E_USER_C_HANDLE'] = userC.handle;
+  process.env['E2E_USER_D_HANDLE'] = userD.handle;
 
   return async function globalTeardown(): Promise<void> {
     // Pollers first: `stop()` waits for any in-flight round, which writes through the

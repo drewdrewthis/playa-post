@@ -81,7 +81,8 @@ test.describe('the You screen renders in both themes', () => {
     await expect(screen).toBeVisible();
 
     await expect(page.getByTestId('profile-counts')).toBeVisible();
-    await expect(page.getByTestId('personal-link-qr')).toBeVisible();
+    // Same 15s budget as everywhere a QR waits on the ensure round-trip.
+    await expect(page.getByTestId('personal-link-qr')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('personal-link-share-button')).toBeVisible();
 
     // Dark is the default now (issue #151) — no toggle needed to reach it.
@@ -231,7 +232,9 @@ test.describe('the You screen renders in both themes', () => {
 
     // The QR is the comp's scannable half, and it is the half that cannot be proved by
     // reading text: `react-qr-code` renders nothing at all if the value never arrives.
-    await expect(page.getByTestId('personal-link-qr')).toBeVisible();
+    // First wait after goto owns the whole ensure round-trip, so it gets the same
+    // budget `readPersonalLinkSlug` gives it — the default 5s flakes under a loaded run.
+    await expect(page.getByTestId('personal-link-qr')).toBeVisible({ timeout: 15_000 });
 
     // The link is the whole point of the card: it has to be the route that opens a
     // personal link, carrying a slug the server actually minted, or it is decoration.

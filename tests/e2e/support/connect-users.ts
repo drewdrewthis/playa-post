@@ -90,6 +90,23 @@ export async function acceptConnectionRequest(page: Page): Promise<void> {
  */
 export async function connectViaPersonalLink(owner: Page, requester: Page): Promise<void> {
   const slug = await readPersonalLinkSlug(owner);
-  await sendConnectionRequest(requester, slug);
+
+  await requester.goto(`${PERSONAL_LINK_PATH_SEGMENT}${slug}`);
+  await expect(requester.getByTestId('personal-link-view')).toBeVisible({ timeout: 15_000 });
+
+  /*
+   * ⚠ Idempotent for an already-connected pair, and it has to be: `global-setup.ts`
+   * pre-connects A—B for the intro path's degree-2 chain, and earlier spec files in the
+   * same run leave their own edges behind. The old invite flow tolerated that because
+   * `AcceptInviteService` resolved a connected pair idempotently; here the link screen
+   * shows the already-connected banner and no send button at all, so pressing on would
+   * wait out the whole test timeout for a control that never renders.
+   */
+  if (await requester.getByTestId('personal-link-connected').isVisible()) {
+    return;
+  }
+
+  await requester.getByTestId('send-connection-request-button').click();
+  await expect(requester.getByTestId('connection-request-sent')).toBeVisible();
   await acceptConnectionRequest(owner);
 }
