@@ -18,7 +18,7 @@ export const EVALUATE_NOTIFY_ME_CONSUMER = 'EvaluateNotifyMeHandler';
 
 /** Collaborators, injected rather than resolved (addendum §12, ADR-0003). */
 export interface EvaluateNotifyMeDependencies {
-  /** `modules/views`' saved-query reader — never a read of its table from here. */
+  /** `modules/views`' stored-query reader — never a read of its table from here. */
   readonly notifyMeQueries: NotifyMeQueryDirectory;
   readonly matches: NotifyMeMatchRepository;
   /** Reads the wall clock. Overridable so a test can pin `processed_at`. */
@@ -29,7 +29,7 @@ export interface EvaluateNotifyMeDependencies {
 export type EvaluateNotifyMeHandler = OutboxConsumer;
 
 /**
- * Evaluate every saved Notify Me query against a newly created bulletin (M2.10).
+ * Evaluate every stored Notify Me query against a newly created bulletin (M2.10).
  *
  * **It computes matches; it does not deliver them.** Each match is written to the
  * outbox as a `NotifyMeMatched` row, and
@@ -49,15 +49,13 @@ export type EvaluateNotifyMeHandler = OutboxConsumer;
  * nothing a second time. That is `recordMatches`' job — this handler does not track
  * what it has seen.
  *
- * ⚠ **One match per person per bulletin, however many of their queries match** (decision
- * D16, issue #172). Before D16 a person had at most one saved query, so "one row per
- * matching query" and "one row per matching person" were the same statement; they are not
- * any more, and the difference is user-visible — a `NotifyMeMatched` per query would put
- * the same bulletin into somebody's grouping window several times and push it at them
- * once per bell they had lit. Deduplication belongs here rather than downstream because
- * this is the layer that knows a person is a person: `recordMatches` writes what it is
- * given, and the window that groups them cannot tell a genuine second bulletin from the
- * same one counted twice.
+ * ⚠ **One match per person per bulletin, however many rows the directory hands back for
+ * them.** `unique (owner_id)` holds a person to one stored query (#208, ADR-0019), but
+ * this handler does not lean on that: a `NotifyMeMatched` per row would put the same
+ * bulletin into somebody's grouping window several times, and `recordMatches` writes what
+ * it is given — the window that groups them cannot tell a genuine second bulletin from
+ * the same one counted twice. Deduplication stays here because this is the layer that
+ * knows a person is a person.
  *
  * That also bounds the work: the scan of a person's queries stops at the first one that
  * matches, but it reads every non-matching one before it — so a match on the last query,
@@ -96,19 +94,19 @@ export function createEvaluateNotifyMeHandler(
         return;
       }
 
-      const saved = await dependencies.notifyMeQueries.findAllCurrent();
+      const stored = await dependencies.notifyMeQueries.findAllCurrent();
       const matched: NotifyMeMatched[] = [];
-      // Whose result is already settled — either because one of their queries matched, or
-      // because they are the author. Read before every evaluation, so a person's second
-      // and third queries are never even tested once their first has matched.
+      // Whose result is already settled — either because a query of theirs matched, or
+      // because they are the author. Read before every evaluation, so a person is never
+      // tested again once they have matched.
       const settled = new Set<string>([authorId]);
 
-      for (const { ownerId, query } of saved) {
+      for (const { ownerId, query } of stored) {
         if (settled.has(ownerId)) {
           continue;
         }
 
-        // Sequential on purpose: this is one authorized read per saved query, and firing
+        // Sequential on purpose: this is one authorized read per stored query, and firing
         // them all at once would let one bulletin open as many pool connections as the
         // product has switched-on Notify Me queries.
         const isMatch = await dependencies.matches.isAuthorizedMatch({

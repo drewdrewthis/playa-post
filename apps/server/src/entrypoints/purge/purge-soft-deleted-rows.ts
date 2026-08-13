@@ -4,9 +4,9 @@ const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 /**
  * One store this sweep empties of rows somebody deleted long enough ago.
  *
- * ⚠ **Structurally satisfied by each module's own purge port** —
- * `modules/views`' `DeletedSavedViewsRepository` and `modules/bulletins`'
- * `RemovedBulletinsRepository` — and deliberately narrower than either. An entrypoint
+ * ⚠ **Structurally satisfied by each module's own purge port** — today
+ * `modules/bulletins`' `RemovedBulletinsRepository` — and deliberately narrower than
+ * any. An entrypoint
  * that named those types would know which modules exist and which of their tables carry
  * a soft delete, which is precisely the coupling `entrypoints/**` exists to not have.
  * The same arrangement `NotificationFlusher` has with `SendGroupedPushHandler`, and
@@ -27,8 +27,8 @@ export interface PurgeTarget {
   /**
    * How many days this store keeps a soft-deleted row before it goes.
    *
-   * **Per target, not per round.** Both of today's targets are handed
-   * `PURGE_RETENTION_DAYS` and so share a window, but they are not required to: ADR-0006
+   * **Per target, not per round.** Today's one target is handed
+   * `PURGE_RETENTION_DAYS`, but targets are not required to share a window: ADR-0006
    * lists other retention chores with windows of their own already decided (published
    * outbox rows at 14 days, `mutation_results` daily), and those arrive here as targets.
    * A single round-wide window would have forced each of them to be either a second
@@ -93,8 +93,8 @@ export interface CreateSoftDeletedRowPurgeDependencies {
  * Build the soft-delete purge (issue #169, and the gap [#118] named).
  *
  * **This is what makes a soft delete a delete.** Every user-facing delete in this product
- * stamps a column rather than removing a row — `app.bulletins.archived_at`,
- * `app.saved_views.deleted_at` — which is right for recoverability and wrong forever
+ * stamps a column rather than removing a row — `app.bulletins.archived_at` — which is
+ * right for recoverability and wrong forever
  * afterwards: without a sweep, "removed" means "hidden and kept indefinitely", and the
  * person who removed something has been told a thing that is not true.
  *
@@ -107,9 +107,9 @@ export interface CreateSoftDeletedRowPurgeDependencies {
  * racing each other for pool connections buy nothing when the next round is minutes away.
  *
  * ⚠ **No transaction spans the targets, and there is nothing to make atomic across
- * them.** A deleted saved view and a removed bulletin share no invariant; each target's
- * own statement is atomic on its own, and holding one transaction open across both would
- * lengthen the locks to guarantee something nobody needs.
+ * them.** Distinct targets share no invariant; each target's own statement is atomic on
+ * its own, and holding one transaction open across several would lengthen the locks to
+ * guarantee something nobody needs.
  *
  * ⚠ **No outbox event, from here or from any target.** Retention housekeeping is not a
  * state change anybody made — the state change was the delete, thirty days earlier, and

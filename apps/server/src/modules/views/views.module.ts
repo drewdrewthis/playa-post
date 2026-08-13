@@ -1,16 +1,8 @@
 import type { DatabaseConnection } from '@playa-post/database';
 
-import { createDeleteSavedViewService } from './application/delete-saved-view.service';
-import type { DeletedSavedViewsRepository } from './application/deleted-saved-views.repository';
-import { createListSavedViewsQuery } from './application/list-saved-views.query';
 import type { NotifyMeQueryDirectory } from './application/notify-me-query.directory';
-import { createRenameSavedViewService } from './application/rename-saved-view.service';
-import { createSaveViewService } from './application/save-view.service';
-import { createSetSavedViewNotifyService } from './application/set-saved-view-notify.service';
 import { createUpdateNotifyMeQueryService } from './application/update-notify-me-query.service';
-import { createPostgresDeletedSavedViewsRepository } from './persistence/postgres-deleted-saved-views.repository';
 import { createPostgresNotifyMeQueryRepository } from './persistence/postgres-notify-me-query.repository';
-import { createPostgresSavedViewRepository } from './persistence/postgres-saved-view.repository';
 import { createViewsRouter, type ViewsRouter } from './transport/views.router';
 
 /**
@@ -20,13 +12,16 @@ import { createViewsRouter, type ViewsRouter } from './transport/views.router';
  * table. Notify Me is what that file's own note said would change it ("Saved views and
  * Notify Me are what give this module state, a table, and procedures; the factory
  * arrives with them"), and it has: `app.notify_me_queries` is this module's, and
- * `views.notifyMe.update` is its first procedure.
+ * `views.notifyMe.update` is its only procedure — Saved Views were removed by issue
+ * #208 (ADR-0019). The directory keeps the `views` name for now; renaming it is
+ * deferred, tracked in #208's follow-up notes, because a rename touches every import
+ * path and the boundary rules for no behavioural gain in the same PR.
  *
  * **This file is the whole of what other modules may import.** `modules/bulletins`'
  * board query consumes `parseBoardQuery`; `modules/notifications`' evaluator consumes
  * {@link createNotifyMeQueryDirectory}. Both are addendum §19's "shared contract with
  * clear ownership" rather than a reach-in: views owns the grammar and the saved
- * queries, and the consumers arriving over three milestones is exactly why neither may
+ * query, and the consumers arriving over three milestones is exactly why neither may
  * be re-derived per caller.
  *
  * ⚠ Re-export additions belong here only if another module genuinely needs them.
@@ -61,15 +56,6 @@ export interface ViewsModule {
    * repository means a consumer gets the projection and no way to reach a write.
    */
   readonly notifyMeQueries: NotifyMeQueryDirectory;
-  /**
-   * This module's half of the retention sweep (issue #169) — hard-deletes saved views
-   * whose soft delete is older than the configured window.
-   *
-   * Exposed unstarted and unscheduled, the way `AppContainer.outboxDrainer` is: *when*
-   * it runs is `entrypoints/purge/start-purge-poller.ts`'s job. A module that scheduled
-   * its own housekeeping would be a module that knows about the runtime (ADR-0009).
-   */
-  readonly deletedSavedViews: DeletedSavedViewsRepository;
 }
 
 /**
@@ -108,30 +94,11 @@ export function createViewsModule(dependencies: ViewsModuleDependencies): ViewsM
   const notifyMeQueries = createPostgresNotifyMeQueryRepository({
     database: dependencies.database,
   });
-  // A second repository over the same connection, not a second module: `app.saved_views`
-  // and `app.notify_me_queries` are both this module's, and the Notify Me *designation*
-  // is a fact spanning them (ADR-0016). They are separate objects because they answer
-  // separate questions — `notifyMeQueries` is also the cross-module read model
-  // `modules/notifications` consumes, and that consumer must not acquire a way to write
-  // somebody's saved views as a side effect.
-  const savedViews = createPostgresSavedViewRepository({ database: dependencies.database });
 
   return {
     router: createViewsRouter({
       updateNotifyMeQuery: createUpdateNotifyMeQueryService({ notifyMeQueries }),
-      listSavedViews: createListSavedViewsQuery({ savedViews }),
-      saveView: createSaveViewService({ savedViews }),
-      renameSavedView: createRenameSavedViewService({ savedViews }),
-      deleteSavedView: createDeleteSavedViewService({ savedViews }),
-      setSavedViewNotify: createSetSavedViewNotifyService({ savedViews }),
     }),
     notifyMeQueries,
-    // A third repository over the same connection, and separate from `savedViews` on
-    // purpose: that object's every statement names an owner, and a retention sweep names
-    // none. Keeping them apart is also what lets composition hand the purge entrypoint a
-    // capability that cannot read or write anybody's views — see the port's own note.
-    deletedSavedViews: createPostgresDeletedSavedViewsRepository({
-      database: dependencies.database,
-    }),
   };
 }

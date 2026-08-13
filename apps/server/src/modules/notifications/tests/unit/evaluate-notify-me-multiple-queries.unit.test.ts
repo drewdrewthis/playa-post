@@ -13,8 +13,10 @@ import { BULLETIN_CREATED, NOTIFY_ME_MATCHED } from '../../domain/notification.e
 import type { NotifyMeMatch } from '../../domain/notify-me-match';
 
 /**
- * What `EvaluateNotifyMeHandler` does now that one person may have several saved queries
- * (issue #172, decision D16).
+ * `EvaluateNotifyMeHandler` matches a person at most once per bulletin, whatever its
+ * directory hands back. `unique (owner_id)` holds a person to one stored query (#208,
+ * ADR-0019), but the handler must not lean on that — these are the assertions that keep
+ * a duplicate row from becoming a duplicate push.
  *
  * ⚠ **Unit rather than integration, because the claim is about arithmetic on a list.**
  * "One match per person however many of their queries match" is a statement about what
@@ -27,7 +29,7 @@ import type { NotifyMeMatch } from '../../domain/notify-me-match';
  * records what it was told, asserted on the artifact (the matches) rather than on a call
  * sequence (`references/principles/coding.md`).
  */
-describe('EvaluateNotifyMeHandler with several queries per person (#172, D16)', () => {
+describe('EvaluateNotifyMeHandler matches each person at most once', () => {
   const bulletinId = '11111111-1111-4111-8111-111111111111';
   const author = '22222222-2222-4222-8222-222222222222';
   const reader = '33333333-3333-4333-8333-333333333333';
@@ -46,7 +48,7 @@ describe('EvaluateNotifyMeHandler with several queries per person (#172, D16)', 
    * A repository that answers matching from a set of texts and remembers what it was told.
    *
    * `matching` names the query texts that count as a match, so a test can say "this
-   * person's first bell misses and their second hits" without a database.
+   * person's first row misses and their second hits" without a database.
    */
   function fakeMatches(matching: ReadonlySet<string>): NotifyMeMatchRepository & {
     readonly asked: AuthorizedMatchQuery[];
@@ -87,9 +89,9 @@ describe('EvaluateNotifyMeHandler with several queries per person (#172, D16)', 
   }
 
   it('matches a person once when two of their queries match the same bulletin', async () => {
-    // ⚠ The regression D16 makes possible: two rows for one person, both matching. A
-    // `NotifyMeMatched` each would put this bulletin into their grouping window twice and
-    // push it at them once per bell.
+    // ⚠ The regression a duplicate directory row makes possible: two rows for one
+    // person, both matching. A `NotifyMeMatched` each would put this bulletin into their
+    // grouping window twice and push it at them twice.
     const matches = fakeMatches(new Set(['truck', 'kitchen']));
     const handler = createEvaluateNotifyMeHandler({
       notifyMeQueries: directory([savedQuery(reader, 'truck'), savedQuery(reader, 'kitchen')]),
@@ -111,8 +113,8 @@ describe('EvaluateNotifyMeHandler with several queries per person (#172, D16)', 
   });
 
   it('stops reading a person’s queries once one of them has matched', async () => {
-    // The other half of the same decision, and the reason the cap can be as generous as it
-    // is: a person whose bulletin matches costs one authorized read, not one per bell.
+    // The other half of the same property: a person who has matched costs one
+    // authorized read, not one per row.
     const matches = fakeMatches(new Set(['truck']));
     const handler = createEvaluateNotifyMeHandler({
       notifyMeQueries: directory([
@@ -129,9 +131,8 @@ describe('EvaluateNotifyMeHandler with several queries per person (#172, D16)', 
   });
 
   it('evaluates every query of a person whose last query is the one that matches', async () => {
-    // The case the cap actually bounds — the full fan-out is paid before anything settles.
-    // Nothing may be skipped here: a person whose third bell is the one that matches must
-    // still be found.
+    // Nothing may be skipped here: a person whose third row is the one that matches
+    // must still be found.
     const matches = fakeMatches(new Set(['shade']));
     const handler = createEvaluateNotifyMeHandler({
       notifyMeQueries: directory([

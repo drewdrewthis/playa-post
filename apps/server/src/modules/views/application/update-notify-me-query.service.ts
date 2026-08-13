@@ -7,7 +7,7 @@ import type { NotifyMeQueryRepository } from '../domain/notify-me-query.reposito
  *
  * `actorId` comes from the `Actor` resolved at the tRPC context boundary, never from
  * the request body (ADR-0002:180-181), and there is **no field naming a query** — the
- * primary key is `owner_id` (ADR-0007:79), so the actor *is* the address. An actor
+ * table is `unique (owner_id)`, so the actor *is* the address. An actor
  * unrelated to somebody else's query has no way to name it, which is how M2-AC19's
  * scenario resolves: supplying another person's `expectedVersion` mismatches the
  * actor's **own** state and is refused before a column of anybody else's row is read.
