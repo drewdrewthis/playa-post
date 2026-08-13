@@ -9,6 +9,7 @@ import { GraphHomeRoute } from './routes/graph-home';
 import { InviteOpenRoute } from './routes/invite-open';
 import { NotFoundRoute } from './routes/not-found';
 import { OnboardingRoute } from './routes/onboarding';
+import { PersonalLinkOpenRoute } from './routes/personal-link-open';
 import { RouteErrorScreen } from './routes/route-error';
 import { SavedViewsRoute } from './routes/saved-views';
 import { SignInRoute } from './routes/sign-in';
@@ -91,6 +92,19 @@ export const appRoutes: RouteObject[] = [
           { path: '/', element: <GraphHomeRoute /> },
           { path: '/graph', element: <GraphHomeRoute /> },
           { path: '/invite/:token', element: <InviteOpenRoute /> },
+          {
+            /*
+             * The personal link (issue #206). Beside `/invite/:token` rather than
+             * replacing it: a token already sitting in somebody's chat history has to keep
+             * opening, and retiring that route would turn every one of them into the "this
+             * invite cannot be opened" screen the issue was filed for.
+             *
+             * ⚠ Inside `ProtectedLayout`, so a signed-out arrival is bounced through
+             * sign-in and returned here (#205) rather than shown a stranger's name.
+             */
+            path: '/c/:slug',
+            element: <PersonalLinkOpenRoute />,
+          },
           { path: '/board', element: <BoardRoute /> },
           { path: '/board/new', element: <ComposeBulletinRoute /> },
           { path: '/saved', element: <SavedViewsRoute /> },

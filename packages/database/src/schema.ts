@@ -84,6 +84,18 @@ export interface AppBulletins {
   version: Generated<number>;
 }
 
+export interface AppConnectionRequests {
+  created_at: Timestamp;
+  decided_at: Timestamp | null;
+  id: Generated<string>;
+  owner_id: string;
+  requester_id: string;
+  /**
+   * pending -> accepted | declined. Both decisions are terminal. Expiry is NOT a status: a pending row older than the TTL is treated as gone by every read and by the gated update, with no cron to fall behind.
+   */
+  status: string;
+}
+
 export interface AppConnections {
   /**
    * What user A grants user B: full | limited. Consumed by app.visible_people, which fails closed — anything that is not exactly full is topology_only.
@@ -232,6 +244,16 @@ export interface AppOutboxEvents {
   status: Generated<string>;
 }
 
+export interface AppPersonalLinks {
+  created_at: Timestamp;
+  owner_id: string;
+  /**
+   * When the owner last rotated. Deliberately does NOT record the previous slug: a retired address kept in a column is a retired address still in the database.
+   */
+  rotated_at: Timestamp | null;
+  slug: string;
+}
+
 export interface AppPushSubscriptions {
   auth_key: string;
   created_at: Timestamp;
@@ -287,6 +309,7 @@ export interface DB {
   "app.bulletin_dismissals": AppBulletinDismissals;
   "app.bulletin_reports": AppBulletinReports;
   "app.bulletins": AppBulletins;
+  "app.connection_requests": AppConnectionRequests;
   "app.connection_trust": AppConnectionTrust;
   "app.connections": AppConnections;
   "app.consumer_receipts": AppConsumerReceipts;
@@ -298,6 +321,7 @@ export interface DB {
   "app.notification_seen_watermarks": AppNotificationSeenWatermarks;
   "app.notify_me_queries": AppNotifyMeQueries;
   "app.outbox_events": AppOutboxEvents;
+  "app.personal_links": AppPersonalLinks;
   "app.push_subscriptions": AppPushSubscriptions;
   "app.saved_views": AppSavedViews;
   "app.users": AppUsers;

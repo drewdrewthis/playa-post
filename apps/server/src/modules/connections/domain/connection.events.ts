@@ -6,16 +6,17 @@ export const CONNECTION_ACCEPTED = 'ConnectionAccepted';
 /**
  * What produced a connection, so a consumer can correlate without a second read.
  *
- * ⚠ **A union of exactly the two ways a connection can form, and it must stay exhaustive.**
+ * ⚠ **A union of exactly the ways a connection can form, and it must stay exhaustive.**
  * A spent invite was the only one until issue #166 gave an accepted introduction the same
- * standing (decision D12). Written as a union rather than as two optional keys so a third
- * origin cannot arrive as "both absent" — a payload with neither identifier says a
- * connection appeared from nowhere, which is precisely what an audit trail exists to make
- * impossible.
+ * standing (decision D12), and issue #206 added an accepted personal-link request. Written
+ * as a union rather than as optional keys so a new origin cannot arrive as "all absent" —
+ * a payload with no identifier says a connection appeared from nowhere, which is precisely
+ * what an audit trail exists to make impossible.
  */
 export type ConnectionOrigin =
   | { readonly invitationId: string }
-  | { readonly introRequestId: string };
+  | { readonly introRequestId: string }
+  | { readonly connectionRequestId: string };
 
 /**
  * Two people are now connected.
@@ -45,13 +46,15 @@ export interface ConnectionAccepted {
   /**
    * The invite that produced it.
    *
-   * Absent when the connection came from an accepted introduction rather than from a
-   * spent token — see {@link ConnectionAccepted.introRequestId}. Exactly one of the two is
-   * present on every event this module builds.
+   * Absent when the connection came from an accepted introduction or an accepted
+   * personal-link request rather than from a spent token. Exactly one of the three is
+   * present on every event this module builds — see {@link ConnectionOrigin}.
    */
   readonly invitationId?: string;
-  /** The introduction that produced it (#166). Absent when an invite did. */
+  /** The introduction that produced it (#166). Absent when another origin did. */
   readonly introRequestId?: string;
+  /** The personal-link request that produced it (#206). Absent when another origin did. */
+  readonly connectionRequestId?: string;
   readonly userAId: string;
   readonly userBId: string;
 }

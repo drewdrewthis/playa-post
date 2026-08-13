@@ -7,7 +7,7 @@ import {
   REPORT_REASON_CHOICES,
 } from '../../apps/web/src/app/moderation/report-abuse-draft';
 
-import { mintInviteViaYouScreen } from './support/mint-invite';
+import { connectViaPersonalLink } from './support/connect-users';
 
 /**
  * The report-abuse sheet and the rate-limited sign-in notice, rendered in **both themes**.
@@ -123,13 +123,8 @@ test.describe('the report-abuse sheet renders in both themes', () => {
       // authored by the other one. This is `vertical-slice-e2e.spec.ts`'s proven setup,
       // minus the steps that only assert the graph and the notification window.
       await bootstrapSession(pageA, userAAccessToken);
-      const inviteToken = await mintInviteViaYouScreen(pageA);
-
       await bootstrapSession(pageB, userBAccessToken);
-      await pageB.goto(`/invite/${inviteToken}`);
-      await expect(pageB.getByTestId('invite-open-view')).toBeVisible();
-      await pageB.getByTestId('invite-accept-button').click();
-      await expect(pageB.getByTestId('connection-accepted-banner')).toBeVisible();
+      await connectViaPersonalLink(pageA, pageB);
 
       await pageA.goto('/graph');
       await pageA.getByTestId(`graph-connection-node-${userBHandle}`).click();
@@ -284,12 +279,8 @@ test.describe('a report or dismissal that did not reach the server says so', () 
       // are rendered only on a bulletin the viewer does not own
       // (`bulletin-detail-sheet.tsx` — `card.own ? archive : (dismiss, report)`).
       await bootstrapSession(pageA, userAAccessToken);
-      const inviteToken = await mintInviteViaYouScreen(pageA);
-
       await bootstrapSession(pageB, userBAccessToken);
-      await pageB.goto(`/invite/${inviteToken}`);
-      await pageB.getByTestId('invite-accept-button').click();
-      await expect(pageB.getByTestId('connection-accepted-banner')).toBeVisible();
+      await connectViaPersonalLink(pageA, pageB);
 
       await pageA.getByTestId('compose-bulletin-button').click();
       await pageA.getByTestId('compose-bulletin-type-select').selectOption(BULLETIN_TYPE.request);

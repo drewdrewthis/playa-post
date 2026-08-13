@@ -24,6 +24,11 @@ const INVENTORY = [
   'connections',
   'connection_trust',
   'invitations',
+  // The permanent, rotatable personal link and the requests it produces (issue #206,
+  // ADR-0018). Two tables, not one: the link is a singleton address per owner while a
+  // request is one row per (owner, requester) episode — see ADR-0018 D1/D3.
+  'personal_links',
+  'connection_requests',
   // the transactional outbox and its consumers (L2 / L3b-infra)
   'consumer_receipts',
   'outbox_events',
@@ -81,7 +86,7 @@ describe('schema app holds exactly the tables M2 declared (m2-lane-briefs.md rat
     await testDatabase?.stop();
   });
 
-  it('matches the eighteen-name inventory as a set, and in count', async () => {
+  it('matches the twenty-name inventory as a set, and in count', async () => {
     const { rows } = await testDatabase.client.query<{ tablename: string }>(
       `select tablename from pg_tables where schemaname = 'app' order by tablename`,
     );

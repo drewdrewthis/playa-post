@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import {
+  PERSONAL_LINK_CARD_LINE,
+  ROTATE_PERSONAL_LINK_LABEL,
+  ROTATE_PERSONAL_LINK_LINE,
+} from '../../apps/web/src/app/connections/connection-request-copy';
+
 /**
  * The You screen (issue #49), rendered in **both themes**.
  *
@@ -67,7 +73,7 @@ async function capture(page: Page, theme: 'light' | 'dark'): Promise<void> {
 }
 
 test.describe('the You screen renders in both themes', () => {
-  test('shows the profile, the invite, and the sync section', async ({ page }) => {
+  test('shows the profile, the personal link, and the sync section', async ({ page }) => {
     await bootstrapSession(page, requireEnv('E2E_USER_A_ACCESS_TOKEN'));
     await page.goto('/you');
 
@@ -75,8 +81,9 @@ test.describe('the You screen renders in both themes', () => {
     await expect(screen).toBeVisible();
 
     await expect(page.getByTestId('profile-counts')).toBeVisible();
-    await expect(page.getByTestId('invite-qr')).toBeVisible();
-    await expect(page.getByTestId('invite-share-button')).toBeVisible();
+    // Same 15s budget as everywhere a QR waits on the ensure round-trip.
+    await expect(page.getByTestId('personal-link-qr')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('personal-link-share-button')).toBeVisible();
 
     // Dark is the default now (issue #151) — no toggle needed to reach it.
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
@@ -85,7 +92,10 @@ test.describe('the You screen renders in both themes', () => {
     // dark modules on a light field, so a dark-palette QR tile photographs fine and does
     // not read. Asserted rather than screenshotted, because "still white" is the whole
     // claim and a human comparing two images is exactly who would miss it.
-    await expect(page.getByTestId('invite-qr')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await expect(page.getByTestId('personal-link-qr')).toHaveCSS(
+      'background-color',
+      'rgb(255, 255, 255)',
+    );
 
     await capture(page, 'dark');
 
@@ -98,8 +108,8 @@ test.describe('the You screen renders in both themes', () => {
     // light would leave an element painted on its own background — which this cannot see,
     // and the screenshot can, which is why both exist.
     await expect(page.getByTestId('profile-counts')).toBeVisible();
-    await expect(page.getByTestId('invite-qr')).toBeVisible();
-    await expect(page.getByTestId('invite-share-button')).toBeVisible();
+    await expect(page.getByTestId('personal-link-qr')).toBeVisible();
+    await expect(page.getByTestId('personal-link-share-button')).toBeVisible();
 
     await capture(page, 'light');
   });
@@ -206,35 +216,53 @@ test.describe('the You screen renders in both themes', () => {
   });
 
   /**
-   * The card **stands ready** (#142/#90): QR, link, consent line and share button are all
-   * on screen the moment the card is, so this test presses nothing — arriving is the whole
-   * interaction, and anything it has to click first would be the step the comp does away
-   * with.
+   * The card **stands ready** (#142/#90): QR, link, explanatory line and share button are
+   * all on screen the moment the card is, so this test presses nothing — arriving is the
+   * whole interaction, and anything it has to click first would be the step the comp does
+   * away with.
    *
    * ⚠ **The share button is never clicked, here or anywhere.** It hands the link to
    * `navigator.share` or the clipboard, neither of which a headless browser grants, and
    * the route swallows both rejections on purpose — so a click would assert nothing while
    * looking like it did. Its label is asserted instead, which is the part a user reads.
    */
-  test('stands ready with a real invite link on the CONNECT card', async ({ page }) => {
+  test('stands ready with a real personal link on the CONNECT card', async ({ page }) => {
     await bootstrapSession(page, requireEnv('E2E_USER_A_ACCESS_TOKEN'));
     await page.goto('/you');
 
     // The QR is the comp's scannable half, and it is the half that cannot be proved by
     // reading text: `react-qr-code` renders nothing at all if the value never arrives.
-    await expect(page.getByTestId('invite-qr')).toBeVisible();
+    // First wait after goto owns the whole ensure round-trip, so it gets the same
+    // budget `readPersonalLinkSlug` gives it — the default 5s flakes under a loaded run.
+    await expect(page.getByTestId('personal-link-qr')).toBeVisible({ timeout: 15_000 });
 
-    // The link is the whole point of the card: it has to be the route that opens an
-    // invite, carrying a token the server actually minted, or it is decoration.
-    const link = page.getByTestId('invite-link');
+    // The link is the whole point of the card: it has to be the route that opens a
+    // personal link, carrying a slug the server actually minted, or it is decoration.
+    const link = page.getByTestId('personal-link');
     await expect(link).toBeVisible();
-    await expect(link).toContainText('/invite/');
+    await expect(link).toContainText('/c/');
 
-    // Load-bearing copy, not decoration — it is the card's consent promise.
-    await expect(page.getByTestId('your-profile')).toContainText(
-      'Nothing happens until you both consent.',
+    /*
+     * Load-bearing copy, not decoration — it is the card's promise about what this link
+     * does, and since #206 that promise changed: the link no longer connects whoever
+     * holds it. Somebody who publishes it believing otherwise has been misled by their own
+     * You screen.
+     */
+    await expect(page.getByTestId('your-profile')).toContainText(PERSONAL_LINK_CARD_LINE);
+
+    await expect(page.getByTestId('personal-link-share-button')).toHaveText('Share link');
+
+    /*
+     * ⚠ **The rotate control and its blast-radius sentence, asserted together and never
+     * pressed.** Rotating is destructive and has no undo — the old slug is stored nowhere
+     * (ADR-0018 D3) — so a walk that clicked it would leave this user's link changed for
+     * every other spec sharing the account. What is provable without pressing is that the
+     * control is reachable and that the sentence telling somebody what it costs is beside
+     * it, which is the half a user reads before deciding.
+     */
+    await expect(page.getByTestId('rotate-personal-link-button')).toHaveText(
+      ROTATE_PERSONAL_LINK_LABEL,
     );
-
-    await expect(page.getByTestId('invite-share-button')).toHaveText('Share invite');
+    await expect(page.getByTestId('your-profile')).toContainText(ROTATE_PERSONAL_LINK_LINE);
   });
 });

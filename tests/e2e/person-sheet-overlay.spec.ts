@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { mintInviteViaYouScreen } from './support/mint-invite';
+import { connectViaPersonalLink } from './support/connect-users';
 
 /**
  * The person sheet is an overlay, not a destination.
@@ -49,14 +49,10 @@ test.describe('tapping a graph node', () => {
 
     try {
       // A node only exists once two users are genuinely connected — the proven
-      // invite-accept setup from `vertical-slice-e2e.spec.ts`, nothing more.
+      // personal-link setup from `vertical-slice-e2e.spec.ts`, nothing more.
       await bootstrapSession(pageA, userAAccessToken);
-      const inviteToken = await mintInviteViaYouScreen(pageA);
-
       await bootstrapSession(pageB, userBAccessToken);
-      await pageB.goto(`/invite/${inviteToken}`);
-      await pageB.getByTestId('invite-accept-button').click();
-      await expect(pageB.getByTestId('connection-accepted-banner')).toBeVisible();
+      await connectViaPersonalLink(pageA, pageB);
 
       await pageA.goto('/graph');
       await expect(pageA.getByTestId(`graph-connection-node-${userBHandle}`)).toBeVisible();

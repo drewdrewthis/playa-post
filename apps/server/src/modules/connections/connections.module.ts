@@ -4,13 +4,21 @@ import type { OutboxConsumer } from '../../entrypoints/outbox-drainer/outbox-con
 
 import { createAcceptInviteService } from './application/accept-invite.service';
 import { createCreateInviteService } from './application/create-invite.service';
+import { createDecideConnectionRequestService } from './application/decide-connection-request.service';
+import { createEnsurePersonalLinkService } from './application/ensure-personal-link.service';
 import { createGetConnectionQuery } from './application/get-connection.query';
+import { createListConnectionRequestsQuery } from './application/list-connection-requests.query';
 import { createOpenInviteService } from './application/open-invite.service';
+import { createOpenPersonalLinkQuery } from './application/open-personal-link.query';
+import { createRotatePersonalLinkService } from './application/rotate-personal-link.service';
+import { createSendConnectionRequestService } from './application/send-connection-request.service';
 import { createSetConnectionTrustService } from './application/set-connection-trust.service';
 import { createConnectIntroducedPairHandler } from './persistence/postgres-connect-introduced-pair.handler';
+import { createPostgresConnectionRequestRepository } from './persistence/postgres-connection-request.repository';
 import { createPostgresConnectionTrustRepository } from './persistence/postgres-connection-trust.repository';
 import { createPostgresConnectionRepository } from './persistence/postgres-connection.repository';
 import { createPostgresInvitationRepository } from './persistence/postgres-invitation.repository';
+import { createPostgresPersonalLinkRepository } from './persistence/postgres-personal-link.repository';
 import { createConnectionsRouter, type ConnectionsRouter } from './transport/connections.router';
 
 /** What the composition root has to hand this module. */
@@ -63,6 +71,15 @@ export interface ConnectionsModule {
  * module may not create another's rows" true while still letting an accepted introduction
  * make a connection.
  *
+ * ⚠ **This module now owns all three ways a connection can form** (issue #206): a spent
+ * invite (`postgres-connection.repository.ts`), an accepted introduction delivered as an
+ * `IntroAccepted` event ({@link ConnectionsModule.connectIntroducedPair}), and an accepted
+ * personal-link request (`postgres-connection-request.repository.ts`). Only the middle one
+ * needs an event, and the reason is a module boundary rather than a policy about
+ * asynchrony: `modules/intros` cannot write `app.connections`, and this module can. A
+ * future path that lives here should be transactional; one that starts elsewhere should
+ * publish.
+ *
  * Called once per process from `composition/container.ts`. Constructing it touches no
  * socket: the pool connects lazily and the router is a data structure, so the whole
  * graph can be built before the database is reachable.
@@ -74,6 +91,13 @@ export function createConnectionsModule(
   const invitations = createPostgresInvitationRepository({ database });
   const connections = createPostgresConnectionRepository({ database });
   const trust = createPostgresConnectionTrustRepository({ database });
+  const personalLinks = createPostgresPersonalLinkRepository({ database });
+  // One repository instance serves all four personal-link request operations, because it is
+  // one connection pool over one pair of ports — `ConnectionRequestRepository` for the two
+  // gated writes and `VisibleConnectionRequestsRepository` for the two §6a-projected reads.
+  // Each service takes only the port it needs, so nothing here hands the send service a way
+  // to read somebody's inbox.
+  const connectionRequests = createPostgresConnectionRequestRepository({ database });
 
   return {
     router: createConnectionsRouter({
@@ -82,6 +106,12 @@ export function createConnectionsModule(
       acceptInvite: createAcceptInviteService({ invitations, connections }),
       setConnectionTrust: createSetConnectionTrustService({ connections, trust }),
       getConnection: createGetConnectionQuery({ connections, trust }),
+      ensurePersonalLink: createEnsurePersonalLinkService({ personalLinks }),
+      rotatePersonalLink: createRotatePersonalLinkService({ personalLinks }),
+      openPersonalLink: createOpenPersonalLinkQuery({ links: connectionRequests }),
+      sendConnectionRequest: createSendConnectionRequestService({ connectionRequests }),
+      listConnectionRequests: createListConnectionRequestsQuery({ requests: connectionRequests }),
+      decideConnectionRequest: createDecideConnectionRequestService({ connectionRequests }),
     }),
     connectIntroducedPair: createConnectIntroducedPairHandler({ database }),
   };
