@@ -150,6 +150,18 @@ export const PERSONAL_LINK_ROTATED_LINE = 'New link ready. The old one no longer
  */
 export const CONNECTION_REQUEST_UNAVAILABLE_LINE = 'That request is no longer available.';
 
+/**
+ * The inbox read failed and nothing is known.
+ *
+ * ⚠ Distinct from an empty inbox, which renders nothing at all: an owner whose read failed
+ * has requests they cannot see, and a section silently absent would hide that there is
+ * anything to retry. Says nothing about why — the transport owns the cause, not this copy.
+ */
+export const CONNECTION_REQUEST_INBOX_LOAD_ERROR_LINE =
+  'Your connection requests did not load.';
+
+export const CONNECTION_REQUEST_INBOX_RETRY_LABEL = 'Try again';
+
 const REFUSAL_MESSAGE: Readonly<Record<string, string>> = {
   PERSONAL_LINK_UNAVAILABLE: PERSONAL_LINK_UNAVAILABLE_LINE,
   CONNECTION_REQUEST_UNAVAILABLE: CONNECTION_REQUEST_UNAVAILABLE_LINE,
@@ -167,5 +179,10 @@ export function connectionRefusalMessage(code: string | null): string {
     return 'That did not send. Try again.';
   }
 
-  return REFUSAL_MESSAGE[code] ?? `The server refused this: ${code}`;
+  /*
+   * ⚠ An unmapped code falls back to the same generic line a transport failure gets, never
+   * to the code itself. Rendering a raw code would let a future or misclassified server
+   * code name a cause on a surface whose whole contract is naming none (D8).
+   */
+  return REFUSAL_MESSAGE[code] ?? 'That did not send. Try again.';
 }

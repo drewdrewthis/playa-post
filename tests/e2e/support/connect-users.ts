@@ -63,13 +63,22 @@ export async function sendConnectionRequest(page: Page, slug: string): Promise<v
  * `app.connections` in the same transaction (ADR-0018 D7), so callers may assert on the
  * graph immediately rather than polling a reload.
  *
+ * @param requesterName - The display name on the row to accept. When given, the row is
+ *   located by it; when omitted, the inbox is asserted to hold exactly one row first, so a
+ *   second pending request fails the wait rather than being accepted by mistake.
+ *
  * Leaves the page on `/graph`.
  */
-export async function acceptConnectionRequest(page: Page): Promise<void> {
+export async function acceptConnectionRequest(page: Page, requesterName?: string): Promise<void> {
   await page.goto('/graph');
 
-  const row = page.getByTestId('connection-request-row').first();
+  const rows = page.getByTestId('connection-request-row');
+  const row =
+    requesterName === undefined ? rows.first() : rows.filter({ hasText: requesterName }).first();
   await expect(row).toBeVisible({ timeout: 15_000 });
+  if (requesterName === undefined) {
+    await expect(rows).toHaveCount(1);
+  }
 
   await row.getByTestId('connection-request-accept-button').click();
   await expect(page.getByTestId('connection-request-inbox-confirmation')).toBeVisible();
@@ -103,6 +112,9 @@ export async function connectViaPersonalLink(owner: Page, requester: Page): Prom
    * wait out the whole test timeout for a control that never renders.
    */
   if (await requester.getByTestId('personal-link-connected').isVisible()) {
+    // The documented postcondition holds on this path too: callers were promised the
+    // owner ends on /graph whether or not there was anything left to accept.
+    await owner.goto('/graph');
     return;
   }
 

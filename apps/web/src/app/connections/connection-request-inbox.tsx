@@ -18,6 +18,8 @@ import {
   CONNECTION_REQUEST_ANSWER_LINE,
   CONNECTION_REQUEST_CONFIRMATION_LINE,
   CONNECTION_REQUEST_DECLINE_LABEL,
+  CONNECTION_REQUEST_INBOX_LOAD_ERROR_LINE,
+  CONNECTION_REQUEST_INBOX_RETRY_LABEL,
   CONNECTION_REQUEST_INBOX_TITLE,
   CONNECTION_REQUEST_LEDE,
   connectionRefusalMessage,
@@ -93,9 +95,11 @@ export function ConnectionRequestInbox(): JSX.Element | null {
 
   /*
    * The confirmation holds the section open after the last row is answered: collapsing to
-   * nothing in the same frame the decision lands would drop the announcement with it.
+   * nothing in the same frame the decision lands would drop the announcement with it. A
+   * failed read holds it open too — "renders nothing" is a claim about a *known-empty*
+   * inbox, and an owner whose read failed may have requests they cannot see.
    */
-  if (rows.length === 0 && confirmation === null) {
+  if (rows.length === 0 && confirmation === null && !inbox.isError) {
     return null;
   }
 
@@ -106,6 +110,28 @@ export function ConnectionRequestInbox(): JSX.Element | null {
       aria-label={CONNECTION_REQUEST_INBOX_TITLE}
     >
       <h2 className="request-inbox__title">{CONNECTION_REQUEST_INBOX_TITLE}</h2>
+
+      {!inbox.isError ? null : (
+        <>
+          <p
+            className="form__error"
+            data-testid="connection-request-inbox-load-error"
+            role="alert"
+          >
+            {CONNECTION_REQUEST_INBOX_LOAD_ERROR_LINE}
+          </p>
+          <button
+            className="button"
+            data-testid="connection-request-inbox-retry-button"
+            type="button"
+            onClick={() => {
+              void inbox.refetch();
+            }}
+          >
+            {CONNECTION_REQUEST_INBOX_RETRY_LABEL}
+          </button>
+        </>
+      )}
 
       {decide.error === null ? null : (
         <p className="form__error" data-testid="connection-request-inbox-error" role="alert">

@@ -35,10 +35,10 @@ carry proposed defaults that proceed unless objected to; see the end of the impl
 ## Where code lives
 
 ```text
-apps/web/        React + Vite PWA. Feature-oriented: src/features/{identity,connections,graph,
-                 bulletins,views,notifications,moderation,sync}/{api,components,hooks,model,routes,
-                 state,tests}. Shell/router/providers/auth/api client/offline queue in
-                 src/app/{routes,auth,api,offline,shell} (the M2 frontend). Shared UI in src/shared/.
+apps/web/        React + Vite PWA. Shell/router/providers/auth/api client/offline queue in
+                 src/app/{routes,auth,api,offline,shell} (the M2 frontend); features live in
+                 sibling directories under src/app/ (see the feature-directory paragraph
+                 below), not in a src/features/ tree. Shared UI in src/shared/.
                  src/app/router.tsx exports its route array (appRoutes) and hangs the whole tree off
                  one pathless root carrying the app-styled error boundary and the * catch-all —
                  routes/route-error.tsx and routes/not-found.tsx, sharing routes/route-message-screen.tsx

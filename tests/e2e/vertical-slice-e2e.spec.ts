@@ -147,7 +147,7 @@ test.describe('The M2 vertical slice, end to end (vertical-slice-e2e.feature, M2
       });
 
       await test.step('4. User A accepts the request', async () => {
-        await acceptConnectionRequest(pageA);
+        await acceptConnectionRequest(pageA, 'User D');
       });
 
       await test.step('5. User A assigns private directional trust to user B', async () => {

@@ -13,6 +13,7 @@ import {
 import {
   CONNECTION_REQUEST_ANSWER_LINE,
   CONNECTION_REQUEST_CONFIRMATION_LINE,
+  CONNECTION_REQUEST_INBOX_LOAD_ERROR_LINE,
 } from './connection-request-copy';
 import { ConnectionRequestInbox } from './connection-request-inbox';
 
@@ -65,6 +66,53 @@ describe('ConnectionRequestInbox', () => {
     tree = await mountWithApi(<ConnectionRequestInbox />, withRows([]));
 
     expect(tree.container.querySelector('[data-testid="connection-request-inbox"]')).toBeNull();
+  });
+
+  /*
+   * ⚠ Distinct from an empty inbox. "Renders nothing" is a claim about a known-empty inbox;
+   * an owner whose read *failed* may have requests they cannot see, and a section silently
+   * absent would hide that there is anything to retry.
+   */
+  it('shows a retriable error when the read itself fails, and retries through it', async () => {
+    let failing = true;
+    const api = createFakeApi({
+      [LIST_PATH]: () => {
+        if (failing) {
+          throw new Error('the read failed');
+        }
+        return [ROW];
+      },
+      [DECIDE_PATH]: () => ({
+        id: ROW.id,
+        status: 'accepted',
+        createdAt: ROW.createdAt,
+        decidedAt: ROW.createdAt,
+      }),
+    });
+
+    tree = await mountWithApi(<ConnectionRequestInbox />, api);
+
+    const error = requireElement(
+      tree.container,
+      '[data-testid="connection-request-inbox-load-error"]',
+    );
+    expect(error.getAttribute('role')).toBe('alert');
+    expect(error.textContent).toBe(CONNECTION_REQUEST_INBOX_LOAD_ERROR_LINE);
+    // The failed read names no cause — the transport owns it, this surface does not.
+    expect(error.textContent).not.toContain('read failed');
+
+    failing = false;
+    await tree.run(() => {
+      requireElement<HTMLButtonElement>(
+        tree?.container ?? document.body,
+        '[data-testid="connection-request-inbox-retry-button"]',
+      ).click();
+    });
+
+    expect(
+      tree.container.querySelector('[data-testid="connection-request-inbox-load-error"]'),
+    ).toBeNull();
+    expect(tree.container.querySelector('[data-testid="connection-request-row"]')).not.toBeNull();
   });
 
   it('names the requester and says what each answer does, before either is pressed', async () => {

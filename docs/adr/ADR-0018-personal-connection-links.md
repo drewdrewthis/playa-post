@@ -270,9 +270,12 @@ interleave with.
 `NOT_FOUND` in `connections.router.ts`'s `asTrpcError`, exactly as `InvitationUnavailableError`
 does.
 
-**Every** failed resolution arrives as the same message with no cause named: an unknown
-slug, a malformed slug, a rotated slug, a deactivated owner, a self-request, an
-already-connected pair, an owner at their pending cap, and a link over its rate limit.
+**Every** failed resolution arrives as the same message with no cause named. At the
+repository these are seven distinct refusals (Verification row 12): a slug matching no row
+— which is what an unknown, malformed, *and* rotated slug all are, since a rotated slug is
+stored nowhere (D3) and the wire puts no shape on a slug beyond "string" — a deactivated
+owner, a self-request, an already-connected pair, a live duplicate request from the same
+pair, an owner at their pending cap, and a link over its rate limit.
 
 The two abuse limits hiding behind it are the ones worth stating aloud. "Not accepting
 requests right now" would be an honest code and a leak — it tells anybody holding a public
@@ -350,25 +353,25 @@ own migration story, and #206 explicitly did not ask for it.
 
 | # | Claim | Evidence |
 |---|---|---|
-| 1 | Both tables carry the §4 backstop, `app_rw`-only grants, and nothing for `anon`/`authenticated`/`public` | `modules/connections/tests/integration/personal-links-schema-migration.integration.test.ts` |
+| 1 | Both tables carry the §4 backstop, `app_rw`-only grants, and nothing for `anon`/`authenticated`/`public` | `apps/server/src/modules/connections/tests/integration/personal-links-schema-migration.integration.test.ts` |
 | 2 | One row per owner (PK on `owner_id`), a unique slug, and **nowhere to keep a retired slug** | same suite — the column list is asserted exhaustively, so adding `previous_slug` fails |
 | 3 | Status is the three states with **no `expired` among them**, and `decided_at` agrees in both directions | same suite |
 | 4 | One open request per pair, and a *decided* request frees the pair | same suite |
 | 5 | The inbox/cap index and the rate-window index both exist, and there is no requester-side one | same suite |
-| 6 | A slug is 16 CSPRNG bytes, base64url, strictly weaker than an invite token, and independent of its owner in both directions | `tests/domain/personal-link.unit.test.ts`; `tests/fitness/invite-token-csprng.fitness.test.ts` now walks `personal-link.ts` |
-| 7 | Two draws never match — a rotation is unrecognisable to whoever held the old link | `tests/domain/personal-link.unit.test.ts` |
-| 8 | The three limits are 14 days / 32 / 12-per-60-minutes, and `hasLapsed` is boundary-inclusive exactly where the SQL predicate is | `tests/domain/connection-request.policy.unit.test.ts` |
-| 9 | The link is minted once and returned unchanged forever, and reading it never rotates it | `tests/integration/personal-links.integration.test.ts` |
+| 6 | A slug is 16 CSPRNG bytes, base64url, strictly weaker than an invite token, and independent of its owner in both directions | `apps/server/src/modules/connections/tests/domain/personal-link.unit.test.ts`; `tests/fitness/invite-token-csprng.fitness.test.ts` now walks `personal-link.ts` |
+| 7 | Two draws never match — a rotation is unrecognisable to whoever held the old link | `apps/server/src/modules/connections/tests/domain/personal-link.unit.test.ts` |
+| 8 | The three limits are 14 days / 32 / 12-per-60-minutes, and `hasLapsed` is boundary-inclusive exactly where the SQL predicate is | `apps/server/src/modules/connections/tests/domain/connection-request.policy.unit.test.ts` |
+| 9 | The link is minted once and returned unchanged forever, and reading it never rotates it | `apps/server/src/modules/connections/tests/integration/personal-links.integration.test.ts` |
 | 10 | A rotated slug is **indistinguishable from one that never existed**, and rotation touches neither existing connections nor already-received requests | same suite |
 | 11 | A total stranger is named the owner (the consent inversion), and a deactivated owner's link stops resolving with no extra check | same suite |
 | 12 | Seven different send refusals answer identically and leave zero rows behind; four decide refusals do the same | same suite — serialized into a `Set` asserted to hold one element |
 | 13 | A lapsed request lets the pair ask again; a live one still refuses — the two arms of the `ON CONFLICT` fix, held apart | same suite, both tests |
 | 14 | Accepting writes the connection **in the same transaction**, at an accepted invite's own disclosure; declining connects nobody and announces nothing to the requester | same suite |
 | 15 | Deciding is terminal-once under concurrency, unaffected by a rotation in between, and a declined pair may ask again | same suite |
-| 16 | Events carry no slug, name the right actor, and refuse to be built from the wrong row | `tests/domain/connection-request.events.unit.test.ts` |
-| 17 | The services hold no authorization and read one clock per call, over fakes rather than mocks | `tests/unit/personal-link-services.unit.test.ts` |
-| 18 | `viewerState` precedence is `own` > `connected` > `requested` > `open` | `tests/unit/opened-personal-link.unit.test.ts` |
-| 19 | The wire refuses a self-named actor and an unknown decision | `tests/unit/decide-connection-request.input.unit.test.ts` |
+| 16 | Events carry no slug, name the right actor, and refuse to be built from the wrong row | `apps/server/src/modules/connections/tests/domain/connection-request.events.unit.test.ts` |
+| 17 | The services hold no authorization and read one clock per call, over fakes rather than mocks | `apps/server/src/modules/connections/tests/unit/personal-link-services.unit.test.ts` |
+| 18 | `viewerState` precedence is `own` > `connected` > `requested` > `open` | `apps/server/src/modules/connections/tests/unit/opened-personal-link.unit.test.ts` |
+| 19 | The wire refuses a self-named actor and an unknown decision | `apps/server/src/modules/connections/tests/unit/decide-connection-request.input.unit.test.ts` |
 | 20 | Contract and router agree at 46 procedures | `tests/fitness/contracts-api-parity.fitness.test.ts` |
 | 21 | No new procedure accepts a viewer identifier | `tests/fitness/viewer-id-provenance.fitness.test.ts` |
 | 22 | `/c/:slug` calls **no mutation** on open, names the owner, and states that a tap sends a *request* before the button is pressed | `apps/web/src/app/routes/personal-link-open.unit.test.tsx` |
