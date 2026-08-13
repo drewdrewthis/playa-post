@@ -34,6 +34,8 @@ export function capturePath(location: Location): ReturnPathState {
  * have written — so this validates rather than casts. Only an origin-relative path is
  * returned: a value not starting with `/` could name another origin outright, and
  * `//host` is scheme-relative — both would turn a stored path into an open redirect.
+ * Backslashes are refused wholesale because WHATWG URL parsing treats `\` as `/` in
+ * http(s) URLs, which would let `/\host` sneak past the `//` check.
  */
 export function returnPathFrom(state: unknown): string | null {
   if (typeof state !== 'object' || state === null) {
@@ -42,7 +44,12 @@ export function returnPathFrom(state: unknown): string | null {
 
   const from = (state as { from?: unknown }).from;
 
-  if (typeof from !== 'string' || !from.startsWith('/') || from.startsWith('//')) {
+  if (
+    typeof from !== 'string' ||
+    !from.startsWith('/') ||
+    from.startsWith('//') ||
+    from.includes('\\')
+  ) {
     return null;
   }
 

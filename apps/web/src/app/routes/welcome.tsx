@@ -30,7 +30,7 @@ export function WelcomeRoute(): JSX.Element {
     markWelcomeSeen();
     // Forwarded untouched: a first-ever visit that arrived through an invite link
     // carries that address as state (#205), and sign-in is where it gets honoured.
-    void navigate('/signin', { state: location.state as unknown });
+    void navigate('/signin', { state: location.state });
   }
 
   if (current === undefined) {

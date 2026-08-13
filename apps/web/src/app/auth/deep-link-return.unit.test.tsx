@@ -109,6 +109,63 @@ describe('capture: RequireSession preserves the interrupted address', () => {
   });
 });
 
+describe('capture: the mid-session probe refusals also preserve the address', () => {
+  async function mountProbeRefusal(code: 'UNAUTHORIZED' | 'FORBIDDEN'): Promise<MountedTree> {
+    const refusal = Object.assign(new Error(code), { data: { code } });
+
+    tree = await mountWithApi(
+      <MemoryRouter initialEntries={['/invite/abc123']}>
+        <SessionProvider authClient={createAuthClient({ accessToken: 'test-token' })}>
+          <Routes>
+            <Route path="/signin" element={<LocationProbe label="signin" />} />
+            <Route path="/onboarding" element={<LocationProbe label="onboarding" />} />
+            <Route
+              path="/invite/:token"
+              element={
+                <RequireSession>
+                  <p data-testid="gated-children">the invite</p>
+                </RequireSession>
+              }
+            />
+          </Routes>
+        </SessionProvider>
+      </MemoryRouter>,
+      createFakeApi({
+        'graph.list': () => {
+          throw refusal;
+        },
+      }),
+    );
+
+    return tree;
+  }
+
+  it('UNAUTHORIZED bounces to sign-in with the address as state', async () => {
+    // A refused token also clears the session, and the anonymous bounce can win the
+    // render race — mark welcome seen so both paths point at /signin, which is where
+    // a real device that has signed in before would land anyway.
+    globalThis.localStorage.setItem('playapost-onboarded', '1');
+
+    const mounted = await mountProbeRefusal('UNAUTHORIZED');
+
+    const probe = requireElement(mounted.container, '[data-testid="probe-signin"]');
+    expect(probe.textContent).toBe('/signin');
+    expect(JSON.parse(probe.getAttribute('data-state') ?? 'null')).toEqual({
+      from: '/invite/abc123',
+    });
+  });
+
+  it('FORBIDDEN bounces to onboarding with the address as state', async () => {
+    const mounted = await mountProbeRefusal('FORBIDDEN');
+
+    const probe = requireElement(mounted.container, '[data-testid="probe-onboarding"]');
+    expect(probe.textContent).toBe('/onboarding');
+    expect(JSON.parse(probe.getAttribute('data-state') ?? 'null')).toEqual({
+      from: '/invite/abc123',
+    });
+  });
+});
+
 describe('return: SignInRoute honours the forwarded address once signed in', () => {
   async function mountSignedInArrival(state: unknown): Promise<MountedTree> {
     tree = await mountWithApi(

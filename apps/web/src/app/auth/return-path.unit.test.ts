@@ -36,6 +36,8 @@ describe('returnPathFrom', () => {
     ['an absolute URL', { from: 'https://evil.example/phish' }],
     // `//host/path` is scheme-relative: the browser would leave this origin entirely.
     ['a scheme-relative URL', { from: '//evil.example/phish' }],
+    // WHATWG URL parsing reads `\` as `/` in http(s) URLs, so this is `//host` in disguise.
+    ['a backslash scheme-relative URL', { from: '/\\evil.example/phish' }],
   ])('refuses %s', (_name, state) => {
     expect(returnPathFrom(state)).toBeNull();
   });
