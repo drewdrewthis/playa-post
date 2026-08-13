@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { SessionProvider } from '../auth/session-provider';
@@ -48,10 +49,13 @@ afterEach(async () => {
 
 async function mountCodeForm(): Promise<MountedTree> {
   // SignInRoute talks to the auth client, never the API — an empty fake proves it.
+  // The router is for `useLocation` (the #205 return path); no navigation happens here.
   tree = await mountWithApi(
-    <SessionProvider authClient={createAnonymousAuthClient()}>
-      <SignInRoute />
-    </SessionProvider>,
+    <MemoryRouter>
+      <SessionProvider authClient={createAnonymousAuthClient()}>
+        <SignInRoute />
+      </SessionProvider>
+    </MemoryRouter>,
     createFakeApi({}),
   );
 
@@ -67,9 +71,11 @@ async function mountCodeForm(): Promise<MountedTree> {
 
 async function mountSignedOut(): Promise<MountedTree> {
   tree = await mountWithApi(
-    <SessionProvider authClient={createAnonymousAuthClient()}>
-      <SignInRoute />
-    </SessionProvider>,
+    <MemoryRouter>
+      <SessionProvider authClient={createAnonymousAuthClient()}>
+        <SignInRoute />
+      </SessionProvider>
+    </MemoryRouter>,
     createFakeApi({}),
   );
 

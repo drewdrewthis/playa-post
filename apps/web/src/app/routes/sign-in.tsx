@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type JSX } from 'react';
-import { Navigate } from 'react-router';
+import { Navigate, useLocation } from 'react-router';
 
+import { returnPathFrom } from '../auth/return-path';
 import { useSession } from '../auth/session-provider';
 import { describeSignInFailure } from '../auth/sign-in-failure';
 
@@ -20,13 +21,19 @@ import './sign-in.css';
  */
 export function SignInRoute(): JSX.Element {
   const { status, requestSignInLink, verifySignInCode } = useSession();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [code, setCode] = useState('');
   const [failure, setFailure] = useState<string | null>(null);
 
   if (status === 'signed-in') {
-    return <Navigate to="/" replace />;
+    // Back to the address `RequireSession` interrupted, when there is one — an invite
+    // or board link opened while signed out resumes here instead of dumping the person
+    // on the graph to hunt the link down again (#205). No need to forward it further:
+    // if onboarding still stands in the way, `RequireSession` re-captures this same
+    // address when it bounces to `/onboarding`.
+    return <Navigate to={returnPathFrom(location.state) ?? '/'} replace />;
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {

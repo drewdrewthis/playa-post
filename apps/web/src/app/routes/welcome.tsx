@@ -1,5 +1,5 @@
 import { useState, type JSX } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 
 import { markWelcomeSeen, WELCOME_STEPS } from '../welcome/welcome-steps';
 
@@ -20,6 +20,7 @@ import '../welcome/welcome.css';
  */
 export function WelcomeRoute(): JSX.Element {
   const navigate = useNavigate();
+  const location = useLocation();
   const [step, setStep] = useState(0);
 
   const current = WELCOME_STEPS[step];
@@ -27,7 +28,9 @@ export function WelcomeRoute(): JSX.Element {
 
   function finish(): void {
     markWelcomeSeen();
-    void navigate('/signin');
+    // Forwarded untouched: a first-ever visit that arrived through an invite link
+    // carries that address as state (#205), and sign-in is where it gets honoured.
+    void navigate('/signin', { state: location.state });
   }
 
   if (current === undefined) {

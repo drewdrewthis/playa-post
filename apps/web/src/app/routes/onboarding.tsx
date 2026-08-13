@@ -1,11 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent, type JSX } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 
 import { DISPLAY_NAME_MAX_LENGTH } from '@playa-post/contracts';
 
 import { useApi } from '../api/api-provider';
 import { applicationErrorCode } from '../api/client';
+import { returnPathFrom } from '../auth/return-path';
 
 /**
  * What each structured handle rejection means, in words a person can act on.
@@ -38,6 +39,7 @@ const UNKNOWN_HANDLE_FAILURE = 'That handle was not accepted.';
 export function OnboardingRoute(): JSX.Element {
   const api = useApi();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [handle, setHandle] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -47,7 +49,10 @@ export function OnboardingRoute(): JSX.Element {
       api.mutate('identity.completeOnboarding', input),
     onSuccess: async () => {
       await queryClient.invalidateQueries();
-      await navigate('/', { replace: true });
+      // The address that was interrupted for onboarding, when `RequireSession` passed
+      // one along — a new user who arrived through an invite link finishes here and
+      // lands on the invite, not the empty graph (#205).
+      await navigate(returnPathFrom(location.state) ?? '/', { replace: true });
     },
   });
 

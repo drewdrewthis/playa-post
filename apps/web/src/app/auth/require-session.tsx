@@ -7,6 +7,7 @@ import { procedureErrorCode } from '../api/client';
 import { GRAPH_LIST_QUERY_KEY } from '../graph/graph-query-keys';
 import { hasSeenWelcome } from '../welcome/welcome-steps';
 
+import { capturePath } from './return-path';
 import { useSession } from './session-provider';
 import { SessionWait } from './session-wait';
 
@@ -83,7 +84,16 @@ export function RequireSession({ children }: { readonly children: ReactNode }): 
     // A first-ever visit gets the pitch before the form; the welcome screen itself
     // drops through to `/signin`. One device-scoped flag decides, so a returning
     // signed-out user is never made to sit through it again.
-    return <Navigate to={hasSeenWelcome() ? SIGN_IN_PATH : WELCOME_PATH} replace />;
+    // `state` carries the address being interrupted, so the sign-in screen can put
+    // the person back where they were heading — an invite link should not need to be
+    // clicked twice (#205). Welcome and onboarding forward it.
+    return (
+      <Navigate
+        to={hasSeenWelcome() ? SIGN_IN_PATH : WELCOME_PATH}
+        replace
+        state={capturePath(location)}
+      />
+    );
   }
 
   // Cached data outranks a live error: see the offline note above.
@@ -95,11 +105,11 @@ export function RequireSession({ children }: { readonly children: ReactNode }): 
     const code = procedureErrorCode(probe.error);
 
     if (code === 'UNAUTHORIZED') {
-      return <Navigate to={SIGN_IN_PATH} replace />;
+      return <Navigate to={SIGN_IN_PATH} replace state={capturePath(location)} />;
     }
 
     if (code === 'FORBIDDEN' && location.pathname !== ONBOARDING_PATH) {
-      return <Navigate to={ONBOARDING_PATH} replace />;
+      return <Navigate to={ONBOARDING_PATH} replace state={capturePath(location)} />;
     }
 
     if (code === null) {
