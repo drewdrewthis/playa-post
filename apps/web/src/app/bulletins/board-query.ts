@@ -147,7 +147,7 @@ export interface BoardQueryState {
  * Recover the chips a query's `type:` term(s) select and the search text they do not
  * already cover — `buildBoardQuery`'s inverse. `filter` and `search` come from this one
  * function together, deliberately: deriving them from two separate reads of the same
- * query text is how a saved `type:` term once ended up counted twice — recovered as a
+ * query text is how a stored `type:` term once ended up counted twice — recovered as a
  * chip by one read, left sitting in the search box by the other, for `buildBoardQuery`
  * to add back a second time.
  *

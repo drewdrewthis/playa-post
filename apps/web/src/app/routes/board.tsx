@@ -26,7 +26,6 @@ import { NoteCard } from '../notes/note-card';
 import { NoteDetailSheet } from '../notes/note-detail-sheet';
 import { useOffline } from '../offline/offline-provider';
 import { forgetBoardCard, queueMutation } from '../offline/pending-mutations';
-import { saveViewFailureMessage, seedSavedViewName } from '../views/saved-view-list';
 
 import {
   bulletinSheet,
@@ -117,12 +116,11 @@ export function BoardRoute(): JSX.Element {
    */
   const view = parseBoardView(searchParams.get('view'));
   const showingDismissed = view === BOARD_VIEW.dismissed;
-  // Seeded from `?q=` on mount and re-synced whenever it changes (the effect below) —
-  // that is how the Saved screen's "OPEN ON BOARD" arrives (#173). `search` and `filter`
-  // both come from one `parseBoardQueryState` call — deriving them separately re-creates
-  // the duplicated term a saved `type:` value once ended up as. Typing or clicking a chip
-  // never writes back to `?q=`, so re-deriving here can never fight a person's own edit —
-  // it only ever reacts to a *new* URL, which is exactly a saved view opening or a
+  // Seeded from `?q=` on mount and re-synced whenever it changes (the effect below).
+  // `search` and `filter` both come from one `parseBoardQueryState` call — deriving them
+  // separately re-creates the duplicated term a stored `type:` value once ended up as.
+  // Typing or clicking a chip never writes back to `?q=`, so re-deriving here can never
+  // fight a person's own edit — it only ever reacts to a *new* URL, which is exactly a
   // browser back/forward landing on a different `?q=`.
   const initialQueryState = parseBoardQueryState(urlQuery);
   const [search, setSearch] = useState(initialQueryState.search);
@@ -148,7 +146,6 @@ export function BoardRoute(): JSX.Element {
    * that is no longer on the board.
    */
   const [reporting, setReporting] = useState<BoardCardView | null>(null);
-  const [savedNotice, setSavedNotice] = useState<string | null>(null);
 
   const settledSearch = useDebounced(search, SEARCH_DEBOUNCE_MS);
   const query = buildBoardQuery(filter, settledSearch);
@@ -203,23 +200,6 @@ export function BoardRoute(): JSX.Element {
   // The offline cache is unioned in so a card written while offline — or one whose
   // server refetch has not landed yet — is on screen rather than briefly missing.
   const cached = useLiveQuery(() => database.cachedBoard.toArray(), [database], []);
-
-  // ⚠ Saves `query`, the composed text the server was actually asked — chip term
-  // included — and not the raw field. A view that stored only what was typed would come
-  // back narrowing differently from the board it was saved off, which is the one way a
-  // saved view can quietly lie.
-  const saveView = useMutation({
-    mutationFn: (input: { name: string; sourceText: string }) =>
-      api.mutate('views.saved.save', input),
-    onSuccess: async () => {
-      setSavedNotice('View saved — find it under Saved');
-      await queryClient.invalidateQueries({ queryKey: ['views', 'saved', 'list'] });
-    },
-    // ⚠ The server's refusals are not all the same refusal — see `saveViewFailureMessage`.
-    onError: (error: unknown) => {
-      setSavedNotice(saveViewFailureMessage(error));
-    },
-  });
 
   /*
    * One mutation for both, because both have the same effect on this screen: the
@@ -483,9 +463,8 @@ export function BoardRoute(): JSX.Element {
        *
        * ⚠ **Not a filter chip.** `BOARD_FILTER_CHIPS` is a closed set over `BulletinType`
        * and every one of its members compiles into a `type:` term the server's grammar
-       * parses; "Dismissed" is not a kind of bulletin and has no term. Putting it in that
-       * row would also let it be saved into a view (#173), which would turn a person's
-       * private dismissals into a named, re-openable query.
+       * parses; "Dismissed" is not a kind of bulletin and has no term — a person's
+       * private dismissals must never become part of a shareable, storable query (#173).
        *
        * `aria-pressed` and `board-search__chip` are borrowed from that row anyway, because
        * this reads as the same kind of control and a second pill style would be a second
@@ -613,18 +592,6 @@ export function BoardRoute(): JSX.Element {
             // ⚠ Bulletins matched, not rows on screen: a search never reaches a note, so
             // counting them would report matches against a query they were never tested by.
             matchCount={board.isSuccess ? visible.length : null}
-            saving={saveView.isPending}
-            // ⚠ The *settled* query, not the raw field. `BoardSearch` knows a query is being
-            // typed; only this route knows whether one has composed yet, because only it holds
-            // the debounce. Without this the control is live for ~250ms doing nothing.
-            settledQueryActive={queryActive}
-            onSave={() => {
-              if (query === undefined) {
-                return;
-              }
-              setSavedNotice(null);
-              saveView.mutate({ name: seedSavedViewName(query), sourceText: query });
-            }}
           />
 
           {/*
@@ -672,17 +639,6 @@ export function BoardRoute(): JSX.Element {
                 </button>
               </div>
             </div>
-          )}
-
-          {/*
-           * `screen__notice` rather than a new class: this is the shared "small line of prose
-           * under the controls" treatment, and a second one would be a second thing to keep
-           * in sync.
-           */}
-          {savedNotice === null ? null : (
-            <p className="screen__notice" data-testid="board-save-view-notice" role="status">
-              {savedNotice}
-            </p>
           )}
 
           {region.boardError ? (

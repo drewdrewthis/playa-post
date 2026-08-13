@@ -107,28 +107,6 @@
   color: var(--pp-sub);
 }
 
-.board-search__save-slot {
-  margin-left: auto;
-}
-
-.board-search__save {
-  white-space: nowrap;
-  padding: 4px 10px;
-  border: 1px dashed var(--pp-accent);
-  border-radius: var(--pp-radius-pill);
-  background: none;
-  color: var(--pp-accent);
-  font-weight: 700;
-  font-size: var(--pp-text-2xs);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.board-search__save:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 /*
  * The chip row scrolls edge to edge, so a chip is never half-clipped by the screen's
  * own gutter. The negative inline margin cancels `.screen`'s padding and the matching
