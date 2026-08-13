@@ -1,5 +1,18 @@
 import type { CreateBulletinRequest, BulletinIdRequest, Bulletin, Board, BoardRequest, VisibleBulletin } from './bulletins';
-import type { GetConnectionRequest, Connection, Invite, InviteTokenRequest, OpenedInvite, SetTrustRequest } from './connections';
+import type {
+  Connection,
+  ConnectionRequestReceipt,
+  DecideConnectionRequestRequest,
+  GetConnectionRequest,
+  IncomingConnectionRequest,
+  Invite,
+  InviteTokenRequest,
+  OpenedInvite,
+  OpenedPersonalLink,
+  PersonalLink,
+  PersonalLinkSlugRequest,
+  SetTrustRequest,
+} from './connections';
 import type { Graph } from './graph';
 import type { Health } from './health';
 import type {
@@ -99,11 +112,38 @@ export interface PlayaPostApi {
   'identity.visibility.get': QuerySpec<void, VisibilitySetting>;
   'identity.visibility.set': MutationSpec<SetVisibilityRequest, VisibilitySetting>;
 
+  /**
+   * The single-use invite model (M2.5).
+   *
+   * ⚠ **Still served, and no longer minted from the UI** (issue #206). A token already
+   * sitting in somebody's chat history has to keep opening, which is why
+   * `invitations.open` and `connection.accept` stay; `invitations.create` stays because
+   * removing a procedure the contract declares is a breaking change for any client that
+   * has not shipped yet. New share surfaces use `personalLink.*` instead.
+   */
   'connections.invitations.create': MutationSpec<void, Invite>;
   'connections.invitations.open': QuerySpec<InviteTokenRequest, OpenedInvite>;
   'connections.connection.accept': MutationSpec<InviteTokenRequest, Connection>;
   'connections.connection.get': QuerySpec<GetConnectionRequest, Connection>;
   'connections.trust.set': MutationSpec<SetTrustRequest, void>;
+
+  /**
+   * The permanent, rotatable personal link (issue #206) — an address rather than a key.
+   *
+   * `ensure` is a **mutation** even though a caller means it as a read: nobody has a link
+   * until they look for one, so the first call writes. It is idempotent in the database,
+   * so a screen may call it on every arrival, and a second call **never rotates**.
+   */
+  'connections.personalLink.ensure': MutationSpec<void, PersonalLink>;
+  'connections.personalLink.rotate': MutationSpec<void, PersonalLink>;
+  'connections.personalLink.open': QuerySpec<PersonalLinkSlugRequest, OpenedPersonalLink>;
+
+  'connections.requests.send': MutationSpec<PersonalLinkSlugRequest, ConnectionRequestReceipt>;
+  'connections.requests.listInbox': QuerySpec<void, readonly IncomingConnectionRequest[]>;
+  'connections.requests.decide': MutationSpec<
+    DecideConnectionRequestRequest,
+    ConnectionRequestReceipt
+  >;
 
   'graph.list': QuerySpec<void, Graph>;
 

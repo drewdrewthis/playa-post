@@ -51,6 +51,12 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
       acceptInvite: { accept: unreachable },
       setConnectionTrust: { set: unreachable },
       getConnection: { get: unreachable },
+      ensurePersonalLink: { ensure: unreachable },
+      rotatePersonalLink: { rotate: unreachable },
+      openPersonalLink: { open: unreachable },
+      sendConnectionRequest: { send: unreachable },
+      listConnectionRequests: { list: unreachable },
+      decideConnectionRequest: { decide: unreachable },
     }),
     graph: createGraphRouter({ listVisibleGraph: { list: unreachable } }),
     bulletins: createBulletinsRouter({

@@ -20,9 +20,16 @@ import { findNonCsprngRandomSources } from './find-non-csprng-random-source';
  * rule wherever it appears inside the invite-token source file.
  *
  * Deliberately narrow, mirroring `no-sql-outside-persistence`'s own scoping
- * discipline: this walks `modules/connections/domain/invite-token.ts` only, not every
+ * discipline: this walks the module's **token-and-slug generators** only, not every
  * file that happens to call `Math.random` — a repo-wide ban is a different, larger
  * rule nobody has asked for yet.
+ *
+ * ⚠ **`domain/personal-link.ts` is the second file in scope** (issue #206). A personal
+ * link's slug is drawn from the same `RandomTokenSource` port, and its entropy
+ * requirement is weaker than a token's — anti-enumeration rather than anti-forgery — so
+ * it is precisely the generator somebody could "simplify" to a timestamp or a
+ * `Math.random` id without feeling they had touched a credential. Adding the path here
+ * costs one line; noticing that omission in review is not something to rely on.
  */
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const inviteTokenSource = join(
@@ -34,6 +41,16 @@ const inviteTokenSource = join(
   'connections',
   'domain',
   'invite-token.ts',
+);
+const personalLinkSource = join(
+  repositoryRoot,
+  'apps',
+  'server',
+  'src',
+  'modules',
+  'connections',
+  'domain',
+  'personal-link.ts',
 );
 const violatingFixture = join(
   repositoryRoot,
@@ -60,6 +77,23 @@ describe('invite-token CSPRNG fitness rule (M2-AC17)', () => {
       const violations = findNonCsprngRandomSources([inviteTokenSource]);
 
       expect(violations).toEqual([]);
+    });
+  });
+
+  describe('against the real personal-link module (issue #206)', () => {
+    it('reports no violation — the slug is drawn from the same CSPRNG port', () => {
+      const violations = findNonCsprngRandomSources([personalLinkSource]);
+
+      expect(violations).toEqual([]);
+    });
+  });
+
+  describe('both generators together', () => {
+    // Asserted over both paths in one call, so the rule cannot pass merely because each
+    // file was checked by a test that only ever looks at one of them — the shape that
+    // lets a third generator be added and watched by nothing.
+    it('walks every randomness source this module mints identifiers from', () => {
+      expect(findNonCsprngRandomSources([inviteTokenSource, personalLinkSource])).toEqual([]);
     });
   });
 });
