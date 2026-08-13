@@ -11,8 +11,8 @@ import { createListBoardQuery } from '../../apps/server/src/modules/bulletins/ap
 import { createPostgresBulletinRepository } from '../../apps/server/src/modules/bulletins/persistence/postgres-bulletin.repository';
 
 /**
- * ADR-0002 **B10** — "A filter can narrow but never widen": "A saved view or Notify
- * Me query crafted to reference a non-authorized author, tag, or bulletin returns 0
+ * ADR-0002 **B10** — "A filter can narrow but never widen": "A Notify Me query or
+ * board query crafted to reference a non-authorized author, tag, or bulletin returns 0
  * rows rather than an error-free leak."
  *
  * M2 ships only `type:` and bare text (ADR-0007's full grammar — `from:`, `tag:`,

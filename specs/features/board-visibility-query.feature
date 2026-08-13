@@ -4,7 +4,7 @@ Feature: Board — default listing and restricted query grammar
   So that no unauthorized bulletin or person is ever exposed through the board
 
   # M2 scope: default board list + ADR-0007 grammar restricted to type: and bare text.
-  # Cut to M5: full grammar, saved views CRUD, notify-bell designation UI, sorts.
+  # Cut to M5: full grammar, sorts. (Saved views were cut entirely by #208, ADR-0019.)
 
   @e2e
   # @ac:M2-AC1

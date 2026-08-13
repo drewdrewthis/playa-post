@@ -70,26 +70,26 @@ error. Rejecting an unresolvable `from:` would make the error a people-existence
 
 ### Storage and evaluation
 
-Saved views and the Notify Me query store **both** the source text (for round-tripping into the input)
+The Notify Me query stores **both** the source text (for round-tripping into the input)
 and the **validated AST as JSONB** with an `ast_version`:
 
 ```sql
-app.saved_views (id, owner_id, name, source_text, ast jsonb, ast_version int, sort, created_at, updated_at, version)
-app.notify_me_queries (id primary key, owner_id, source_text, ast jsonb, ast_version int, source_view_id, updated_at, version)
+app.notify_me_queries (id primary key, owner_id unique, source_text, ast jsonb, ast_version int, updated_at, version)
 ```
+
+⚠ **`app.saved_views` used to be written down here too.** Issue
+[#208](https://github.com/drewdrewthis/playa-post/issues/208) / ADR-0019 removed Saved
+Views entirely, and the `source_view_id` designation column went with them.
 
 Storing the AST means Notify Me evaluation on the outbox path does not re-parse untrusted text on every
 event, and a future grammar change is a versioned migration rather than a silent reinterpretation of
 saved queries.
 
-⚠ **`app.notify_me_queries` used to read `owner_id primary key` here, and that line was D1** —
-"exactly one Notify Me query per user, expressed as a database constraint rather than a convention".
-Product decision **D16** ([#172](https://github.com/drewdrewthis/playa-post/issues/172), owner-directed)
-reopened the count: a person may notify on several saved views at once. The constraint expressing it is
-now `unique nulls not distinct (owner_id, source_view_id)` — one query per (owner, view), plus one
-untied query per owner — so it is still the database enforcing the rule, over a set rather than a
-singleton. The per-person bound the primary key was also providing (how many queries the evaluator reads
-per `BulletinCreated`) moved into `NOTIFY_ME_QUERY_LIMIT_PER_OWNER`; see D16 and ADR-0016's amended D1.
+The key has travelled: `owner_id primary key` was D1 ("exactly one Notify Me query per
+user, expressed as a database constraint"); D16 (#172) reopened the count with
+`unique nulls not distinct (owner_id, source_view_id)`; ADR-0019 (#208) closed it again
+as a plain `unique (owner_id)`, keeping the surrogate `id` as the primary key because
+outbox events route on it. One query per person, enforced by the database throughout.
 
 ### Compilation
 
@@ -108,8 +108,9 @@ Free-text uses a Postgres generated `tsvector` column over title/body/tags/locat
 
 ### Reuse
 
-Same AST, same compiler, three consumers: board list, saved views, Notify Me matching. One grammar, one
-validator, one compiler — the reuse is the reason this is a fixed grammar and not three ad-hoc filters.
+Same AST, same compiler, two consumers: board list and Notify Me matching (saved views
+were the third until #208 / ADR-0019 removed them). One grammar, one validator, one
+compiler — the reuse is the reason this is a fixed grammar and not ad-hoc filters.
 
 ## Alternatives considered
 

@@ -15,13 +15,8 @@ import { createReportBulletinService } from '../../apps/server/src/modules/moder
 import { createUndismissBulletinService } from '../../apps/server/src/modules/moderation/application/undismiss-bulletin.service';
 import { ModerationTargetUnavailableError } from '../../apps/server/src/modules/moderation/domain/moderation.errors';
 import { createPostgresModerationRepository } from '../../apps/server/src/modules/moderation/persistence/postgres-moderation.repository';
-import { createDeleteSavedViewService } from '../../apps/server/src/modules/views/application/delete-saved-view.service';
-import { createRenameSavedViewService } from '../../apps/server/src/modules/views/application/rename-saved-view.service';
-import { createSaveViewService } from '../../apps/server/src/modules/views/application/save-view.service';
-import { createSetSavedViewNotifyService } from '../../apps/server/src/modules/views/application/set-saved-view-notify.service';
 import { createUpdateNotifyMeQueryService } from '../../apps/server/src/modules/views/application/update-notify-me-query.service';
 import { createPostgresNotifyMeQueryRepository } from '../../apps/server/src/modules/views/persistence/postgres-notify-me-query.repository';
-import { createPostgresSavedViewRepository } from '../../apps/server/src/modules/views/persistence/postgres-saved-view.repository';
 
 /**
  * ADR-0002 **B13** — "Write-path IDOR matrix": "For every mutation type in
@@ -54,27 +49,14 @@ import { createPostgresSavedViewRepository } from '../../apps/server/src/modules
  * could exercise. Duplicated from `bulletin-request-lifecycle.integration.test.ts`'s
  * identical scenario.
  *
- * `view.save` is the first row here with a **real** unrelated-actor case rather than a
- * by-construction one: a saved view has an `id` a client legitimately sends
- * (`views.saved.rename` / `.delete` / `.setNotify` all name one), so unlike
- * `notifyMe.update` there genuinely is a field through which actor C can point at user
- * A's row. What makes it fail closed is that every statement behind those procedures
- * carries `owner_id = <actor>` in its `WHERE` — so C's attempt matches nothing, and "it
- * is not yours" and "it does not exist" become the same query result rather than two
- * distinguishable answers (M5-AC16: 404, never 403). That is the property this block
- * exercises, in all three shapes. Duplicated from
- * `modules/views/tests/integration/saved-view.integration.test.ts`'s identical scenario.
- *
  * `notifyMe.update` has the same "fail-closed by construction" shape for a different
  * reason: **the procedure carries no query-identifying field at all**, so there is
  * nothing for an unrelated actor to name — B14 forbids a client-suppliable `ownerId`,
  * and `UpdateNotifyMeQueryCommand` takes `actorId` from the resolved `Actor` only. What
- * makes that addressable was the primary key on `owner_id` (D1, ADR-0007:79) until
- * **decision D16 reopened D1** (#172); the procedure now writes the actor's row whose
- * `source_view_id` is `NULL`, held to one per person by
- * `UNIQUE NULLS NOT DISTINCT (owner_id, source_view_id)`. The property this block
- * exercises is unaffected — an unrelated actor still cannot name a row, whichever
- * constraint is doing the addressing. `update-notify-me-query.service.ts`'s own doc comment
+ * makes that addressable is the one-row-per-person key: the procedure writes the
+ * actor's own row, held to one per person by `unique (owner_id)` (#208, ADR-0019).
+ * An unrelated actor therefore cannot name a row at all.
+ * `update-notify-me-query.service.ts`'s own doc comment
  * states the resulting property: an actor supplying somebody else's
  * `expectedVersion` mismatches their **own** absent row and is refused before a
  * column of anybody else's row is read (`NotifyMeQueryConflictError`, which carries
@@ -83,7 +65,7 @@ import { createPostgresSavedViewRepository } from '../../apps/server/src/modules
  * application-level redaction step). Duplicated from
  * `notify-me-query.integration.test.ts`'s identical scenario.
  */
-describe('B13 — write-path IDOR matrix (bulletin.archive, bulletin.undismiss, notifyMe.update, view.save)', () => {
+describe('B13 — write-path IDOR matrix (bulletin.archive, bulletin.undismiss, notifyMe.update)', () => {
   let testDatabase: PostgresTestDatabase;
   let database: DatabaseConnection;
 
@@ -301,7 +283,7 @@ describe('B13 — write-path IDOR matrix (bulletin.archive, bulletin.undismiss, 
         const userA = await seedOnboardedUser('b13_notifyme_a');
         const actorC = await seedOnboardedUser('b13_notifyme_c');
 
-        // A has a saved query. C has no relationship to A or to A's query — there is
+        // A has a stored query. C has no relationship to A or to A's query — there is
         // no `connections` row between them, and there is no field on the mutation
         // through which C could name A's query at all (D1, B14). C's only possible
         // attack is guessing/observing A's `expectedVersion` and submitting it as
@@ -319,7 +301,7 @@ describe('B13 — write-path IDOR matrix (bulletin.archive, bulletin.undismiss, 
         expect(rejection).toBeInstanceOf(Error);
 
         // ADR-0005: "the conflict envelope is a leak channel" — C's rejection must
-        // not carry A's saved query text, and must carry no version/state field at
+        // not carry A's stored query text, and must carry no version/state field at
         // all (NotifyMeQueryConflictError's own contract).
         const serialized = JSON.stringify(rejection, Object.getOwnPropertyNames(rejection as object));
         expect(serialized).not.toMatch(/kitchen/);
@@ -333,72 +315,6 @@ describe('B13 — write-path IDOR matrix (bulletin.archive, bulletin.undismiss, 
     );
   });
 
-  describe('view.save', () => {
-    it("rejects actor C on rename, delete and setNotify with zero state change on user A's view", async () => {
-      const userA = await seedOnboardedUser('b13_savedviews_a');
-      const actorC = await seedOnboardedUser('b13_savedviews_c');
-
-      const savedViews = createPostgresSavedViewRepository({ database });
-      const saveView = createSaveViewService({ savedViews });
-      const renameSavedView = createRenameSavedViewService({ savedViews });
-      const deleteSavedView = createDeleteSavedViewService({ savedViews });
-      const setSavedViewNotify = createSetSavedViewNotifyService({ savedViews });
-
-      // A saves a view and lights its bell, so there is state on BOTH tables for C to
-      // reach — the designation is the part a `notify boolean` on someone else's row
-      // would have made writable (ADR-0016).
-      const viewA = await saveView.save({
-        actorId: userA,
-        name: 'Kitchen crew',
-        sourceText: 'type:request kitchen',
-      });
-      await setSavedViewNotify.set({ actorId: userA, viewId: viewA.id, notify: true });
-      const outboxBeforeAttack = await outboxRowCount();
-
-      // C has no relationship to A and no view of their own. Unlike notifyMe.update,
-      // C CAN name A's row — `viewId` is a legitimate client-supplied field — so this
-      // is a real attempt rather than a structurally impossible one.
-      const renameRejection = await renameSavedView
-        .rename({ actorId: actorC, viewId: viewA.id, name: 'Mine now', expectedVersion: 1 })
-        .catch((error: unknown) => error);
-      expect(renameRejection).toBeInstanceOf(Error);
-
-      const notifyRejection = await setSavedViewNotify
-        .set({ actorId: actorC, viewId: viewA.id, notify: false })
-        .catch((error: unknown) => error);
-      expect(notifyRejection).toBeInstanceOf(Error);
-
-      // Delete answers `deleted: false` rather than throwing — the same answer an
-      // invented id gets, which is what stops it being an oracle for real view ids.
-      await expect(deleteSavedView.delete({ actorId: actorC, viewId: viewA.id })).resolves.toEqual(
-        { viewId: viewA.id, deleted: false },
-      );
-
-      for (const rejection of [renameRejection, notifyRejection]) {
-        const serialized = JSON.stringify(rejection, Object.getOwnPropertyNames(rejection as object));
-        // ADR-0005's "the conflict envelope is a leak channel", applied to a view: C's
-        // refusals must carry neither A's name, nor A's query text, nor any version.
-        expect(serialized).not.toMatch(/[Kk]itchen/);
-        expect(serialized).not.toMatch(/currentState/);
-        expect(serialized).not.toMatch(/currentVersion/);
-      }
-
-      const { rows: viewRows } = await testDatabase.client.query<{
-        owner_id: string;
-        name: string;
-      }>(`select owner_id, name from app.saved_views`);
-      expect(viewRows).toEqual([{ owner_id: userA, name: 'Kitchen crew' }]);
-
-      // A's bell is still lit, on A's view, and C never acquired one.
-      const { rows: designationRows } = await testDatabase.client.query<{
-        owner_id: string;
-        source_view_id: string | null;
-      }>(`select owner_id, source_view_id from app.notify_me_queries`);
-      expect(designationRows).toEqual([{ owner_id: userA, source_view_id: viewA.id }]);
-
-      expect(await outboxRowCount()).toBe(outboxBeforeAttack);
-    });
-  });
 });
 
 /** Mirrors `packages/database/src/database-schema.integration.test.ts`'s helper. */
