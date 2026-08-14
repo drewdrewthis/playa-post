@@ -173,6 +173,21 @@ test.describe('the bell badge clears when the panel is opened', () => {
         await expect(clearAll).toBeHidden();
       }
 
+      // ⚠ The opt-out below stops future *matching*, not the delivery of matches the
+      // earlier specs' bulletins already made — those arrive when their 60-second
+      // grouping window (M2-AC7) elapses, which can be mid-journey. Every such bulletin
+      // was posted before this spec started, so waiting out one full window from here
+      // and clearing again retires the last possible in-flight arrival. 90 s for the
+      // same reason vertical-slice-e2e.spec.ts pays 90 s: window plus scheduler tick.
+      await page.waitForTimeout(90_000);
+      await page.reload();
+      await page.getByTestId('notifications-bell-button').click();
+      await expect(page.getByTestId('notifications-panel')).toBeVisible();
+      if (await clearAll.isVisible()) {
+        await clearAll.click();
+        await expect(clearAll).toBeHidden();
+      }
+
       await page.getByTestId('notification-settings-toggle').click();
       const bulletins = page.getByTestId('notification-setting-bulletins');
       await expect(bulletins).toBeVisible();
