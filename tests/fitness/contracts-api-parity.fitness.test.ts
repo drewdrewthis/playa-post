@@ -146,6 +146,8 @@ const inputParity: InputParity = {
   'notifications.markSeen': true,
   'notifications.dismiss': true,
   'notifications.push.subscribe': true,
+  'notifications.settings.get': true,
+  'notifications.settings.update': true,
 };
 
 const outputParity: OutputParity = {
@@ -190,6 +192,8 @@ const outputParity: OutputParity = {
   'notifications.markSeen': true,
   'notifications.dismiss': true,
   'notifications.push.subscribe': true,
+  'notifications.settings.get': true,
+  'notifications.settings.update': true,
 };
 
 describe('packages/contracts is the router, restated (ADR-0014)', () => {

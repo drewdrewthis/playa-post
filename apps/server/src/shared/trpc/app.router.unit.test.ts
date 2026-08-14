@@ -94,6 +94,7 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
       listNotifications: { list: unreachable },
       markNotificationsSeen: { markSeen: unreachable },
       dismissNotification: { dismiss: unreachable },
+      notificationSettings: { get: unreachable, update: unreachable },
     }),
   });
 
