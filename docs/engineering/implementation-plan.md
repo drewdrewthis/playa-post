@@ -51,11 +51,13 @@ Per-feature engineering DoD remains addendum §25 plus the repo-specific additio
   automatic community-wide punishment.
 - Private notes / `type:note` — cut by decision D2.
 - ~~Multiple notifying saved queries — cut by decision D1 (exactly one Notify Me).~~
-  **Reinstated by decision D16** ([#172](https://github.com/drewdrewthis/playa-post/issues/172),
-  owner-directed): several saved views may notify at once, capped per person because the
-  evaluator reads every switched-on query on every `BulletinCreated`. Struck rather than
-  deleted — this list is what a brief reads to learn what is deliberately absent, and a
-  line silently removed reads as an oversight.
+  ~~**Reinstated by decision D16** ([#172](https://github.com/drewdrewthis/playa-post/issues/172),
+  owner-directed): several saved views may notify at once, capped per person.~~
+  **Cut again, with Saved Views themselves, by decision D19**
+  ([#208](https://github.com/drewdrewthis/playa-post/issues/208), owner-directed,
+  ADR-0019): exactly one Notify Me query per person, `unique (owner_id)`. Struck rather
+  than deleted — this list is what a brief reads to learn what is deliberately absent,
+  and a line silently removed reads as an oversight.
 - Microservices, event sourcing, a custom command bus, or a custom query framework (addendum §8, §18).
 - Horizontal build-out of all modules before the M2 slice works (PDF §9, addendum §23).
 - Performance projections, caches, or materialized views before measurement demands them (ADR-0004).
@@ -284,7 +286,7 @@ User signs in → creates or opens an invite → another user accepts
 | **connections** | create invite (opaque revocable token), open invite, accept; `SetConnectionTrust` (private, directional, `unset` ≠ 0) | invite revocation UI, expiry policy, connection removal, introduction requests, blocking |
 | **graph** | `app.visible_people` recursive CTE (ADR-0004) rendering the viewer + accepted 1st-degree connections; `disclosure` levels present and enforced by the §6a projection rule | ghost/topology-only nodes, degrees ≥ 2, `path_via`, truncation UI, clustering, perf gate |
 | **bulletins** | `Request` type only: create, read via authorized board query, archive; lifecycle timestamps + `version` | the other six types, edit, expiry sweep, tags, location, URL detection |
-| **views** | **no saved views.** A default board list + the ADR-0007 grammar restricted to `type:` and bare text; **one** Notify Me query (D1) | full grammar, saved views CRUD, notify-bell designation UI, sorts |
+| **views** | **no saved views.** A default board list + the ADR-0007 grammar restricted to `type:` and bare text; **one** Notify Me query (D1) | full grammar, sorts. ~~saved views CRUD, notify-bell designation UI~~ — shipped early via #45/#172, then removed entirely by [#208](https://github.com/drewdrewthis/playa-post/issues/208) / ADR-0019 |
 | **notifications** | Web Push subscribe; `EvaluateNotifyMeHandler` on `BulletinCreated`; one grouped push via a 60 s window; delivery-time authorization re-check + identifier-only payloads (ADR-0002 §11) | grouping across event families, cross-device dedup, subscription expiry, preferences, the query-change combined notification |
 | **moderation** | private report of a bulletin → immediately hidden for the reporter; viewer-local dismissal | reason taxonomy, operator console + `app_operator_ro`, hide-author, blocking, withdrawal |
 | **sync** | envelope + `mutation_results` + replay for exactly `bulletin.create`; the actorship precedence rule for every M2 mutation | full conflict matrix, `expired`, batching, `expectedVersion` paths, conflict UI |
@@ -575,8 +577,8 @@ event**, restore from backup, `app_migrator` break-glass · M4.10 expand/contrac
 ### Work item groups
 
 **A. Bulletins and board breadth** — A1 remaining six types · A2 edit (+ `expectedVersion`) · A3 expiry
-sweep · A4 tags, location, URL detection · A5 full grammar · A6 saved views CRUD + defaults + sorts ·
-A7 Notify Me designation UI (D1) · A8 Notify Me full matching incl. the query-change combined notification.
+sweep · A4 tags, location, URL detection · A5 full grammar · ~~A6 saved views CRUD + defaults + sorts~~ (removed by #208 / ADR-0019) ·
+A7 standalone Notify Me UI (D19; web UI is a #208 follow-up) · A8 Notify Me full matching incl. the query-change combined notification.
 
 **B. Graph and connections** — B1 degrees ≥ 2 + ghost nodes with the ADR-0004 adjacency rule ·
 B2 `path_via` + truncation UI · B3 introduction requests · B4 blocking + cache invalidation ·
@@ -655,13 +657,14 @@ G5 public API docs · G6 load test.
 - **M5-AC13 (subscription lifecycle, C3)** A push endpoint returning 404/410 causes the subscription row to
   be deleted with no further sends, while other devices of the same user still receive.
   *Evidence: quoted `SELECT` before/after + the second device's captured payload.*
-- **M5-AC14 (Notify Me is singular, D1, A7)** Creating a second Notify Me query fails at the database
-  constraint; toggling the bell on view B moves the query from view A and the UI states that it moved.
-  *Evidence: quoted constraint-violation error + a screenshot of the moved-bell feedback.*
+- **M5-AC14 (Notify Me is singular, D19, A7)** Creating a second Notify Me query for the same owner
+  fails at the database constraint (`unique (owner_id)`); the bell-movement half died with saved views
+  ([#208](https://github.com/drewdrewthis/playa-post/issues/208) / ADR-0019).
+  *Evidence: quoted constraint-violation error.*
 - **M5-AC15 (query-change combined notification, A8)** Changing the Notify Me query produces exactly **one**
   combined notification for pre-existing matches, and zero on a subsequent unchanged save.
   *Evidence: quoted push payload + notification counts before and after the no-op save.*
-- **M5-AC16 (saved views are viewer-scoped, A6)** User B cannot read, update, or delete user A's view by ID
+- ~~**M5-AC16 (saved views are viewer-scoped, A6)** User B cannot read, update, or delete user A's view by ID~~ — the feature was removed by [#208](https://github.com/drewdrewthis/playa-post/issues/208) / ADR-0019 before M5; the surviving write-path proof is B13's `notifyMe.update` block
   — 404, not 403 (ADR-0002 §10). *Evidence: three quoted responses.*
 - **M5-AC17 (full grammar, A5)** Each of `from: tag: loc: deg: trust: is:` plus negation, alternation, and
   quoted phrases parses to the expected AST and compiles to a result set matching a hand-computed fixture;
@@ -993,9 +996,9 @@ Not filed. Labels: `feature`, `adr`, `vertical-slice`, `bug`.
 | 16 | connections: invite create / open / accept | Opaque revocable token from a CSPRNG, ≥ 16 bytes, not derived from any ID. Acceptance is transactional and emits `ConnectionAccepted`. A spent or revoked token returns `INVITATION_UNAVAILABLE`. | vertical-slice |
 | 17 | connections: private directional trust | `SetConnectionTrust` — directional, private, viewer-owned; `unset` distinct from `0`, modelled as NULL. Emits `ConnectionTrustChanged`. Never exposed to the other party or a third party, **including via conflict envelopes**. | vertical-slice |
 | 18 | graph: `visible_people` recursive CTE + read model + person projection | Checked-in `SECURITY INVOKER` function (ADR-0004) with `SET search_path = ''` (ADR-0002 §5 pooler-safety — that rule's home is ADR-0002, not ADR-0004), limited in M2 to the viewer plus accepted 1st-degree connections. Blocks prune inside the recursive term. Implements ADR-0002 §6a: every person representation in every payload is projected through this function's `disclosure` level. | vertical-slice |
-| 19 | bulletins: create and archive a Request | `CreateBulletinService` and `ArchiveBulletinService` with lifecycle timestamps, `version`, and `BulletinCreated`/`BulletinArchived` outbox events in the same transaction. Request type only. Non-author `getById` on an archived bulletin returns 404 `BULLETIN_GONE`. **Extended by decision D17** ([#169](https://github.com/drewdrewthis/playa-post/issues/169)): `archived_at` is confirmed as the product's soft-delete column and the write path is unchanged, but the row is no longer kept forever — the hourly retention purge hard-deletes it once it is older than `PURGE_RETENTION_DAYS` (default 30), taking its reports and dismissals with it by cascade, so a removed bulletin eventually leaves its author's own `listMine` too. `app.saved_views` gained the same treatment; `app.notes` is explicitly excluded, having no delete. | vertical-slice |
+| 19 | bulletins: create and archive a Request | `CreateBulletinService` and `ArchiveBulletinService` with lifecycle timestamps, `version`, and `BulletinCreated`/`BulletinArchived` outbox events in the same transaction. Request type only. Non-author `getById` on an archived bulletin returns 404 `BULLETIN_GONE`. **Extended by decision D17** ([#169](https://github.com/drewdrewthis/playa-post/issues/169)): `archived_at` is confirmed as the product's soft-delete column and the write path is unchanged, but the row is no longer kept forever — the hourly retention purge hard-deletes it once it is older than `PURGE_RETENTION_DAYS` (default 30), taking its reports and dismissals with it by cascade, so a removed bulletin eventually leaves its author's own `listMine` too. `app.saved_views` gained the same treatment until [#208](https://github.com/drewdrewthis/playa-post/issues/208) dropped the table; `app.notes` is explicitly excluded, having no delete. | vertical-slice |
 | 20 | views: query grammar tokenizer, Zod AST, and SQL compiler | ADR-0007 restricted to `type:` and bare text. Unknown fields, over-length input, and > 16 terms are rejected naming the offending token; well-formed values that resolve to nothing return zero rows, never an error. Compiles to parameterized SQL over the authorized CTE. | adr |
-| 21 | views: Notify Me queries | Shipped as one row per user, enforced by a primary key on `owner_id` (D1 as a constraint). **Superseded by decision D16** ([#172](https://github.com/drewdrewthis/playa-post/issues/172)): several saved views may notify at once, so the key is a surrogate `id` with `unique nulls not distinct (owner_id, source_view_id)` carrying the rule, and the per-person count is bounded by `NOTIFY_ME_QUERY_LIMIT_PER_OWNER` instead of by the key. Unchanged: stores source text plus validated AST with `ast_version`, and `UpdateNotifyMeQuery` emits `NotifyMeQueryChanged`. | vertical-slice |
+| 21 | views: Notify Me queries | Shipped as one row per user, enforced by a primary key on `owner_id` (D1 as a constraint); D16 ([#172](https://github.com/drewdrewthis/playa-post/issues/172)) briefly made it a set keyed per (owner, view); **decision D19** ([#208](https://github.com/drewdrewthis/playa-post/issues/208), ADR-0019) removed Saved Views and restored one row per user, now `unique (owner_id)` with the surrogate `id` kept as primary key for outbox routing. Unchanged: stores source text plus validated AST with `ast_version`, and `UpdateNotifyMeQuery` emits `NotifyMeQueryChanged`. | vertical-slice |
 | 22 | notifications: subscription, grouped delivery, delivery-time re-check | Web Push subscribe, `EvaluateNotifyMeHandler` on `BulletinCreated`, `SendGroupedPushHandler` with a 60 s window. Recipient authorization is re-evaluated in the send handler inside the receipt transaction (ADR-0002 §11); payloads carry identifiers and a generic string only. | vertical-slice |
 | 23 | moderation: private report and viewer-local dismissal | Reporting hides the bulletin for the reporter immediately and never discloses the reporter to the author. Dismissal is viewer-local. No strike counts, no aggregation. | vertical-slice |
 | 24 | sync: envelope, idempotency, actorship, replay | ADR-0005 envelope; `app.mutation_results` written in the same transaction as the effect; the `bulletin.create` handler. **Actorship is verified before any handler and before version comparison**, so an unrelated actor never receives a conflict envelope. Same ID + same hash → `replayed`; different hash → `IDEMPOTENCY_KEY_REUSE`. | adr |

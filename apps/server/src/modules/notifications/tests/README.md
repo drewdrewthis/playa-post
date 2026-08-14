@@ -18,7 +18,7 @@ runs in the `integration` vitest project against a Testcontainers Postgres with
 | `integration/` | `notification-seen.integration.test.ts` | **none** — `notifications.markSeen` (issue #178). Proves what only a database can: the watermark survives a new caller, a second open replaces rather than accumulates, a stale write never moves it backwards, and it is scoped to one recipient. Every scenario asserts `unread` beside `seen`, because the regression this feature can ship is one flag implying the other |
 | `unit/` | `list-notifications-unread.unit.test.ts` | **none** — the `unread`/dismiss rule's boundary cases, against in-memory fakes |
 | `unit/` | `list-notifications-seen.unit.test.ts` | **none** — the `seen` rule's boundary cases (no watermark, a timestamp exactly on it, either side of it, a second open) and all four `seen`×`unread` combinations, against in-memory fakes |
-| `unit/` | `evaluate-notify-me-multiple-queries.unit.test.ts` | `notify-me.feature` › "A bulletin matching two of one viewer's queries is matched once" — the feature's one `@unit` scenario, tagged that way because the claim settles at evaluation and needs no database (#172, decision D16) — one match per person however many of their queries match, the scan stopping at a person's first match, people kept apart, and the author skipped before any read. The authorized-read half stays in `notify-me-push.integration.test.ts`: a fake here would prove nothing about `app.visible_bulletins` |
+| `unit/` | `evaluate-notify-me-multiple-queries.unit.test.ts` | `notify-me.feature` › "A bulletin matching two of one viewer's queries is matched once" — the feature's one `@unit` scenario, tagged that way because the claim settles at evaluation and needs no database — one match per person however many directory rows match (defense in depth over `unique (owner_id)`, #208/ADR-0019), the scan stopping at a person's first match, people kept apart, and the author skipped before any read. The authorized-read half stays in `notify-me-push.integration.test.ts`: a fake here would prove nothing about `app.visible_bulletins` |
 
 The two pure rules this module owns — the 60-second tumbling window
 (`domain/notification-window.ts`) and the payload's fixed shape
@@ -45,8 +45,8 @@ after it. Everything else must throw, because at-least-once is the contract (ADR
 `notify-me.feature`'s remaining two scenarios do not live here:
 
 - **`notifyMe.update` fails closed for an unrelated actor** (M2-AC19) is in
-  `modules/views/tests/integration/` — `views` owns the saved query and its table
-  (ADR-0007:77-79); this module only reads it, through views' public directory.
+  `modules/views/tests/integration/` — `views` owns the stored query and its table
+  (ADR-0007); this module only reads it, through views' public directory.
 - **Retry/backoff and two concurrent drainers** (M2-AC23, M2-AC24) belong to the outbox
   drainer entrypoint (M2.14, lane L3b-infra). They are infrastructure assertions about
   `app.outbox_events` and are not about notifications at all — they sit in

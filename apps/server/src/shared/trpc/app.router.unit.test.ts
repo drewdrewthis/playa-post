@@ -88,11 +88,6 @@ const appRouter = (): ReturnType<typeof createAppRouter> =>
     sync: createSyncRouter({ submitMutations: { submit: unreachable } }),
     views: createViewsRouter({
       updateNotifyMeQuery: { update: unreachable },
-      listSavedViews: { list: unreachable },
-      saveView: { save: unreachable },
-      renameSavedView: { rename: unreachable },
-      deleteSavedView: { delete: unreachable },
-      setSavedViewNotify: { set: unreachable },
     }),
     notifications: createNotificationsRouter({
       subscribeToPush: { subscribe: unreachable },

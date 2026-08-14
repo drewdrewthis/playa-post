@@ -36,7 +36,7 @@ const unreachable = (): Promise<never> =>
   Promise.reject(new Error('no procedure is invoked by this router'));
 
 /** How many procedures the assembled router serves. Asserted, never inferred. */
-export const EXPECTED_PROCEDURE_COUNT = 46;
+export const EXPECTED_PROCEDURE_COUNT = 41;
 
 /** Build the whole ten-module router with no infrastructure behind it. */
 export function buildNullObjectAppRouter(): ReturnType<typeof createAppRouter> {
@@ -89,11 +89,6 @@ export function buildNullObjectAppRouter(): ReturnType<typeof createAppRouter> {
     sync: createSyncRouter({ submitMutations: { submit: unreachable } }),
     views: createViewsRouter({
       updateNotifyMeQuery: { update: unreachable },
-      listSavedViews: { list: unreachable },
-      saveView: { save: unreachable },
-      renameSavedView: { rename: unreachable },
-      deleteSavedView: { delete: unreachable },
-      setSavedViewNotify: { set: unreachable },
     }),
     notifications: createNotificationsRouter({
       subscribeToPush: { subscribe: unreachable },

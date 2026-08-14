@@ -24,8 +24,8 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
  * nothing truncates it between spec files, and spec files run alphabetically in a single
  * worker (`playwright.config.ts`) — so whatever a file leaves behind belongs to every file
  * that sorts after it. A pinned note has **no take-down at all**: decision D6's corollary
- * gives `app.notes` neither an `archived_at` nor a delete, so unlike the bulletins and
- * saved views `board-multi-select-filter.spec.ts` drains in its `afterEach`, the three
+ * gives `app.notes` neither an `archived_at` nor a delete, so unlike the bulletins
+ * `board-multi-select-filter.spec.ts` archives in its `afterEach`, the three
  * notes below genuinely cannot be removed. The honest answer is therefore to write them
  * where nothing later reads them: `intro-request.spec.ts` is the only other file that acts
  * as C, and `intro-request` sorts before `notification-seen-badge`. Pinning to **B** would
@@ -46,9 +46,8 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
  */
 
 /**
- * The comp's phone column, at the size the comp is drawn for — see
- * `saved-views-screen.spec.ts` for the citation. Scoped here for the same reason: the
- * screenshots below should show the comp's bell, not an arbitrary desktop viewport.
+ * The comp's phone column, at the size the comp is drawn for. Scoped here so the
+ * screenshots below show the comp's bell, not an arbitrary desktop viewport.
  */
 test.use({ viewport: { width: 430, height: 860 }, deviceScaleFactor: 2 });
 
@@ -104,8 +103,8 @@ function requireEnv(name: string): string {
 /**
  * Writes one PNG, or nothing when the suite is not being run for its pictures.
  *
- * `animations: 'disabled'` is load-bearing, not tidiness — see `saved-views-screen.spec.ts`'s
- * `capture` for why a default-animated shot photographs the harness instead of the screen.
+ * `animations: 'disabled'` is load-bearing, not tidiness — a default-animated shot
+ * photographs the harness instead of the screen.
  */
 async function capture(page: Page, name: string): Promise<void> {
   const directory = process.env['E2E_NOTIFICATION_SEEN_SCREENSHOT_DIR'];

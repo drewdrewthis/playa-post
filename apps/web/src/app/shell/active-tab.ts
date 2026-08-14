@@ -1,5 +1,5 @@
-/** The four destinations in the bottom tab bar. */
-export type TabId = 'graph' | 'board' | 'saved' | 'you';
+/** The three destinations in the bottom tab bar. */
+export type TabId = 'graph' | 'board' | 'you';
 
 /**
  * The paths that belong to each tab, beyond the tab's own.
@@ -12,7 +12,6 @@ export type TabId = 'graph' | 'board' | 'saved' | 'you';
 const TAB_PATHS: readonly (readonly [TabId, readonly string[]])[] = [
   ['graph', ['/graph']],
   ['board', ['/board']],
-  ['saved', ['/saved']],
   ['you', ['/you']],
 ];
 

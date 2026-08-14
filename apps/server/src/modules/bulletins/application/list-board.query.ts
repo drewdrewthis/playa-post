@@ -27,7 +27,7 @@ export interface ListBoardCommand {
    * ADR-0007 query text, exactly as the person typed it. Absent means the default
    * board.
    *
-   * Parsed here rather than at the transport so the `sync`/saved-view paths (M5) reach
+   * Parsed here rather than at the transport so the `sync` path (M5) reaches
    * the same validator instead of restating the grammar, and so a rejection surfaces as
    * `INVALID_BOARD_QUERY` rather than a generic transport `BAD_REQUEST` (M2-AC13/AC18).
    */

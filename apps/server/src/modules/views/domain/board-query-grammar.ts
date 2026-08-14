@@ -9,13 +9,13 @@ import { ApplicationError } from '../../../shared/errors/application-error';
  * this grammar. That is the point: silently reinterpreting somebody's saved query
  * notifies them about the wrong things while they are not there to notice.
  *
- * **One constant, because there is one grammar.** `app.saved_views.ast_version` and
- * `app.notify_me_queries.ast_version` both mean "which shape of {@link BoardQuery} is in
- * the `ast` column", and ADR-0007's "Reuse" section is explicit that the two tables hold
- * the same AST. Two constants could drift, and a drift would be invisible: each table's
- * reader would keep filtering on its own number and quietly stop seeing the other's rows.
+ * **One constant, because there is one grammar.** `app.notify_me_queries.ast_version`
+ * means "which shape of {@link BoardQuery} is in the `ast` column" — the one stored-AST
+ * table left since #208 dropped Saved Views (ADR-0019). The name stays board-scoped on
+ * purpose: the board list parses through this same grammar, and a second constant for a
+ * future stored consumer is exactly the drift this comment forbids.
  *
- * ⚠ Bump this and you owe the migration — for **both** tables.
+ * ⚠ Bump this and you owe the migration.
  */
 export const BOARD_QUERY_AST_VERSION = 1;
 

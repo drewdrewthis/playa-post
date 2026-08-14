@@ -11,10 +11,9 @@ export interface PostgresRemovedBulletinsRepositoryDependencies {
 /**
  * The retention sweep over `app.bulletins` (issue #169).
  *
- * A second file rather than a method on `postgres-bulletin.repository.ts`, matching
- * `postgres-deleted-saved-views.repository.ts`: that file is the author's own rows and
- * the §6a-projected authorized set, both addressed by somebody, and this is addressed by
- * a clock.
+ * A second file rather than a method on `postgres-bulletin.repository.ts`: that file is
+ * the author's own rows and the §6a-projected authorized set, both addressed by
+ * somebody, and this is addressed by a clock.
  *
  * ⚠ **One statement, no transaction, and the cascade is the rest of it.** A single
  * `DELETE` is already atomic, and the reports and dismissals that would otherwise refuse
@@ -23,9 +22,9 @@ export interface PostgresRemovedBulletinsRepositoryDependencies {
  * because those are `modules/moderation`'s tables and a statement here naming them would
  * be the cross-module reach-in addendum §19 forbids.
  *
- * ⚠ Unbounded, deliberately, on the same terms
- * `postgres-deleted-saved-views.repository.ts` records — and the trigger for revisiting
- * is more likely here, this being the largest table the product grows.
+ * ⚠ Unbounded, deliberately: a `LIMIT` would bound lock time on a table nothing else
+ * long-holds, at the price of a backlog the sweep can never finish. The trigger for
+ * revisiting is this being the largest table the product grows.
  *
  * ⚠ **It leaves rows that merely mention a bulletin id, and that is correct rather than
  * overlooked.** `app.outbox_events.aggregate_id` carries the id of the bulletin an event

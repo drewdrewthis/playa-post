@@ -28,9 +28,10 @@ later milestone must. ADR-0009 is the only one so far.
 | [0013](ADR-0013-bulletin-visibility-and-the-board-grammar-split.md) | Bulletin visibility, `BULLETIN_GONE`, and the board grammar's parse/compile split (amends 0002, 0005, 0007) | proposed |
 | [0014](ADR-0014-contracts-api-spec-and-router-parity.md) | `packages/contracts` declares the client API; a compile-time parity gate keeps it honest | proposed |
 | [0015](ADR-0015-design-tokens-theming-and-self-hosted-type.md) | Two token sets, an explicit theme toggle, and self-hosted type | proposed (amended — three-way preference incl. system mode, dark default per issue #151, superseding #43's light default) |
-| [0016](ADR-0016-saved-views-and-the-notify-me-designation.md) | Saved views, and the per-view bell as a designation rather than a notify flag (implements 0007's `app.saved_views`; executed product decision D1, and **amended in place for D16** — several bells may be lit at once, so the constraint carrying the rule is `unique nulls not distinct (owner_id, source_view_id)` rather than a primary key on `owner_id`) | proposed |
+| [0016](ADR-0016-saved-views-and-the-notify-me-designation.md) | Saved views, and the per-view bell as a designation rather than a notify flag | superseded by 0019 — issue #208 removed Saved Views entirely |
 | [0017](ADR-0017-intro-requests-and-the-consent-inversion.md) | Intro requests: their own aggregate, eligibility composed on both sides, and the consent inversion (amends 0002, 0004) | proposed |
 | [0018](ADR-0018-personal-connection-links.md) | The personal connection link: a permanent address, a request the owner answers, and rotation as the only revocation (amends 0002, 0012) | proposed — executes the owner's ratification of #206 |
+| [0019](ADR-0019-remove-saved-views.md) | Saved views removed; Notify Me stands alone, one query per person (supersedes 0016; amends 0007) | accepted — executes the owner's decision of 2026-08-13, issue #208 |
 
 Normative inputs, in precedence order:
 

@@ -6,10 +6,9 @@ import { activeTabFor } from './active-tab';
 /**
  * The bottom tab bar, with the compose button breaking its top edge.
  *
- * Four tabs and a FAB, exactly as `design/Playa Post.dc.html` draws them. Saved and You
- * are rendered even though neither screen is built: a navigation bar that grows tabs as
- * features land teaches a user a shape that keeps changing, and both routes exist and
- * say honestly that they are coming.
+ * Three tabs and a FAB. The comp drew a fourth, Saved, which went with the Saved Views
+ * feature (issue #208). You is rendered even though the screen is not built: its route
+ * exists and says honestly that it is coming.
  */
 export function TabBar(): JSX.Element {
   const { pathname } = useLocation();
@@ -35,7 +34,6 @@ export function TabBar(): JSX.Element {
         <span aria-hidden="true">+</span>
       </Link>
 
-      <Tab to="/saved" glyph="☆" label="Saved" active={active === 'saved'} />
       <Tab to="/you" glyph="◍" label="You" active={active === 'you'} />
     </nav>
   );

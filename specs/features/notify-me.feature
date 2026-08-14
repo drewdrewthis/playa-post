@@ -105,55 +105,25 @@ Feature: Notify Me — saved-query notifications
     And zero rows change on the Notify Me query
     And zero rows are written to outbox_events
 
-  @integration
-  # @ac:172-AC1
-  # Decision D16, reopening D1. Under D1 the second bell put the first one out; the
-  # assertion is on the stored queries rather than on the answer, because a bell that
-  # "lit" by overwriting its neighbour looks identical from the outside.
-  Scenario: A second saved view can be notified on without switching the first off
-    Given a viewer with Notify Me switched on for a saved view
-    When that viewer switches Notify Me on for a second saved view
-    Then both saved views are notifying
-    And each notifying view carries its own saved query
-
-  @integration
-  # @ac:172-AC2
-  Scenario: Switching one saved view's notifications off leaves the others on
-    Given a viewer with Notify Me switched on for three saved views
-    When that viewer switches Notify Me off for one of them
-    Then the other two are still notifying
-    And exactly one notification is announced as cleared
-
-  @integration
-  # @ac:172-AC4
-  # The bound D1's primary key used to provide: on every BulletinCreated the evaluator
-  # reads a person's switched-on queries until one matches — worst case all of them — so
-  # the count per person has to stop somewhere.
-  Scenario: Switching on more notifications than the per-person cap is refused
-    Given a viewer already at the Notify Me cap
-    When that viewer switches Notify Me on for one more saved view
-    Then the response is a structured error naming the cap
-    And the views that were notifying are still notifying
-
   @unit
-  # @ac:172-AC1
-  # The corollary that makes several bells safe: matches are per person, not per query.
-  # Without it a person is pushed the same bulletin once per bell they lit.
+  # Defense in depth over `unique (owner_id)` (#208, ADR-0019): matches are per person,
+  # not per directory row. Without it a duplicate row would push a person the same
+  # bulletin twice.
   #
   # ⚠ @unit rather than @integration, and the wording follows the proof. This is settled
   # at the point of evaluation — `EvaluateNotifyMeHandler` records one match per person —
   # so it is provable without a database, and the grouped delivery downstream of it is
   # already pinned by the two window scenarios above.
   Scenario: A bulletin matching two of one viewer's queries is matched once
-    Given a viewer with Notify Me switched on for two saved views
-    And a bulletin is created that matches both of their queries
-    When the bulletin is evaluated against the saved Notify Me queries
+    Given a directory handing back two matching rows for one viewer
+    When the bulletin is evaluated against the stored Notify Me queries
     Then exactly one match is recorded for that viewer
 
   @integration
-  # @ac:172-AC3
-  Scenario: An existing single-notify user keeps their notification through the migration
-    Given a stored Notify Me query from before multiple notifications were allowed
-    When the migration that allows several is applied
-    Then that query still exists, designated from the same saved view
-    And that viewer can switch a second one on with no further migration
+  # Issue #208, ADR-0019: the removal migration keeps an untied query and deletes the
+  # per-view designations with the views they pointed at.
+  Scenario: An existing untied Notify Me query survives the Saved Views removal
+    Given a stored Notify Me query tied to no saved view, from before the removal
+    When the migration that removes Saved Views is applied
+    Then that query still exists with its text and version intact
+    And a query that was a per-view bell is deleted with its view

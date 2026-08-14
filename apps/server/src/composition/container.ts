@@ -483,22 +483,17 @@ export function buildAppContainer(
   // inside the modules, because they describe what an operator is reading rather than
   // what a module calls itself.
   //
-  // Both targets are handed the same window today — one operator policy, "how long does
-  // deleted data live", covers every user-facing delete this product has. They each carry
-  // it rather than the sweep holding one, because the retention chores ADR-0006 already
-  // has windows for (published outbox rows at 14 days, `mutation_results` daily) arrive
-  // here as targets whose windows are decided by that ADR, not by this environment key.
+  // One target today — removed saved views (#208) took the second one with them. The
+  // window stays per target rather than on the sweep, because the retention chores
+  // ADR-0006 already has windows for (published outbox rows at 14 days,
+  // `mutation_results` daily) arrive here as targets whose windows are decided by that
+  // ADR, not by this environment key.
   const softDeletePurge = createSoftDeletedRowPurge({
     targets: [
       {
         name: 'removed bulletins',
         retentionDays: configuration.purgeRetentionDays,
         purge: (before) => bulletins.removedBulletins.purge(before),
-      },
-      {
-        name: 'deleted saved views',
-        retentionDays: configuration.purgeRetentionDays,
-        purge: (before) => views.deletedSavedViews.purge(before),
       },
     ],
   });

@@ -18,10 +18,6 @@ describe('activeTabFor', () => {
       expect(activeTabFor('/board')).toBe('board');
     });
 
-    it('maps "/saved" to the Saved tab', () => {
-      expect(activeTabFor('/saved')).toBe('saved');
-    });
-
     it('maps "/you" to the You tab', () => {
       expect(activeTabFor('/you')).toBe('you');
     });

@@ -1,6 +1,8 @@
 # ADR-0016 — Saved views, and the per-view bell as a designation rather than a second query
 
-- **Status:** proposed
+- **Status:** superseded by [ADR-0019](ADR-0019-remove-saved-views.md) — issue #208 removed
+  Saved Views entirely; Notify Me stands alone, one query per person. The text below is
+  the record of the removed feature, unedited.
 - **Date:** 2026-08-08
 - **Drivers:** issue #45; product decision D1 (`docs/product/decisions.md`); ADR-0007:73-79
   (the `app.saved_views` shape and the shared AST); ADR-0005:102 (`view.save` is

@@ -207,23 +207,19 @@ export interface AppNotificationSeenWatermarks {
 
 export interface AppNotifyMeQueries {
   /**
-   * The validated AST, ADR-0007's restricted filter grammar compiled by modules/views. Never raw SQL, never a second grammar — same shape the board and saved views use.
+   * The validated AST, ADR-0007's restricted filter grammar compiled by modules/views. Never raw SQL, never a second grammar — same shape the board uses.
    */
   ast: Json;
   ast_version: number;
   /**
-   * The aggregate identity of one saved Notify Me query (D16). Server-internal: it is what app.outbox_events.aggregate_id carries for NotifyMeQueryChanged/Cleared, and it never reaches a client — the API names a designation by the saved view its bell sits on.
+   * The aggregate identity of the saved Notify Me query. Server-internal: it is what app.outbox_events.aggregate_id carries for NotifyMeQueryChanged, and it never reaches a client — views.notifyMe.update names no row, because the actor is the address.
    */
   id: Generated<string>;
   owner_id: string;
   source_text: string;
-  /**
-   * The app.saved_views row this query was designated from, or NULL when it was written directly through views.notifyMe.update. D16: a person may light the bell on several views at once, so this is what tells their queries apart — one row per (owner, view), with the NULL row reserved for the query that belongs to no view. Cross-owner designation is refused by notify_me_queries_source_view_fkey, which is unchanged.
-   */
-  source_view_id: string | null;
   updated_at: Timestamp;
   /**
-   * ADR-0005 optimistic-concurrency version, per query rather than per person (D16). notifyMe.update is expectedVersion: yes and addresses the untied row — a mismatch is a conflict, never a silent overwrite of a deliberate change.
+   * ADR-0005 optimistic-concurrency version. notifyMe.update is expectedVersion: yes — a mismatch is a conflict, never a silent overwrite of a deliberate change.
    */
   version: Generated<number>;
 }
@@ -260,28 +256,6 @@ export interface AppPushSubscriptions {
   endpoint: string;
   owner_id: string;
   p256dh_key: string;
-}
-
-export interface AppSavedViews {
-  /**
-   * The validated AST, ADR-0007's restricted filter grammar compiled by modules/views. Never raw SQL, never a second grammar — the same shape the board and Notify Me use.
-   */
-  ast: Json;
-  ast_version: number;
-  created_at: Timestamp;
-  /**
-   * NULL means live. A non-NULL value is the instant views.saved.delete removed it: the row is absent from every read (all of them scoped WHERE owner_id = <actor> AND deleted_at IS NULL) and is hard-deleted by the purge once it is older than PURGE_RETENTION_DAYS. Deleting a view still clears its Notify Me designation outright in the same transaction — a bell whose card is gone has no off-switch left (D16).
-   */
-  deleted_at: Timestamp | null;
-  id: Generated<string>;
-  name: string;
-  owner_id: string;
-  source_text: string;
-  updated_at: Timestamp;
-  /**
-   * ADR-0005 optimistic-concurrency version. view.save is expectedVersion: yes — a mismatch is a conflict, never a silent overwrite of a deliberate rename.
-   */
-  version: Generated<number>;
 }
 
 export interface AppUsers {
@@ -323,6 +297,5 @@ export interface DB {
   "app.outbox_events": AppOutboxEvents;
   "app.personal_links": AppPersonalLinks;
   "app.push_subscriptions": AppPushSubscriptions;
-  "app.saved_views": AppSavedViews;
   "app.users": AppUsers;
 }

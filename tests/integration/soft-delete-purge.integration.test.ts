@@ -30,11 +30,9 @@ function daysAgo(days: number): Date {
  * exists for the identical reason on the drainer's consumer list.
  *
  * ⚠ **Lives at `tests/integration/` because it is owned by no module.** It asserts over
- * `modules/views`' table, `modules/bulletins`' table, and `modules/moderation`'s two
- * dependents at once, and the thing under test is addressed by a clock rather than by an
- * actor. Its per-module halves are elsewhere: the saved view's soft delete is proved in
- * `modules/views/tests/integration/saved-view.integration.test.ts`, and the bulletin's
- * `archived_at` was already proved by M2-AC12.
+ * `modules/bulletins`' table and `modules/moderation`'s two dependents at once, and the
+ * thing under test is addressed by a clock rather than by an actor. Its per-module half
+ * is elsewhere: the bulletin's `archived_at` was already proved by M2-AC12.
  *
  * The catalog block below is here rather than in a module's schema suite for the same
  * reason: those facts are *what this sweep needs to be true*, and one of them
@@ -110,37 +108,11 @@ describe('soft-deleted rows are purged after the retention window (#169, D17)', 
     return bulletinId;
   }
 
-  /** A saved view, optionally already deleted at a given instant. */
-  async function seedSavedView(
-    ownerId: string,
-    name: string,
-    deletedAt: Date | null,
-  ): Promise<string> {
-    const { rows } = await testDatabase.client.query<{ id: string }>(
-      `insert into app.saved_views
-         (owner_id, name, source_text, ast, ast_version, created_at, updated_at, deleted_at)
-       values ($1, $2, 'type:offer', $3, 1, $4, $4, $5) returning id`,
-      [ownerId, name, JSON.stringify({ types: ['offer'], text: [] }), daysAgo(90), deletedAt],
-    );
-    const viewId = rows[0]?.id;
-    if (viewId === undefined) {
-      throw new Error('seedSavedView: insert returned no row');
-    }
-    return viewId;
-  }
-
   async function bulletinTitles(): Promise<readonly string[]> {
     const { rows } = await testDatabase.client.query<{ title: string }>(
       `select title from app.bulletins order by title`,
     );
     return rows.map((row) => row.title);
-  }
-
-  async function savedViewNames(): Promise<readonly string[]> {
-    const { rows } = await testDatabase.client.query<{ name: string }>(
-      `select name from app.saved_views order by name`,
-    );
-    return rows.map((row) => row.name);
   }
 
   async function countOf(table: string): Promise<number> {
@@ -158,15 +130,6 @@ describe('soft-deleted rows are purged after the retention window (#169, D17)', 
    * up with are two claims, and only the second one governs at runtime.
    */
   describe('the shape the purge depends on', () => {
-    it('gives app.saved_views a nullable deleted_at — absence is the live state', async () => {
-      const { rows } = await testDatabase.client.query<{ is_nullable: string; data_type: string }>(
-        `select is_nullable, data_type from information_schema.columns
-          where table_schema = 'app' and table_name = 'saved_views' and column_name = 'deleted_at'`,
-      );
-
-      expect(rows).toEqual([{ is_nullable: 'YES', data_type: 'timestamp with time zone' }]);
-    });
-
     it("cascades a bulletin's reports and dismissals, so a purge cannot be refused by them", async () => {
       // ⚠ Without this the sweep wedges *permanently and silently*: one `NOT NULL`
       // dependent refuses the `DELETE`, every round, and a purge that throws every hour
@@ -192,19 +155,15 @@ describe('soft-deleted rows are purged after the retention window (#169, D17)', 
       ]);
     });
 
-    it("indexes each sweep's predicate, partially — live rows are not part of the question", async () => {
+    it("indexes the sweep's predicate, partially — live rows are not part of the question", async () => {
       const { rows } = await testDatabase.client.query<{ indexname: string }>(
         `select indexname from pg_catalog.pg_indexes
           where schemaname = 'app'
-            and indexname in ('saved_views_deleted_at_idx', 'bulletins_archived_at_idx')
-            and indexdef like '%WHERE%'
-          order by indexname`,
+            and indexname = 'bulletins_archived_at_idx'
+            and indexdef like '%WHERE%'`,
       );
 
-      expect(rows.map((row) => row.indexname)).toEqual([
-        'bulletins_archived_at_idx',
-        'saved_views_deleted_at_idx',
-      ]);
+      expect(rows.map((row) => row.indexname)).toEqual(['bulletins_archived_at_idx']);
     });
   });
 
@@ -235,27 +194,6 @@ describe('soft-deleted rows are purged after the retention window (#169, D17)', 
       }
     });
 
-    it('removes a saved view deleted before the window and keeps one deleted inside it', async () => {
-      const container = containerWithRetention(30);
-      try {
-        const owner = await seedUser('dusty_purge_views');
-        await seedSavedView(owner, 'deleted 31 days ago', daysAgo(31));
-        await seedSavedView(owner, 'deleted 29 days ago', daysAgo(29));
-        await seedSavedView(owner, 'never deleted', null);
-
-        const result = await container.softDeletePurge.purgeOnce({ now: NOW });
-
-        expect(await savedViewNames()).toEqual(['deleted 29 days ago', 'never deleted']);
-        expect(result.purged).toContainEqual({
-          name: 'deleted saved views',
-          deletedBefore: daysAgo(30),
-          rows: 1,
-        });
-      } finally {
-        await container.dispose();
-      }
-    });
-
     it('follows the configured window rather than a thirty baked into the sweep', async () => {
       // AC3, at the level where it could actually be faked: the arithmetic is unit-tested
       // in `entrypoints/purge/`, and this is the proof that the number reaching it comes
@@ -265,15 +203,12 @@ describe('soft-deleted rows are purged after the retention window (#169, D17)', 
         const owner = await seedUser('dusty_purge_window');
         await seedBulletin(owner, 'removed 8 days ago', daysAgo(8));
         await seedBulletin(owner, 'removed 6 days ago', daysAgo(6));
-        await seedSavedView(owner, 'deleted 8 days ago', daysAgo(8));
-        await seedSavedView(owner, 'deleted 6 days ago', daysAgo(6));
 
         await container.softDeletePurge.purgeOnce({ now: NOW });
 
-        // Both of these survive a 30-day window and neither survives a 7-day one, so the
-        // assertion cannot pass against a hardcoded default.
+        // The older one survives a 30-day window and not a 7-day one, so the assertion
+        // cannot pass against a hardcoded default.
         expect(await bulletinTitles()).toEqual(['removed 6 days ago']);
-        expect(await savedViewNames()).toEqual(['deleted 6 days ago']);
       } finally {
         await container.dispose();
       }
@@ -284,12 +219,11 @@ describe('soft-deleted rows are purged after the retention window (#169, D17)', 
       try {
         const author = await seedUser('dusty_purge_idempotent');
         await seedBulletin(author, 'removed 31 days ago', daysAgo(31));
-        await seedSavedView(author, 'deleted 31 days ago', daysAgo(31));
 
         const first = await container.softDeletePurge.purgeOnce({ now: NOW });
         const second = await container.softDeletePurge.purgeOnce({ now: NOW });
 
-        expect(first.totalRows).toBe(2);
+        expect(first.totalRows).toBe(1);
         expect(second.totalRows).toBe(0);
       } finally {
         await container.dispose();
@@ -375,40 +309,6 @@ describe('soft-deleted rows are purged after the retention window (#169, D17)', 
       }
     });
 
-    it('does not wedge on a Notify Me designation the delete path failed to clear', async () => {
-      // ⚠ A state no service can produce — `SavedViewRepository#delete` clears the
-      // designation in the same transaction, and `setNotify` refuses a deleted view — so
-      // it is written here with raw SQL, exactly as this repository's other
-      // unreachable-by-design assertions are. The FK used to enforce the ordering by
-      // making the view row disappear; a soft-deleted row satisfies it, so the guarantee
-      // now rests on one predicate in one file. If that predicate is ever lost, this is
-      // what fails — instead of the sweep throwing every hour in production, forever,
-      // looking exactly like a sweep with nothing to do.
-      const container = containerWithRetention(30);
-      try {
-        const owner = await seedUser('dusty_purge_stray_designation');
-        const view = await seedSavedView(owner, 'deleted 31 days ago', daysAgo(31));
-
-        await testDatabase.client.query(
-          `insert into app.notify_me_queries
-             (owner_id, source_text, ast, ast_version, updated_at, source_view_id)
-           values ($1, 'type:offer', $2, 1, $3, $4)`,
-          [owner, JSON.stringify({ types: ['offer'], text: [] }), daysAgo(31), view],
-        );
-
-        const result = await container.softDeletePurge.purgeOnce({ now: NOW });
-
-        expect(result.purged).toContainEqual({
-          name: 'deleted saved views',
-          deletedBefore: daysAgo(30),
-          rows: 1,
-        });
-        expect(await savedViewNames()).toEqual([]);
-        expect(await countOf('app.notify_me_queries')).toBe(0);
-      } finally {
-        await container.dispose();
-      }
-    });
   });
 
   describe('what the purge does not do', () => {
@@ -417,7 +317,6 @@ describe('soft-deleted rows are purged after the retention window (#169, D17)', 
       try {
         const author = await seedUser('dusty_purge_outbox');
         await seedBulletin(author, 'removed 31 days ago', daysAgo(31));
-        await seedSavedView(author, 'deleted 31 days ago', daysAgo(31));
 
         await container.softDeletePurge.purgeOnce({ now: NOW });
 

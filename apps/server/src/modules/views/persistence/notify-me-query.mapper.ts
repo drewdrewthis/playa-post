@@ -56,7 +56,6 @@ export function toNotifyMeQuery(row: NotifyMeQueryRow): NotifyMeQuery {
     sourceText: row.source_text,
     query: toBoardQuery(row.ast),
     astVersion: row.ast_version,
-    sourceViewId: row.source_view_id,
     version: row.version,
     updatedAt: row.updated_at,
   };

@@ -58,7 +58,7 @@ apps/web/        React + Vite PWA. Shell/router/providers/auth/api client/offlin
                  which of the board's two lists `?view=` names, what an unanswered dismissed read may
                  claim, and how a failed un-dismissal reads. A view rather than a filter chip, because
                  BOARD_FILTER_CHIPS is closed over BulletinType and every member compiles into a `type:`
-                 term a saved view could store; src/app/graph/ is the network canvas: graph-layout.ts seeded from person
+                 term of the board grammar; src/app/graph/ is the network canvas: graph-layout.ts seeded from person
                  ids, graph-viewport.ts pan/zoom arithmetic, graph-node-identity.ts §6a for dots,
                  graph-counts.ts, graph-network.tsx, graph-viz.css; src/app/moderation/ is the report
                  sheet and what the board says when a hide fails: report-abuse-draft.ts holds the
@@ -139,8 +139,8 @@ apps/server/     The modular monolith.
                  declares its own purge port and composition/container.ts's targets array is the one
                  place that knows which tables carry a soft delete, exactly as its consumers array is
                  for the drainer. Its SQL therefore lives in the owning modules'
-                 persistence/ (modules/views' postgres-deleted-saved-views.repository.ts,
-                 modules/bulletins' postgres-removed-bulletins.repository.ts), and a purged
+                 persistence/ (modules/bulletins' postgres-removed-bulletins.repository.ts —
+                 the sole target since #208 removed Saved Views), and a purged
                  bulletin's reports and dismissals go by ON DELETE CASCADE rather than by a
                  statement here reaching into modules/moderation's tables. Only the retention
                  WINDOW is configurable (PURGE_RETENTION_DAYS, default 30); the cadence is a
@@ -152,13 +152,12 @@ apps/server/     The modular monolith.
                  model rather than an aggregate; modules/views was domain/ + tests/ alone while the
                  board grammar was all it shipped, and gained application/ persistence/ transport/ with
                  Notify Me in M2.10 — its <name>.module.ts is now a factory as well as a barrel. Saved
-                 views (app.saved_views, views.saved.*) landed there too, ahead of M5, with the
-                 comp's per-view bell modelled as a pointer FROM app.notify_me_queries so "who gets
-                 notified" has one answer and not two: ADR-0016. Issue #172 / decision D16 reopened
-                 D1's count — several bells may be lit at once — and the pointer survived it: the
-                 constraint carrying the rule is now unique nulls not distinct
-                 (owner_id, source_view_id) rather than a primary key on owner_id — the NULL
-                 semantics are load-bearing, holding the untied query at one per owner, D16.)
+                 views landed there ahead of M5 (ADR-0016), grew per-view bells (D16), and were
+                 then removed entirely by issue #208 / ADR-0019: the module is back to the board
+                 grammar plus the one untied Notify Me query, held to one per person by
+                 unique (owner_id) with id staying the primary key for outbox aggregate routing.
+                 The directory keeps the name views for now — the rename is deferred, see the
+                 module barrel.)
                  A module MAY also grow an infrastructure/ for a
                  non-persistence adapter — modules/connections/infrastructure/ holds the node:crypto
                  CSPRNG behind the invite-token port (shared since #206 with the personal-link

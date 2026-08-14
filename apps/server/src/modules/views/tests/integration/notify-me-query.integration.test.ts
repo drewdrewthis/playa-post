@@ -31,14 +31,9 @@ import { createPostgresNotifyMeQueryRepository } from '../../persistence/postgre
  * `postgres-bulletin.repository.ts#archive`'s `.where('author_id', '=', write.actorId)`
  * pattern.
  *
- * ⚠ **What made that addressable used to be the primary key on `owner_id`** — D1's
- * "exactly one Notify Me query per user", ADR-0007:79. **Issue #172 reopened D1** and a
- * person may now hold several queries, so the address narrowed with it: this procedure
- * writes the one row of theirs that belongs to **no saved view**, held to one per person
- * by `UNIQUE NULLS NOT DISTINCT (owner_id, source_view_id)`. The scenario below is
- * unaffected — the rows seeded here carry no `source_view_id`, which is exactly the row
- * this procedure means — and `saved-view.integration.test.ts` carries the assertions
- * about the designated rows this one cannot reach.
+ * ⚠ **What makes that addressable is the one-row-per-person key**: since #208 removed
+ * Saved Views (ADR-0019), a person holds exactly one Notify Me query, held to one by
+ * `unique (owner_id)`, so "your row" needs no identifier beyond the actor.
  *
  * Given that, "actor C submits notifyMe.update for [user A's] query" is realized
  * the one way the data model allows it: **C submits `expectedVersion` equal to A's
@@ -125,7 +120,7 @@ describe('notifyMe.update (notify-me.feature, M2-AC19)', () => {
       const notifyMeQueries = createPostgresNotifyMeQueryRepository({ database });
       const updateNotifyMeQuery = createUpdateNotifyMeQueryService({ notifyMeQueries });
 
-      // C has never saved a query of their own, and attempts to reach A's row the
+      // C has never stored a query of their own, and attempts to reach A's row the
       // only way the data model exposes: by supplying A's own current version.
       const rejection = await updateNotifyMeQuery
         .update({ actorId: actorC.userId, sourceText: 'type:request', expectedVersion: 3 })
@@ -135,7 +130,7 @@ describe('notifyMe.update (notify-me.feature, M2-AC19)', () => {
 
       const serialized = JSON.stringify(rejection, Object.getOwnPropertyNames(rejection as object));
       // ADR-0005: "the conflict envelope is a leak channel" — C's rejection must not
-      // carry A's saved query text or reveal that a version 3 exists for anyone.
+      // carry A's stored query text or reveal that a version 3 exists for anyone.
       expect(serialized).not.toMatch(/kitchen/);
 
       const aRow = await queryRowFor(userA.userId);

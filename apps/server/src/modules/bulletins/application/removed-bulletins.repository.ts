@@ -10,7 +10,7 @@
  * window, at which point it stops existing for everybody including them.
  *
  * ⚠ **A second port beside {@link import('../domain/bulletin.repository').BulletinRepository}
- * rather than a method on it**, for the reason `DeletedSavedViewsRepository` states: that
+ * rather than a method on it**: that
  * one is the author's own rows, addressed by an actor, and this one is addressed by a
  * clock. Composition can therefore hand the purge a capability that deletes old rows and
  * cannot read, create, or archive a bulletin.
@@ -37,7 +37,7 @@ export interface RemovedBulletinsRepository {
    * Idempotent — a second call with the same cutoff removes nothing — and emits no
    * outbox event: retention housekeeping is not a fact about anybody's state, and a
    * consumer told "your bulletin was removed" thirty days after its author removed it has
-   * nothing to do with that. `DeletedSavedViewsRepository` says the same of its own sweep.
+   * nothing to do with that.
    *
    * @returns How many rows were removed, not counting the cascaded dependents.
    */

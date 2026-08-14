@@ -10,8 +10,8 @@ import type { BoardCardView } from './board-card-view';
  *
  * **A view, not a filter term, and the distinction is load-bearing.** `board-query.ts`
  * states that this app has no grammar of its own; a `dismissed:` term would be one, and
- * it would also be a term a saved view could store, which would make one person's
- * private dismissals part of a query they can name and re-open. Dismissal is a fact about
+ * it would also be a term a stored query (Notify Me) could carry, which would make one
+ * person's private dismissals part of a query. Dismissal is a fact about
  * a viewer's relationship to a bulletin, not a property of the bulletin, so it addresses
  * a different server read (`bulletins.dismissed`) rather than narrowing the same one.
  */

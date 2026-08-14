@@ -11,7 +11,6 @@ import { NotFoundRoute } from './routes/not-found';
 import { OnboardingRoute } from './routes/onboarding';
 import { PersonalLinkOpenRoute } from './routes/personal-link-open';
 import { RouteErrorScreen } from './routes/route-error';
-import { SavedViewsRoute } from './routes/saved-views';
 import { SignInRoute } from './routes/sign-in';
 import { WelcomeRoute } from './routes/welcome';
 import { YourProfileRoute } from './routes/your-profile';
@@ -60,8 +59,8 @@ function OnboardingLayout(): JSX.Element {
  * (`people/person-sheet.tsx`), selection state rather than navigation, which is how
  * the comp draws it.
  *
- * `/saved` and `/you` are routed before either screen is built, because the comp's tab
- * bar has four tabs and a tab that goes nowhere is worse than one that says "soon".
+ * `/you` is routed before the screen is built, because the comp's tab bar draws it
+ * and a tab that goes nowhere is worse than one that says "soon".
  *
  * The whole tree sits under one pathless root route so every child shares its
  * `errorElement`: before that existed, a throw anywhere below had nowhere to land and
@@ -107,7 +106,6 @@ export const appRoutes: RouteObject[] = [
           },
           { path: '/board', element: <BoardRoute /> },
           { path: '/board/new', element: <ComposeBulletinRoute /> },
-          { path: '/saved', element: <SavedViewsRoute /> },
           { path: '/you', element: <YourProfileRoute /> },
         ],
       },
