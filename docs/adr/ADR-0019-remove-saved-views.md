@@ -10,7 +10,7 @@
 
 ADR-0016 shipped the Saved tab, `views.saved.*`, `app.saved_views`, and the per-view
 notify bell; D16 (#172) then let several bells notify at once, capped at six. The owner
-has now cut the feature entirely: nobody needs named, listable views, and the bell —
+has now cut the feature entirely: nobody needs views to be named and listed, and the bell —
 built as a *designation* precisely so "who gets notified" would have one answer — had
 become the most intricate machinery in the product (a composite FK, a
 `NULLS NOT DISTINCT` unique key, a cap with its own scope rules, a two-event lifecycle)

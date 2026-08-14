@@ -7,9 +7,9 @@ split, and get deleted with the module.
 the `unit` vitest project — no database, no container, fast enough to run on save;
 `*.integration.test.ts` runs in `integration` against a Testcontainers Postgres with
 `supabase/migrations` applied. The grammar needs no infrastructure to prove — it is a
-total function from text to a validated AST — and the Notify Me query needs
-nothing but, because "an unrelated actor changes zero rows and writes zero outbox
-events" is a claim about SQL.
+total function from text to a validated AST. The Notify Me query needs the database
+to prove that an unrelated actor changes zero rows and writes zero outbox events,
+because that is a claim about SQL.
 
 | Directory | Suite | Feature-file scenarios |
 |---|---|---|

@@ -578,7 +578,7 @@ event**, restore from backup, `app_migrator` break-glass · M4.10 expand/contrac
 
 **A. Bulletins and board breadth** — A1 remaining six types · A2 edit (+ `expectedVersion`) · A3 expiry
 sweep · A4 tags, location, URL detection · A5 full grammar · ~~A6 saved views CRUD + defaults + sorts~~ (removed by #208 / ADR-0019) ·
-A7 Notify Me designation UI (D1) · A8 Notify Me full matching incl. the query-change combined notification.
+A7 standalone Notify Me UI (D19; web UI is a #208 follow-up) · A8 Notify Me full matching incl. the query-change combined notification.
 
 **B. Graph and connections** — B1 degrees ≥ 2 + ghost nodes with the ADR-0004 adjacency rule ·
 B2 `path_via` + truncation UI · B3 introduction requests · B4 blocking + cache invalidation ·
@@ -657,9 +657,10 @@ G5 public API docs · G6 load test.
 - **M5-AC13 (subscription lifecycle, C3)** A push endpoint returning 404/410 causes the subscription row to
   be deleted with no further sends, while other devices of the same user still receive.
   *Evidence: quoted `SELECT` before/after + the second device's captured payload.*
-- **M5-AC14 (Notify Me is singular, D1, A7)** Creating a second Notify Me query fails at the database
-  constraint; toggling the bell on view B moves the query from view A and the UI states that it moved.
-  *Evidence: quoted constraint-violation error + a screenshot of the moved-bell feedback.*
+- **M5-AC14 (Notify Me is singular, D19, A7)** Creating a second Notify Me query for the same owner
+  fails at the database constraint (`unique (owner_id)`); the bell-movement half died with saved views
+  ([#208](https://github.com/drewdrewthis/playa-post/issues/208) / ADR-0019).
+  *Evidence: quoted constraint-violation error.*
 - **M5-AC15 (query-change combined notification, A8)** Changing the Notify Me query produces exactly **one**
   combined notification for pre-existing matches, and zero on a subsequent unchanged save.
   *Evidence: quoted push payload + notification counts before and after the no-op save.*

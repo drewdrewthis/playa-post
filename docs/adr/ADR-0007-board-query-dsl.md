@@ -125,7 +125,7 @@ compiler — the reuse is the reason this is a fixed grammar and not ad-hoc filt
 
 ## Consequences
 
-- **Positive:** the prototype's UX survives; one grammar serves three features; injection is
+- **Positive:** the prototype's UX survives; one grammar serves both surviving consumers (three until #208 / ADR-0019 removed saved views); injection is
   structurally impossible; the whole grammar fits in one table that a reviewer can audit.
 - **Negative:** adding a field is a code change (tokenizer enum, Zod schema, compiler branch, tests) —
   intentional friction on the surface most likely to leak.

@@ -29,7 +29,7 @@ export interface EvaluateNotifyMeDependencies {
 export type EvaluateNotifyMeHandler = OutboxConsumer;
 
 /**
- * Evaluate every stored Notify Me query against a newly created bulletin (M2.10).
+ * Evaluate current stored Notify Me queries for eligible recipients of a newly created bulletin (M2.10).
  *
  * **It computes matches; it does not deliver them.** Each match is written to the
  * outbox as a `NotifyMeMatched` row, and
@@ -106,7 +106,7 @@ export function createEvaluateNotifyMeHandler(
           continue;
         }
 
-        // Sequential on purpose: this is one authorized read per stored query, and firing
+        // Sequential on purpose: this is one authorized read per evaluated stored query, and firing
         // them all at once would let one bulletin open as many pool connections as the
         // product has switched-on Notify Me queries.
         const isMatch = await dependencies.matches.isAuthorizedMatch({
