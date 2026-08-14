@@ -1,5 +1,7 @@
 import type { GroupedNotification } from '../application/grouped-notification';
+import type { NotificationSetting } from '../application/notification-settings.service';
 import type { NotificationDismissal } from '../domain/notification-dismissal';
+import type { NotificationKind } from '../domain/notification-kind';
 import type { NotificationSeenMark } from '../domain/notification-seen-mark';
 
 /** What every notification on the wire carries, whatever caused it. */
@@ -73,6 +75,17 @@ export interface PresentedNotificationSeenMark {
 }
 
 /**
+ * What `notifications.settings.get` and `.update` answer with (issue #209).
+ *
+ * The full list, one entry per kind in `NOTIFICATION_KINDS` order, so a client renders
+ * the settings panel from the response and never hardcodes kinds. `enabled` is derived
+ * server-side from the absence of an opt-out row (ADR-0020 D3).
+ */
+export interface PresentedNotificationSettings {
+  readonly settings: readonly { readonly kind: NotificationKind; readonly enabled: boolean }[];
+}
+
+/**
  * Project one notification onto the wire.
  *
  * A field-by-field copy rather than a spread: a spread would carry whatever the read
@@ -113,6 +126,15 @@ export function presentNotificationDismissal(
   return {
     notificationId: dismissal.notificationId,
     dismissedAt: dismissal.dismissedAt.toISOString(),
+  };
+}
+
+/** Project the caller's settings onto the wire. Field-by-field, like every presenter here. */
+export function presentNotificationSettings(
+  settings: readonly NotificationSetting[],
+): PresentedNotificationSettings {
+  return {
+    settings: settings.map((setting) => ({ kind: setting.kind, enabled: setting.enabled })),
   };
 }
 

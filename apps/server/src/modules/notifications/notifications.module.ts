@@ -14,6 +14,7 @@ import {
 } from './application/evaluate-notify-me.handler';
 import { createListNotificationsQuery } from './application/list-notifications.query';
 import { createMarkNotificationsSeenService } from './application/mark-notifications-seen.service';
+import { createNotificationSettingsService } from './application/notification-settings.service';
 import {
   createSendGroupedPushHandler,
   type SendGroupedPushHandler,
@@ -24,6 +25,7 @@ import type { PushTransport } from './domain/push-transport';
 import { createPostgresDeliveredNotificationRepository } from './persistence/postgres-delivered-notification.repository';
 import { createPostgresNoteNotificationRepository } from './persistence/postgres-note-notification.repository';
 import { createPostgresNotificationDismissalRepository } from './persistence/postgres-notification-dismissal.repository';
+import { createPostgresNotificationOptoutRepository } from './persistence/postgres-notification-optout.repository';
 import { createPostgresNotificationSeenWatermarkRepository } from './persistence/postgres-notification-seen-watermark.repository';
 import { createPostgresNotifyMeMatchRepository } from './persistence/postgres-notify-me-match.repository';
 import { createPostgresPushSubscriptionRepository } from './persistence/postgres-push-subscription.repository';
@@ -130,6 +132,7 @@ export function createNotificationsModule(
   const noteNotifications = createPostgresNoteNotificationRepository({ database });
   const dismissals = createPostgresNotificationDismissalRepository({ database });
   const seenWatermarks = createPostgresNotificationSeenWatermarkRepository({ database });
+  const optouts = createPostgresNotificationOptoutRepository({ database });
 
   return {
     router: createNotificationsRouter({
@@ -147,6 +150,7 @@ export function createNotificationsModule(
       // what `markSeen` writes (issue #178). ⚠ It takes no `deliveredNotifications` —
       // there is no notification to prove ownership of, because the command names none.
       markNotificationsSeen: createMarkNotificationsSeenService({ seenWatermarks }),
+      notificationSettings: createNotificationSettingsService({ optouts }),
     }),
     evaluateNotifyMe: createEvaluateNotifyMeHandler({
       notifyMeQueries: createNotifyMeQueryDirectory({ database }),
@@ -155,7 +159,8 @@ export function createNotificationsModule(
     // No push transport and no `visiblePeople`: a note notification is delivered to the
     // bell by existing, and whether the viewer may still read it is decided by
     // `app.visible_notes` on the read path rather than by anything this handler holds.
-    deliverNotePinned: createDeliverNotePinnedHandler({ noteNotifications }),
+    // `optouts` is the per-kind off-switch (issue #209, ADR-0020 D4).
+    deliverNotePinned: createDeliverNotePinnedHandler({ noteNotifications, optouts }),
     sendGroupedPush: createSendGroupedPushHandler({
       matches,
       pushSubscriptions,
