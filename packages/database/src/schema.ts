@@ -197,6 +197,15 @@ export interface AppNotificationDismissals {
   recipient_id: string;
 }
 
+export interface AppNotificationOptouts {
+  created_at: Generated<Timestamp>;
+  /**
+   * A GroupedNotification kind: bulletins or note. The CHECK is the schema's copy of the contract union; widen both together.
+   */
+  kind: string;
+  owner_id: string;
+}
+
 export interface AppNotificationSeenWatermarks {
   /**
    * Advances on every notifications.markSeen and never retreats — the upsert refuses a timestamp older than the stored one. Compared inclusively against a notification's occurred_at.
@@ -292,6 +301,7 @@ export interface DB {
   "app.mutation_results": AppMutationResults;
   "app.notes": AppNotes;
   "app.notification_dismissals": AppNotificationDismissals;
+  "app.notification_optouts": AppNotificationOptouts;
   "app.notification_seen_watermarks": AppNotificationSeenWatermarks;
   "app.notify_me_queries": AppNotifyMeQueries;
   "app.outbox_events": AppOutboxEvents;

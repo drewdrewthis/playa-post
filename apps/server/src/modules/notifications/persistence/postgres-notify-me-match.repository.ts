@@ -6,6 +6,7 @@ import { EVALUATE_NOTIFY_ME_CONSUMER } from '../application/evaluate-notify-me.h
 import type {
   AuthorizedMatchQuery,
   CompleteWindowCommand,
+  EligibleRecipientsQuery,
   NotifyMeMatchRepository,
   RecordMatchesCommand,
 } from '../application/notify-me-match.repository';
@@ -40,8 +41,8 @@ const OUTBOX_PUBLISHED = 'published';
  *
  * **Every read of a bulletin here goes through `app.visible_bulletins`** — the one
  * definition of what a viewer may see (ADR-0002 §6, ADR-0004:75-77), which itself
- * composes `app.visible_people`. This module never names `app.bulletins`, never joins
- * `app.users`, and never re-derives reachability: a notification that decided
+ * composes `app.visible_people`. This module never names `app.bulletins`, and never
+ * re-derives reachability: a notification that decided
  * visibility for itself would be the second answer R2 is about, and the delivery path
  * is the worst place to have one because nobody sees the result but the recipient.
  *
@@ -58,6 +59,28 @@ export function createPostgresNotifyMeMatchRepository(
   const { database } = dependencies;
 
   return {
+    async findEligibleRecipients(query: EligibleRecipientsQuery): Promise<readonly string[]> {
+      // ADR-0020 D1's candidate set, as one statement. ⚠ This is the module's one read
+      // of `app.users`, and it reads **ids only** — the disclosure rule this file's
+      // docblock defends guards names and contact fields, not the existence of an id
+      // the outbox already carries. Visibility is still `app.visible_bulletins`'s
+      // answer, asked per candidate; the opt-out is ADR-0020 D3's absence-means-on.
+      const { rows } = await sql<{ id: string }>`
+        select u.id
+          from app.users u
+         where u.id <> ${query.authorId}
+           and not exists (select 1
+                             from app.notification_optouts o
+                            where o.owner_id = u.id and o.kind = 'bulletins')
+           and exists (select 1
+                         from app.visible_bulletins(u.id) vb
+                        where vb.bulletin_id = ${query.bulletinId})
+         order by u.id
+      `.execute(database);
+
+      return rows.map((row) => row.id);
+    },
+
     async isAuthorizedMatch(command: AuthorizedMatchQuery): Promise<boolean> {
       // ADR-0007's grammar, evaluated as **one static statement with bound
       // parameters** rather than as a second compiled filter. The board's compiler

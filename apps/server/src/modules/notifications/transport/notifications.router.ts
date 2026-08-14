@@ -5,6 +5,7 @@ import { authenticatedProcedure, router } from '../../../shared/trpc/trpc';
 import type { DismissNotificationService } from '../application/dismiss-notification.service';
 import type { ListNotificationsQuery } from '../application/list-notifications.query';
 import type { MarkNotificationsSeenService } from '../application/mark-notifications-seen.service';
+import type { NotificationSettingsService } from '../application/notification-settings.service';
 import type { SubscribeToPushService } from '../application/subscribe-to-push.service';
 import { NotificationUnavailableError } from '../domain/notification.errors';
 
@@ -12,12 +13,15 @@ import {
   presentNotification,
   presentNotificationDismissal,
   presentNotificationSeenMark,
+  presentNotificationSettings,
   type PresentedNotification,
   type PresentedNotificationDismissal,
   type PresentedNotificationSeenMark,
+  type PresentedNotificationSettings,
 } from './grouped-notification.presenter';
 import { notificationIdInput } from './notification-id.input';
 import { subscribeToPushInput } from './subscribe-to-push.input';
+import { updateNotificationSettingInput } from './update-notification-setting.input';
 
 /** The application operations this router speaks for. One use case, one procedure. */
 export interface NotificationsRouterDependencies {
@@ -25,6 +29,7 @@ export interface NotificationsRouterDependencies {
   readonly listNotifications: ListNotificationsQuery;
   readonly markNotificationsSeen: MarkNotificationsSeenService;
   readonly dismissNotification: DismissNotificationService;
+  readonly notificationSettings: NotificationSettingsService;
 }
 
 /**
@@ -68,7 +73,7 @@ async function present<T>(operation: () => Promise<T>): Promise<T> {
 /**
  * The notifications module's tRPC surface.
  *
- * **Four procedures, and the delivery half of this module still has none on purpose.**
+ * **Six procedures, and the delivery half of this module still has none on purpose.**
  * `EvaluateNotifyMeHandler` is an outbox consumer and `SendGroupedPushHandler` is a
  * scheduled flush (ADR-0006's "notification grouping window flush") — neither has a
  * caller who could sensibly invoke it over HTTP, and exposing "flush now" would hand a
@@ -79,7 +84,8 @@ async function present<T>(operation: () => Promise<T>): Promise<T> {
  * convention `connections.trust.set` follows. `list`, `markSeen` and `dismiss` are not,
  * because they are about notifications rather than about the push transport — a person
  * reading or clearing their panel has one whether or not a device is subscribed.
- * Notification *preferences* are M5 and arrive as a sibling.
+ * Notification *preferences* are the promised sibling, arrived as `settings` (issue
+ * #209, ADR-0020): per-kind switches, not per-device transport state.
  *
  * **There is deliberately no `dismissAll`.** The panel's "CLEAR ALL" is the client
  * calling `dismiss` once per notification it is currently showing, which is the only
@@ -156,6 +162,46 @@ export function createNotificationsRouter(dependencies: NotificationsRouterDepen
           ),
         ),
       ),
+
+    settings: router({
+      /**
+       * The caller's own per-kind switches, every kind, in a stable order.
+       *
+       * **No input at all**, `list`'s statement: there is exactly one person's settings
+       * a caller may read (ADR-0002 §5a). `enabled` is derived from the absence of an
+       * opt-out row, so a person who never opened this panel reads all-on (ADR-0020).
+       */
+      get: authenticatedProcedure.query(
+        async ({ ctx }): Promise<PresentedNotificationSettings> =>
+          present(async () =>
+            presentNotificationSettings(
+              await dependencies.notificationSettings.get(ctx.actor.userId),
+            ),
+          ),
+      ),
+
+      /**
+       * Move one switch, answering where they all now stand.
+       *
+       * Idempotent in both directions — a retry converges — and viewer-local and
+       * nothing else: it changes which *future* events produce a notification for the
+       * caller, and touches nothing already delivered, no other recipient, and no
+       * device's push enrollment.
+       */
+      update: authenticatedProcedure
+        .input(updateNotificationSettingInput)
+        .mutation(async ({ ctx, input }): Promise<PresentedNotificationSettings> =>
+          present(async () =>
+            presentNotificationSettings(
+              await dependencies.notificationSettings.update(
+                ctx.actor.userId,
+                input.kind,
+                input.enabled,
+              ),
+            ),
+          ),
+        ),
+    }),
 
     push: router({
       /**

@@ -1,3 +1,4 @@
+import type { NotificationOptoutRepository } from '../domain/notification-optout.repository';
 import { NOTE_PINNED } from '../domain/notification.events';
 
 import type { NoteNotificationRepository } from './note-notification.repository';
@@ -15,6 +16,8 @@ export const DELIVER_NOTE_PINNED_CONSUMER = 'DeliverNotePinnedHandler';
 /** Collaborators, injected rather than resolved (addendum §12, ADR-0003). */
 export interface DeliverNotePinnedDependencies {
   readonly noteNotifications: NoteNotificationRepository;
+  /** The per-kind off-switch (issue #209, ADR-0020 D4). */
+  readonly optouts: NotificationOptoutRepository;
   /** Reads the wall clock. Overridable so a test can pin `processed_at`. */
   readonly now?: (() => Date) | undefined;
 }
@@ -25,12 +28,13 @@ export type DeliverNotePinnedHandler = OutboxConsumer;
 /**
  * Put a pinned note in its recipient's bell (issue #149, closing #112's open consumer).
  *
- * **Delivery is unconditional, and that is what "on by default" means here.** No
- * preference table exists (M5 owns preferences), so the choice is between delivering to
- * everyone and delivering to nobody; a note is addressed to exactly one person who has
- * already accepted a connection with its author, which makes "on" the only defensible
- * default. It is not a setting read from nowhere — it is the absence of a setting, and
- * the day M5 adds one this handler is where it is consulted.
+ * **Delivery is on by default, and off means no receipt** (issue #209, ADR-0020 D4).
+ * The preference table this handler's first version promised would be consulted here
+ * now exists: a recipient opted out of kind `note` gets no receipt, and because the
+ * receipt *is* the notification, that is the whole opt-out. The handler still returns
+ * normally, so the drainer publishes the row — a skipped delivery is a processed
+ * event, not a retryable failure, and an opt-out at delivery time is permanent for
+ * that event, which is what "off" means.
  *
  * **The whole effect is the receipt**, so this handler holds no other collaborator.
  * `findDeliveredNoteNotifications` joins `NotePinned` rows to exactly this consumer's
@@ -43,11 +47,14 @@ export type DeliverNotePinnedHandler = OutboxConsumer;
  * window to close, so there is no scheduled flush and no second consumer — which is why
  * `NOTE_PINNED` is drained generically rather than added to `SELF_DRAINED_EVENT_TYPES`.
  *
- * **The payload is never read**, not even `recipientId`. Routing happens at read time,
- * where `payload ->> 'recipientId'` is compared against a `ViewerId` the request
- * boundary minted — so a malformed payload produces a notification nobody can read
- * rather than one delivered to a guess, and this file has nowhere for a note's text to
- * arrive even if a future publisher wrongly put it there (ADR-0006, M2-AC16).
+ * **The payload yields one identifier, `recipientId`, and nothing else** — read only
+ * to ask the opt-out question. Routing still happens at read time, where
+ * `payload ->> 'recipientId'` is compared against a `ViewerId` the request boundary
+ * minted, and this file still has nowhere for a note's text to arrive even if a future
+ * publisher wrongly put it there (ADR-0006, M2-AC16). A payload with no readable
+ * `recipientId` keeps the first version's behaviour — receipt written, row settled —
+ * because there is nobody whose preference could be consulted, and the notification it
+ * produces is unreadable anyway.
  *
  * **Authorization is not decided here.** ADR-0002 §11 evaluates it at the moment of
  * disclosure, and for a note that moment is the read: `app.visible_notes` is asked then,
@@ -67,6 +74,16 @@ export function createDeliverNotePinnedHandler(
       // to: a throw would push an irrelevant delivery through the retry-and-dead-letter
       // path (ADR-0006, M2-AC23) and eventually raise an alert about nothing.
       if (event.eventType !== NOTE_PINNED) {
+        return;
+      }
+
+      const recipientId = event.payload['recipientId'];
+      if (
+        typeof recipientId === 'string' &&
+        (await dependencies.optouts.hasOptedOut(recipientId, 'note'))
+      ) {
+        // No receipt, and the receipt is the notification — this is the opt-out
+        // (ADR-0020 D4). Returning without throwing lets the drainer publish the row.
         return;
       }
 

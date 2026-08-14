@@ -20,6 +20,13 @@ export interface AuthorizedMatchQuery {
   readonly query: BoardQuery;
 }
 
+/** What enumerating a bulletin's candidate recipients is asked with (ADR-0020 D1). */
+export interface EligibleRecipientsQuery {
+  readonly bulletinId: string;
+  /** Excluded in the SQL — the one person guaranteed to already know. */
+  readonly authorId: string;
+}
+
 /** What recording one evaluation's outcome is given. */
 export interface RecordMatchesCommand {
   /** The triggering `BulletinCreated` event, whose receipt this write claims. */
@@ -56,6 +63,20 @@ export interface CompleteWindowCommand {
  * reconstructs.
  */
 export interface NotifyMeMatchRepository {
+  /**
+   * Everyone a new bulletin may notify: **every user who can see it**, minus its
+   * author, minus anyone opted out of kind `bulletins` (ADR-0020 D1).
+   *
+   * Visibility is asked of `app.visible_bulletins` per candidate — the one definition
+   * of what a viewer may see — so the answer already carries the authorization
+   * compute-time can give; send-time re-checks it as ever (ADR-0002 §11). O(users) per
+   * bulletin, deliberately: at this product's scale the honest full scan beats a
+   * cleverness that could disagree with the read path.
+   *
+   * @returns `app.users.id`s, ordered, for a deterministic evaluation order.
+   */
+  findEligibleRecipients(query: EligibleRecipientsQuery): Promise<readonly string[]>;
+
   /**
    * Re-read the bulletin **as the recipient** and test their saved filter against it.
    *

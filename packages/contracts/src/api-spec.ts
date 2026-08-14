@@ -45,7 +45,9 @@ import type {
   NotificationDismissal,
   NotificationIdRequest,
   NotificationSeenMark,
+  NotificationSettings,
   SubscribeToPushRequest,
+  UpdateNotificationSettingRequest,
 } from './notifications';
 import type { MutationBatch, SubmitMutationsRequest } from './sync';
 import type { NotifyMeQuery, UpdateNotifyMeQueryRequest } from './views';
@@ -177,6 +179,11 @@ export interface PlayaPostApi {
   'notifications.markSeen': MutationSpec<void, NotificationSeenMark>;
   'notifications.dismiss': MutationSpec<NotificationIdRequest, NotificationDismissal>;
   'notifications.push.subscribe': MutationSpec<SubscribeToPushRequest, void>;
+  'notifications.settings.get': QuerySpec<void, NotificationSettings>;
+  'notifications.settings.update': MutationSpec<
+    UpdateNotificationSettingRequest,
+    NotificationSettings
+  >;
 }
 
 /** Every dotted path this API serves. */

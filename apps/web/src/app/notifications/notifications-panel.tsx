@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import type { GroupedNotification } from '@playa-post/contracts';
 
 import { EnablePushControl } from './enable-push-control';
+import { NotificationSettingsControl } from './notification-settings-control';
 import { useMarkNotificationsSeen, useNotificationDismissal } from './notifications-mutation';
 import { useGroupedNotifications } from './notifications-query';
 import {
@@ -98,6 +99,13 @@ export function NotificationsPanel({ onClose }: { readonly onClose: () => void }
           on a device or build that cannot do push — see `enable-push-control.tsx`.
         */}
         <EnablePushControl />
+
+        {/*
+          Below the push offer, above the list: the switches are for the rare visit that
+          wants to change something, so they arrive collapsed and cost no request until
+          opened — see `notification-settings-control.tsx`.
+        */}
+        <NotificationSettingsControl />
 
         {dismissal.refusedCount === 0 ? null : (
           <p className="notifications__refused" role="status" data-testid="notifications-refused">

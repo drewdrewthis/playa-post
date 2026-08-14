@@ -51,6 +51,10 @@ const INVENTORY = [
   // notifications that had also been dismissed, collapsing the exact distinction the
   // feature exists to keep.
   'notification_seen_watermarks',
+  // Per-kind notification off-switches (issue #209, ADR-0020). One row per
+  // (owner, kind) a person has switched OFF — absence means on, which is what makes
+  // notifications default-on without a backfill.
+  'notification_optouts',
   // moderation and sync (L4)
   'bulletin_dismissals',
   'bulletin_reports',
@@ -77,7 +81,7 @@ describe('schema app holds exactly the tables M2 declared (m2-lane-briefs.md rat
     await testDatabase?.stop();
   });
 
-  it('matches the nineteen-name inventory as a set, and in count', async () => {
+  it('matches the twenty-name inventory as a set, and in count', async () => {
     const { rows } = await testDatabase.client.query<{ tablename: string }>(
       `select tablename from pg_tables where schemaname = 'app' order by tablename`,
     );

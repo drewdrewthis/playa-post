@@ -94,6 +94,52 @@ export interface PinnedNoteNotification extends NotificationBase {
  */
 export type GroupedNotification = GroupedBulletinNotification | PinnedNoteNotification;
 
+/**
+ * Every notification kind a person can switch off — the discriminants of
+ * {@link GroupedNotification}, as a value.
+ *
+ * ⚠ **Kept in lockstep with the union above and with the CHECK on
+ * `app.notification_optouts.kind`** (ADR-0020). A future kind is added to all three in
+ * the same PR; `notifications.settings.get` serves one entry per member of this list,
+ * so a client renders the settings panel from the response and never hardcodes kinds.
+ */
+export const NOTIFICATION_KINDS = ['bulletins', 'note'] as const;
+
+/** One member of {@link NOTIFICATION_KINDS}. */
+export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
+
+/**
+ * One kind's switch position, as `notifications.settings.get` serves it.
+ *
+ * `enabled` is derived server-side from the **absence** of an opt-out row — on is the
+ * default and is never stored (ADR-0020 D3).
+ */
+export interface NotificationSetting {
+  readonly kind: NotificationKind;
+  readonly enabled: boolean;
+}
+
+/**
+ * `notifications.settings.get` output — every kind, in {@link NOTIFICATION_KINDS}
+ * order, whether or not the caller has ever touched a switch.
+ */
+export interface NotificationSettings {
+  readonly settings: readonly NotificationSetting[];
+}
+
+/**
+ * Input of `notifications.settings.update` — one switch, one position.
+ *
+ * Idempotent in both directions: disabling a disabled kind and enabling an enabled one
+ * are no-ops that answer the same {@link NotificationSettings}, so a retry converges.
+ * ⚠ **Deliberately not in `MUTATION_TYPES`** (see `sync.ts`): a settings flip replayed
+ * from an offline queue hours later would silently undo a decision made since.
+ */
+export interface UpdateNotificationSettingRequest {
+  readonly kind: NotificationKind;
+  readonly enabled: boolean;
+}
+
 /** Input of `notifications.dismiss`. The identifier `notifications.list` served. */
 export interface NotificationIdRequest {
   readonly notificationId: string;
