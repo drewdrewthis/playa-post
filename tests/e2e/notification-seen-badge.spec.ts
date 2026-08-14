@@ -156,6 +156,33 @@ async function expectBadge(page: Page, count: number): Promise<void> {
 }
 
 test.describe('the bell badge clears when the panel is opened', () => {
+  test.beforeEach(async ({ browser }) => {
+    // Since #209 every bulletin C can see arrives as a notification by default, so
+    // whatever bulletins the specs before this one posted may be sitting on C's bell —
+    // and this journey's exact badge counts only mean anything from a quiet start.
+    // Two acts, through the real screens: retire anything already delivered, and switch
+    // Bulletins off so nothing new lands mid-journey. Notes — the kind this file is
+    // about — stay on, and `afterEach` switches Bulletins back.
+    await withUser(browser, requireEnv('E2E_USER_C_ACCESS_TOKEN'), async (page) => {
+      await page.getByTestId('notifications-bell-button').click();
+      await expect(page.getByTestId('notifications-panel')).toBeVisible();
+
+      const clearAll = page.getByTestId('notifications-clear-all');
+      if (await clearAll.isVisible()) {
+        await clearAll.click();
+        await expect(clearAll).toBeHidden();
+      }
+
+      await page.getByTestId('notification-settings-toggle').click();
+      const bulletins = page.getByTestId('notification-setting-bulletins');
+      await expect(bulletins).toBeVisible();
+      if ((await bulletins.getAttribute('aria-checked')) === 'true') {
+        await bulletins.click();
+        await expect(bulletins).toHaveAttribute('aria-checked', 'false');
+      }
+    });
+  });
+
   test.afterEach(async ({ browser }) => {
     // Everything this file can retire, it retires. The notes themselves cannot be — see
     // the block comment above — but the notifications pointing at them can, so the bell C
@@ -172,6 +199,15 @@ test.describe('the bell badge clears when the panel is opened', () => {
       if (await clearAll.isVisible()) {
         await clearAll.click();
         await expect(clearAll).toBeHidden();
+      }
+
+      // Hand the rest of the run the defaults back: Bulletins on again (see beforeEach).
+      await page.getByTestId('notification-settings-toggle').click();
+      const bulletins = page.getByTestId('notification-setting-bulletins');
+      await expect(bulletins).toBeVisible();
+      if ((await bulletins.getAttribute('aria-checked')) === 'false') {
+        await bulletins.click();
+        await expect(bulletins).toHaveAttribute('aria-checked', 'true');
       }
     });
   });
@@ -215,11 +251,24 @@ test.describe('the bell badge clears when the panel is opened', () => {
         // them. An implementation that cleared the badge by dismissing would pass the
         // first of these three and fail the other two.
         await expect(pageC.getByTestId('notifications-unseen-count')).toHaveCount(0);
-        await expect(pageC.getByTestId('notification-grouped-item')).toHaveCount(2);
+        // Scoped to the active list: the rows `beforeEach` retired sit in the Dismissed
+        // section below, and counting them here would blur exactly the line this step
+        // exists to draw.
+        const activeRows = pageC.locator(
+          '.notifications__body > .notifications__list [data-testid="notification-grouped-item"]',
+        );
+        await expect(activeRows).toHaveCount(2);
         await expect(
-          pageC.locator('[data-testid="notification-grouped-item"][data-unread="true"]'),
+          pageC.locator(
+            '.notifications__body > .notifications__list [data-testid="notification-grouped-item"][data-unread="true"]',
+          ),
         ).toHaveCount(2);
-        await expect(pageC.getByTestId('notifications-dismissed')).toHaveCount(0);
+        // Opening moved nothing into Dismissed: whatever `beforeEach` retired is all
+        // that is there — the count is unchanged by the open.
+        const dismissedRows = pageC.locator(
+          '[data-testid="notifications-dismissed"] [data-testid="notification-grouped-item"]',
+        );
+        const dismissedBefore = await dismissedRows.count();
 
         // Closed before the shot: the panel is a full-column takeover (#51) and covers the
         // chrome the bell lives in, so the cleared badge is only photographable from the
@@ -240,6 +289,8 @@ test.describe('the bell badge clears when the panel is opened', () => {
           pageC.locator('[data-testid="notification-grouped-item"][data-unread="true"]'),
         ).toHaveCount(1);
         await expect(pageC.getByTestId('notifications-dismissed')).toBeVisible();
+        // …and the `✕` moved exactly one row there — the open above moved none.
+        await expect(dismissedRows).toHaveCount(dismissedBefore + 1);
         // Dismissing something already seen cannot lower a badge that is already empty —
         // stated so a future badge that counted `unread` again would be caught here too.
         await expect(pageC.getByTestId('notifications-unseen-count')).toHaveCount(0);
