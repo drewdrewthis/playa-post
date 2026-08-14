@@ -137,6 +137,28 @@ describe('NotificationSettingsControl', () => {
     expect(switchFor(mounted, 'bulletins').getAttribute('aria-checked')).toBe('true');
   });
 
+  it('says the read failed rather than loading forever', async () => {
+    const api = createFakeApi({
+      [GET_PATH]: () => {
+        throw new Error('UNAVAILABLE');
+      },
+    });
+
+    const mounted = await mountAndOpen(api);
+
+    tree = mounted;
+
+    // A failed read has no data either — what distinguishes it from loading is that
+    // the control says so, with the retry offer, instead of spinning on a promise
+    // that has already been broken.
+    expect(mounted.container.textContent).toContain(
+      'Your settings did not load. Close and reopen to try again.',
+    );
+    expect(
+      mounted.container.querySelector('[data-testid="notification-settings-loading"]'),
+    ).toBeNull();
+  });
+
   it('snaps the switch back when the server refuses the flip', async () => {
     const api = createFakeApi({
       [GET_PATH]: () => ALL_ON,

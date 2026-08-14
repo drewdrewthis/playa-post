@@ -14,7 +14,7 @@ experience is silence — the opposite of what the owner wants for a small-commu
 board. Pinned-note notifications (`NotePinned` → the receipt-is-the-notification read
 side) have no off-switch at all.
 
-#209 asks for a Notifications settings affordance: each notification type listed with
+Issue #209 asks for a Notifications settings affordance: each notification type listed with
 an on/off toggle, **on by default**, storing only the opt-outs.
 
 ## Decision

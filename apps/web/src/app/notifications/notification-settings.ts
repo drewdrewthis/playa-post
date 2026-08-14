@@ -52,6 +52,10 @@ export function useNotificationSettings(open: boolean): NotificationSettingsCont
   });
 
   const update = useMutation({
+    // One scope serializes the flips: TanStack Query otherwise runs mutations in
+    // parallel, and two quick taps reaching the server out of order would let the
+    // stored setting end up the opposite of the last one selected.
+    scope: { id: 'notification-settings' },
     mutationFn: (input: { kind: NotificationKind; enabled: boolean }) =>
       api.mutate('notifications.settings.update', input),
 
@@ -78,7 +82,9 @@ export function useNotificationSettings(open: boolean): NotificationSettingsCont
 
   return {
     settings: settings.data ?? null,
-    loading: open && settings.data === undefined,
+    // `isPending`, not `data === undefined`: a failed read also has no data, and it
+    // must surface as the control's failure line rather than as loading forever.
+    loading: open && settings.isPending,
     setEnabled: (kind, enabled) => {
       update.mutate({ kind, enabled });
     },
