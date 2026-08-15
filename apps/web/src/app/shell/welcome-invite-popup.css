@@ -1,0 +1,104 @@
+/*
+ * The welcome invite popup (issue #220).
+ *
+ * Every colour is a token from `app/theme/tokens.css`, so the card is correct in both
+ * themes with no `[data-theme]` selector of its own — the same discipline
+ * `report-abuse-sheet.css` explains at its top.
+ *
+ * A centred card rather than a bottom sheet, deliberately: the sheets are workspaces
+ * someone opened, this is a greeting the app volunteers — the comp's sheet shape would
+ * read as a form to fill in. Positioned absolute against `.app-column`, the nearest
+ * positioned ancestor, like every other overlay in the shell.
+ *
+ * z-index 48/49: above the notifications takeover (35) and the report sheet (44/45) —
+ * a welcome that rises under an open panel is invisible — and below the compose sheet
+ * (70), which nothing should cover.
+ */
+
+.invite-hint__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 48;
+  background: var(--pp-scrim);
+}
+
+.invite-hint {
+  position: absolute;
+  top: 50%;
+  right: 1.25rem;
+  left: 1.25rem;
+  z-index: 49;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--pp-space-3);
+  padding: var(--pp-space-5);
+  border: 1px solid var(--pp-sheet-border);
+  border-radius: var(--pp-radius-lg);
+  background: var(--pp-sheet-bg);
+  box-shadow: var(--pp-sheet-shadow);
+  text-align: center;
+  animation: pp-invite-hint-rise 0.22s ease-out;
+}
+
+/* Its own keyframe, duplicated on purpose — one CSS file per feature means the
+   feature's file is complete (see `report-abuse-sheet.css` on this exact trade). */
+@keyframes pp-invite-hint-rise {
+  from {
+    transform: translateY(calc(-50% + 24px));
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(-50%);
+    opacity: 1;
+  }
+}
+
+.invite-hint__icon {
+  margin: 0;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.invite-hint__title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.invite-hint__body,
+.invite-hint__quiet {
+  margin: 0;
+  color: var(--pp-faint);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+/* The link is an address to recognise, not prose — one line, clipped with an
+   ellipsis, in the mono the connect card uses for the same string. */
+.invite-hint__link {
+  max-width: 100%;
+  overflow: hidden;
+  margin: 0;
+  font-family: var(--pp-font-mono, monospace);
+  font-size: 0.8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invite-hint__share {
+  align-self: stretch;
+}
+
+.invite-hint__remember {
+  display: flex;
+  align-items: center;
+  gap: var(--pp-space-2);
+  color: var(--pp-faint);
+  font-size: 0.875rem;
+}
+
+.invite-hint__dismiss {
+  align-self: stretch;
+}

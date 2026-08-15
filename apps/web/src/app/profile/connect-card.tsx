@@ -11,11 +11,7 @@ import {
   ROTATE_PERSONAL_LINK_LINE,
 } from '../connections/connection-request-copy';
 
-import {
-  personalLinkShareBlurb,
-  personalLinkShareText,
-  personalLinkUrl,
-} from './personal-link-share';
+import { personalLinkUrl, sharePersonalLink } from './personal-link-share';
 import { RetryRow } from './retry-row';
 
 /** How long the copy button's "Copied" confirmation holds before reverting — the same
@@ -180,34 +176,6 @@ export function ConnectCard(): JSX.Element {
       </div>
     </div>
   );
-}
-
-/**
- * Hand the link to the platform's share sheet, or to the clipboard.
- *
- * ⚠ **`text` and `url` never overlap.** `navigator.share`'s `text` field carries only the
- * blurb; the link travels solely in `url`. Passing both fields with the link folded into
- * `text` too used to mean a share target that reads both fields verbatim — the OS share
- * sheet's own Copy action among them — pasted the link twice (issue #160). The clipboard
- * fallback has no separate `url` field to lean on, so it gets the combined, self-contained
- * form instead.
- *
- * ⚠ Both branches can reject — `navigator.share` throws `AbortError` when the user dismisses
- * the sheet, and the clipboard throws when the document is not focused. Neither is a failure
- * worth interrupting anybody over, and neither leaves the app in a bad state, so both are
- * swallowed. The link is on screen either way, which is the fallback that always works.
- */
-async function sharePersonalLink(url: string): Promise<void> {
-  try {
-    if (typeof navigator.share === 'function') {
-      await navigator.share({ text: personalLinkShareBlurb(), url });
-      return;
-    }
-
-    await navigator.clipboard.writeText(personalLinkShareText(url));
-  } catch {
-    // Deliberately silent; see above.
-  }
 }
 
 /**
