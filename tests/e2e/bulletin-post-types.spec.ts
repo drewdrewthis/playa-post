@@ -51,6 +51,7 @@ test.describe('Bulletin post types (#87)', () => {
     const composedIds: string[] = [];
     for (const type of postableTypes) {
       await page.goto('/board');
+      await page.getByTestId('add-button').click();
       await page.getByTestId('compose-bulletin-button').click();
 
       // The select's option *values* ARE the postable vocabulary — no `update`, no

@@ -37,7 +37,8 @@ import {
  * | `graph-connection-node-<handle>` | graph home | One connected person's node, clickable to open their person sheet |
  * | `person-sheet-save-trust-button` | person sheet | Persists the trust slider's value |
  * | `graph-connection-edge-<handle>` | graph home | Visible edge/row proving the connection rendered for this viewer |
- * | `compose-bulletin-button` | app shell (the compose FAB) | Opens the compose form. Present on every authenticated screen since the design wave (#51) replaced the per-screen buttons with one FAB in the tab bar |
+ * | `add-button` | app shell (the FAB) | Opens the add chooser (#221): person or post |
+ * | `compose-bulletin-button` | add chooser (board option) | Opens the compose form — the id follows the compose affordance, which lives in the chooser now |
  * | `compose-bulletin-type-select` | compose form | `<select>` with an accessible name "Type"; values include `request` |
  * | `compose-bulletin-title-input` | compose form | Title field |
  * | `compose-bulletin-body-input` | compose form | Body field |
@@ -170,6 +171,7 @@ test.describe('The M2 vertical slice, end to end (vertical-slice-e2e.feature, M2
       });
 
       await test.step('7. User A creates a Request bulletin', async () => {
+        await pageA.getByTestId('add-button').click();
         await pageA.getByTestId('compose-bulletin-button').click();
         await pageA.getByTestId('compose-bulletin-type-select').selectOption('request');
         await pageA.getByTestId('compose-bulletin-title-input').fill('Need a ride to the airport');
@@ -316,6 +318,7 @@ test.describe('The Dismissed category, end to end (moderation-report-dismiss.fea
       await test.step('User A posts a bulletin User B can see', async () => {
         await bootstrapSession(pageA, requireEnv('E2E_USER_A_ACCESS_TOKEN'));
         await pageA.goto('/board');
+        await pageA.getByTestId('add-button').click();
         await pageA.getByTestId('compose-bulletin-button').click();
         await pageA.getByTestId('compose-bulletin-type-select').selectOption('request');
         await pageA.getByTestId('compose-bulletin-title-input').fill(BULLETIN_TITLE);

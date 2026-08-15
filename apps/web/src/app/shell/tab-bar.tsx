@@ -4,13 +4,13 @@ import { Link, useLocation } from 'react-router';
 import { activeTabFor } from './active-tab';
 
 /**
- * The bottom tab bar, with the compose button breaking its top edge.
+ * The bottom tab bar, with the add button breaking its top edge.
  *
  * Four tabs and a FAB. The comp drew Saved in the fourth slot, which went with the
  * Saved Views feature (issue #208); Info (issue #216) now stands there — the pitch,
  * the repository, and the support link, permanently reachable.
  */
-export function TabBar(): JSX.Element {
+export function TabBar({ onAdd }: { readonly onAdd: () => void }): JSX.Element {
   const { pathname } = useLocation();
   const active = activeTabFor(pathname);
 
@@ -20,19 +20,21 @@ export function TabBar(): JSX.Element {
       <Tab to="/board" glyph="▤" label="Board" active={active === 'board'} />
 
       {/*
-       * The one way to compose, on every screen. It carries
-       * `compose-bulletin-button` because it *is* the compose affordance now — the
-       * per-screen buttons the board and the graph used to own are gone, and two
-       * routes to one form is one of them going stale.
+       * The one "add" on every screen — a button now, not a link (issue #221): "add"
+       * means two things in this product, so the FAB opens the chooser and the
+       * chooser's board option is what carries `compose-bulletin-button`. The
+       * per-screen compose buttons stayed gone; two routes to one form is one of
+       * them going stale.
        */}
-      <Link
+      <button
         className="compose-fab"
-        data-testid="compose-bulletin-button"
-        to="/board/new"
-        aria-label="Post a bulletin"
+        data-testid="add-button"
+        type="button"
+        aria-label="Add"
+        onClick={onAdd}
       >
         <span aria-hidden="true">+</span>
-      </Link>
+      </button>
 
       <Tab to="/info" glyph="✺" label="Info" active={active === 'info'} />
       <Tab to="/you" glyph="◍" label="You" active={active === 'you'} />

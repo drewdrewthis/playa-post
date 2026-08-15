@@ -132,6 +132,12 @@
  * the line, -14px means -14px.
  */
 .compose-fab {
+  /* A <button> since issue #221 (it opens the add chooser rather than navigating),
+     so the UA's border/padding/font need zeroing where a link had none. */
+  padding: 0;
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -154,6 +154,7 @@ test.describe('asking for an intro through a shared connection', () => {
 
     await test.step('walk 2 — C posts a bulletin, A re-asks from its detail sheet', async () => {
       await withUser(browser, userCAccessToken, async (pageC) => {
+        await pageC.getByTestId('add-button').click();
         await pageC.getByTestId('compose-bulletin-button').click();
         await pageC.getByTestId('compose-bulletin-type-select').selectOption('request');
         await pageC.getByTestId('compose-bulletin-title-input').fill('Spare bike wheel out here?');
