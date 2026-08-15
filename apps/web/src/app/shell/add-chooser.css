@@ -1,0 +1,93 @@
+/*
+ * The plus button's chooser sheet (issue #221).
+ *
+ * Every colour is a token from `app/theme/tokens.css`, so the sheet is correct in
+ * both themes with no `[data-theme]` selector of its own — see
+ * `report-abuse-sheet.css` on this discipline.
+ *
+ * A bottom sheet, not a centred card: the chooser is the FAB continued — it rises
+ * from where the thumb already is. Positioned absolute against `.app-column`, the
+ * nearest positioned ancestor, like every other overlay in the shell.
+ *
+ * z-index 52/53: above the notifications takeover (35) and the report sheet (44/45),
+ * below the compose sheet (70), which the board option is about to open.
+ */
+
+.add-chooser__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 52;
+  background: var(--pp-scrim);
+}
+
+.add-chooser {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.875rem;
+  left: 0.75rem;
+  z-index: 53;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-4);
+  padding: var(--pp-space-5);
+  border: 1px solid var(--pp-sheet-border);
+  border-radius: var(--pp-radius-lg);
+  background: var(--pp-sheet-bg);
+  box-shadow: var(--pp-sheet-shadow);
+  animation: pp-add-chooser-up 0.22s ease-out;
+}
+
+/* Its own keyframe, duplicated on purpose — one CSS file per feature means the
+   feature's file is complete (see `report-abuse-sheet.css` on this exact trade). */
+@keyframes pp-add-chooser-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.add-chooser__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--pp-space-3);
+}
+
+.add-chooser__title {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.add-chooser__close {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--pp-faint);
+  font: inherit;
+  font-size: 0.8125rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.add-chooser__option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+}
+
+.add-chooser__option .button {
+  align-self: stretch;
+}
+
+.add-chooser__explainer {
+  margin: 0;
+  color: var(--pp-faint);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}

@@ -6,6 +6,7 @@ import { NotificationsPanel } from '../notifications/notifications-panel';
 import { OfflinePendingBadge } from '../offline/pending-badge';
 import { ThemeToggle } from '../theme/theme-toggle';
 
+import { AddChooser } from './add-chooser';
 import { TabBar } from './tab-bar';
 import { WelcomeInvitePopup } from './welcome-invite-popup';
 
@@ -32,6 +33,7 @@ import './app-shell.css';
  */
 export function AppShell(): JSX.Element {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [addChooserOpen, setAddChooserOpen] = useState(false);
 
   return (
     <div className="app-frame">
@@ -54,7 +56,11 @@ export function AppShell(): JSX.Element {
           <Outlet />
         </main>
 
-        <TabBar />
+        <TabBar
+          onAdd={() => {
+            setAddChooserOpen(true);
+          }}
+        />
 
         {notificationsOpen ? (
           <NotificationsPanel
@@ -67,6 +73,16 @@ export function AppShell(): JSX.Element {
         {/* Self-gating (issue #220): decides for itself whether this visit gets the
             welcome, so the shell holds no invite-hint policy. */}
         <WelcomeInvitePopup />
+
+        {/* The FAB's chooser (issue #221) — its open state lives here for the same
+            `inset: 0` reason the notifications overlay's does. */}
+        {addChooserOpen ? (
+          <AddChooser
+            onClose={() => {
+              setAddChooserOpen(false);
+            }}
+          />
+        ) : null}
       </div>
     </div>
   );

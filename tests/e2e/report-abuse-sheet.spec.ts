@@ -139,6 +139,7 @@ test.describe('the report-abuse sheet renders in both themes', () => {
       // it — its scrim would swallow the tap on the compose FAB below.
       await pageA.getByTestId('person-sheet-close-button').click();
 
+      await pageA.getByTestId('add-button').click();
       await pageA.getByTestId('compose-bulletin-button').click();
       // `BULLETIN_TYPE.request` rather than a literal, so a rename in the contract's
       // vocabulary (`bulletins/domain/bulletin.ts`) fails here at compile time instead
@@ -287,6 +288,7 @@ test.describe('a report or dismissal that did not reach the server says so', () 
       await bootstrapSession(pageB, userBAccessToken);
       await connectViaPersonalLink(pageA, pageB);
 
+      await pageA.getByTestId('add-button').click();
       await pageA.getByTestId('compose-bulletin-button').click();
       await pageA.getByTestId('compose-bulletin-type-select').selectOption(BULLETIN_TYPE.request);
       await pageA.getByTestId('compose-bulletin-title-input').fill('Spare goggles, dusty camp');

@@ -110,6 +110,7 @@ async function composeBulletin(
   page: Page,
   bulletin: { readonly type: BulletinType; readonly title: string; readonly body: string },
 ): Promise<void> {
+  await page.getByTestId('add-button').click();
   await page.getByTestId('compose-bulletin-button').click();
   await page.getByTestId('compose-bulletin-type-select').selectOption(bulletin.type);
   await page.getByTestId('compose-bulletin-title-input').fill(bulletin.title);
