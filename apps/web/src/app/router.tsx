@@ -6,6 +6,7 @@ import { OfflineProvider } from './offline/offline-provider';
 import { BoardRoute } from './routes/board';
 import { ComposeBulletinRoute } from './routes/compose-bulletin';
 import { GraphHomeRoute } from './routes/graph-home';
+import { InfoRoute } from './routes/info';
 import { InviteOpenRoute } from './routes/invite-open';
 import { NotFoundRoute } from './routes/not-found';
 import { OnboardingRoute } from './routes/onboarding';
@@ -106,6 +107,7 @@ export const appRoutes: RouteObject[] = [
           },
           { path: '/board', element: <BoardRoute /> },
           { path: '/board/new', element: <ComposeBulletinRoute /> },
+          { path: '/info', element: <InfoRoute /> },
           { path: '/you', element: <YourProfileRoute /> },
         ],
       },

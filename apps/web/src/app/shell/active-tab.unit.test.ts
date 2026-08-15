@@ -18,6 +18,10 @@ describe('activeTabFor', () => {
       expect(activeTabFor('/board')).toBe('board');
     });
 
+    it('maps "/info" to the Info tab', () => {
+      expect(activeTabFor('/info')).toBe('info');
+    });
+
     it('maps "/you" to the You tab', () => {
       expect(activeTabFor('/you')).toBe('you');
     });
