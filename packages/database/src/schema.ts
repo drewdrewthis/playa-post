@@ -200,7 +200,7 @@ export interface AppNotificationDismissals {
 export interface AppNotificationOptouts {
   created_at: Generated<Timestamp>;
   /**
-   * A GroupedNotification kind: bulletins or note. The CHECK is the schema's copy of the contract union; widen both together.
+   * A GroupedNotification kind: bulletins, note, or connections. The CHECK is the schema's copy of the contract union; widen both together.
    */
   kind: string;
   owner_id: string;

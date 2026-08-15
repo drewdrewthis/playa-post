@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { viewerIdFromActor, type ViewerId } from '../../../../shared/auth/viewer-id';
+import type { LiveConnectionRequestDirectory } from '../../../connections/connections.module';
 import type {
   DeliveredNoteNotification,
   DeliveredNotificationMatch,
@@ -68,11 +69,17 @@ describe('notifications unread + dismiss', () => {
       findDeliveredMatches: async () => matches,
       findVisibleBulletinIds: async (_viewer, bulletinIds) => bulletinIds,
       findDeliveredNoteNotifications: async () => notes,
+      findDeliveredConnectionRequestNotifications: async () => [],
       findVisibleNoteIds: async (_viewer, noteIds) => noteIds,
       hasDeliveredMatch: async (owner, notificationId) =>
         owner === recipientId &&
         [...matches, ...notes].some((candidate) => candidate.eventId === notificationId),
     };
+  }
+
+  /** No live requests, which keeps this file about the dismissal rule alone. */
+  function fakeNoLiveRequests(): LiveConnectionRequestDirectory {
+    return { listLiveRequestIdsFor: async () => [] };
   }
 
   /** An in-memory `app.notification_dismissals`, primary key and all. */
@@ -113,6 +120,7 @@ describe('notifications unread + dismiss', () => {
   describe('list', () => {
     it('marks a notification unread while nothing has dismissed it', async () => {
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         deliveredNotifications: fakeDelivered([match('event-1', 'bulletin-1')]),
         dismissals: fakeDismissals(),
         seenWatermarks: fakeNeverSeen(),
@@ -130,6 +138,7 @@ describe('notifications unread + dismiss', () => {
       // behind it stopped being visible to me" — two different facts that both end in a
       // missing row.
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         deliveredNotifications: fakeDelivered([match('event-1', 'bulletin-1')]),
         dismissals: fakeDismissals(['event-1']),
         seenWatermarks: fakeNeverSeen(),
@@ -144,6 +153,7 @@ describe('notifications unread + dismiss', () => {
 
     it('dismisses one notification without touching another', async () => {
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         // 61 seconds apart, so the tumbling window puts them in two notifications
         // (M2-AC7) — which is what makes this a test of per-notification state rather
         // than of one group.
@@ -171,6 +181,7 @@ describe('notifications unread + dismiss', () => {
       // *first*. A dismissal recorded against the second must not mark it read, or the
       // client's `✕` would silently miss.
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         deliveredNotifications: fakeDelivered([
           match('event-opener', 'bulletin-1'),
           match('event-joiner', 'bulletin-2', 59_000),
@@ -188,6 +199,7 @@ describe('notifications unread + dismiss', () => {
 
     it('serves both kinds in one list, newest first, each carrying its own discriminator', async () => {
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         deliveredNotifications: fakeDelivered(
           [match('event-bulletin', 'bulletin-1')],
           [note('event-note', 'note-1', 120_000)],
@@ -224,6 +236,7 @@ describe('notifications unread + dismiss', () => {
       // bulletin matches. Two people writing to you is two notifications; collapsing them
       // into "2 notes" would hide the second person.
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         deliveredNotifications: fakeDelivered(
           [],
           [note('event-note-1', 'note-1'), note('event-note-2', 'note-2', 1_000)],
@@ -242,6 +255,7 @@ describe('notifications unread + dismiss', () => {
 
     it('marks a dismissed note read and leaves the unread bulletin alone', async () => {
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         deliveredNotifications: fakeDelivered(
           [match('event-bulletin', 'bulletin-1')],
           [note('event-note', 'note-1')],
@@ -271,6 +285,7 @@ describe('notifications unread + dismiss', () => {
         now: () => new Date('2026-08-02T09:00:00.000Z'),
       });
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         deliveredNotifications,
         dismissals,
         seenWatermarks: fakeNeverSeen(),
@@ -292,6 +307,7 @@ describe('notifications unread + dismiss', () => {
         now: () => new Date('2026-08-02T09:00:00.000Z'),
       });
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         deliveredNotifications,
         dismissals,
         seenWatermarks: fakeNeverSeen(),

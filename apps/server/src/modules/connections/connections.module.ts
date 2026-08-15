@@ -8,11 +8,13 @@ import { createDecideConnectionRequestService } from './application/decide-conne
 import { createEnsurePersonalLinkService } from './application/ensure-personal-link.service';
 import { createGetConnectionQuery } from './application/get-connection.query';
 import { createListConnectionRequestsQuery } from './application/list-connection-requests.query';
+import type { LiveConnectionRequestDirectory } from './application/live-connection-request.directory';
 import { createOpenInviteService } from './application/open-invite.service';
 import { createOpenPersonalLinkQuery } from './application/open-personal-link.query';
 import { createRotatePersonalLinkService } from './application/rotate-personal-link.service';
 import { createSendConnectionRequestService } from './application/send-connection-request.service';
 import { createSetConnectionTrustService } from './application/set-connection-trust.service';
+import { liveRequestFloor } from './domain/connection-request.policy';
 import { createConnectIntroducedPairHandler } from './persistence/postgres-connect-introduced-pair.handler';
 import { createPostgresConnectionRequestRepository } from './persistence/postgres-connection-request.repository';
 import { createPostgresConnectionTrustRepository } from './persistence/postgres-connection-trust.repository';
@@ -20,6 +22,8 @@ import { createPostgresConnectionRepository } from './persistence/postgres-conne
 import { createPostgresInvitationRepository } from './persistence/postgres-invitation.repository';
 import { createPostgresPersonalLinkRepository } from './persistence/postgres-personal-link.repository';
 import { createConnectionsRouter, type ConnectionsRouter } from './transport/connections.router';
+
+export type { LiveConnectionRequestDirectory } from './application/live-connection-request.directory';
 
 /** What the composition root has to hand this module. */
 export interface ConnectionsModuleDependencies {
@@ -84,6 +88,36 @@ export interface ConnectionsModule {
  * socket: the pool connects lazily and the router is a data structure, so the whole
  * graph can be built before the database is reachable.
  */
+/**
+ * The live request inbox, as identifiers — this module's cross-module export
+ * (issue #218).
+ *
+ * Exported beside {@link createConnectionsModule} the way `modules/views` exports
+ * `createNotifyMeQueryDirectory`, and for the same reason: `modules/notifications`
+ * needs this one reader and nothing else this module builds. Building the whole module
+ * for one question would hand a consumer a tRPC surface as a side effect.
+ *
+ * It reuses the inbox read and the TTL policy verbatim — `owner_id = viewer`,
+ * `status = 'pending'`, {@link liveRequestFloor} — so "what the bell still shows" and
+ * "what the inbox still lists" are one statement and one arithmetic, never two
+ * spellings that can drift. Only the ids survive the mapping; the requester cards the
+ * read projects stay inside this module.
+ *
+ * Constructing it touches no socket: the pool connects lazily.
+ */
+export function createLiveConnectionRequestDirectory(
+  dependencies: ConnectionsModuleDependencies,
+): LiveConnectionRequestDirectory {
+  const requests = createPostgresConnectionRequestRepository({ database: dependencies.database });
+
+  return {
+    async listLiveRequestIdsFor(viewerId: string): Promise<readonly string[]> {
+      const inbox = await requests.findInboxFor(viewerId, liveRequestFloor(new Date()));
+      return inbox.map((request) => request.id);
+    },
+  };
+}
+
 export function createConnectionsModule(
   dependencies: ConnectionsModuleDependencies,
 ): ConnectionsModule {

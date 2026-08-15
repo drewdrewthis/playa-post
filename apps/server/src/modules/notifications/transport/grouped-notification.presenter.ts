@@ -31,6 +31,12 @@ export interface PresentedNoteNotification extends PresentedNotificationBase {
   readonly noteId: string;
 }
 
+/** A pending request to connect, on the wire. Identifier only — no requester, no slug. */
+export interface PresentedConnectionRequestNotification extends PresentedNotificationBase {
+  readonly kind: 'connections';
+  readonly connectionRequestId: string;
+}
+
 /**
  * One notification as this API renders it.
  *
@@ -44,7 +50,10 @@ export interface PresentedNoteNotification extends PresentedNotificationBase {
  * tRPC without a serializer turns a `Date` into a string on the wire anyway, so
  * declaring the string is declaring what a caller actually receives.
  */
-export type PresentedNotification = PresentedBulletinNotification | PresentedNoteNotification;
+export type PresentedNotification =
+  | PresentedBulletinNotification
+  | PresentedNoteNotification
+  | PresentedConnectionRequestNotification;
 
 /**
  * What comes back when a recipient dismisses a notification.
@@ -97,8 +106,9 @@ export interface PresentedNotificationSettings {
  * once, where a reviewer can see every field it can possibly carry.
  */
 export function presentNotification(notification: GroupedNotification): PresentedNotification {
-  return notification.kind === 'note'
-    ? {
+  switch (notification.kind) {
+    case 'note':
+      return {
         kind: 'note',
         notificationId: notification.notificationId,
         occurredAt: notification.occurredAt.toISOString(),
@@ -108,8 +118,21 @@ export function presentNotification(notification: GroupedNotification): Presente
         noteId: notification.noteId,
         unread: notification.unread,
         seen: notification.seen,
-      }
-    : {
+      };
+    case 'connections':
+      return {
+        kind: 'connections',
+        notificationId: notification.notificationId,
+        occurredAt: notification.occurredAt.toISOString(),
+        // ⚠ The request's identifier and nothing else. Who asked is read through the
+        // inbox on `connections.requests.list`, which is where the requester's
+        // self-projection and the TTL are applied.
+        connectionRequestId: notification.connectionRequestId,
+        unread: notification.unread,
+        seen: notification.seen,
+      };
+    case 'bulletins':
+      return {
         kind: 'bulletins',
         notificationId: notification.notificationId,
         occurredAt: notification.occurredAt.toISOString(),
@@ -117,6 +140,7 @@ export function presentNotification(notification: GroupedNotification): Presente
         unread: notification.unread,
         seen: notification.seen,
       };
+  }
 }
 
 /** Project one dismissal onto the wire. */

@@ -1,14 +1,16 @@
 import { sql, type DatabaseConnection } from '@playa-post/database';
 
 import type { ViewerId } from '../../../shared/auth/viewer-id';
+import { DELIVER_CONNECTION_REQUESTED_CONSUMER } from '../application/deliver-connection-requested.handler';
 import { DELIVER_NOTE_PINNED_CONSUMER } from '../application/deliver-note-pinned.handler';
 import type {
+  DeliveredConnectionRequestNotification,
   DeliveredNoteNotification,
   DeliveredNotificationMatch,
   DeliveredNotificationRepository,
 } from '../application/delivered-notification.repository';
 import { SEND_GROUPED_PUSH_CONSUMER } from '../application/send-grouped-push.handler';
-import { NOTE_PINNED, NOTIFY_ME_MATCHED } from '../domain/notification.events';
+import { CONNECTION_REQUESTED, NOTE_PINNED, NOTIFY_ME_MATCHED } from '../domain/notification.events';
 
 /** Everything the repository needs, injected (addendum §12). */
 export interface PostgresDeliveredNotificationRepositoryDependencies {
@@ -184,6 +186,35 @@ export function createPostgresDeliveredNotificationRepository(
       return rows.map((row) => row.note_id);
     },
 
+    async findDeliveredConnectionRequestNotifications(
+      viewerId: ViewerId,
+    ): Promise<readonly DeliveredConnectionRequestNotification[]> {
+      // The same shape as its two siblings, against the third event type and its
+      // consumer's receipt. ⚠ The recipient key in a `ConnectionRequested` payload is
+      // `ownerId` — the request inbox's owner, matching the request row's own column —
+      // not `recipientId`; filtering on the wrong key here would silently serve nobody.
+      //
+      // ⚠ `app.connection_requests` is not named here and must not be. Whether the
+      // request is still live in the owner's inbox is `modules/connections`' question,
+      // asked through its exported directory at the application layer.
+      const { rows } = await sql<DeliveredNoteRow>`
+        select requested.event_id, requested.occurred_at, requested.aggregate_id
+          from app.outbox_events as requested
+          join app.consumer_receipts as receipt
+            on receipt.event_id = requested.event_id
+           and receipt.consumer_name = ${DELIVER_CONNECTION_REQUESTED_CONSUMER}
+         where requested.event_type = ${CONNECTION_REQUESTED}
+           and requested.payload ->> 'ownerId' = ${viewerId}::text
+         order by requested.occurred_at asc, requested.event_id asc
+      `.execute(database);
+
+      return rows.map((row) => ({
+        eventId: row.event_id,
+        connectionRequestId: row.aggregate_id,
+        occurredAt: row.occurred_at,
+      }));
+    },
+
     async hasDeliveredMatch(recipientId: string, notificationId: string): Promise<boolean> {
       // The same predicates the two read statements use — the event type, the recipient
       // in the payload, and *that kind's* receipt — narrowed to one identifier. Written
@@ -196,6 +227,12 @@ export function createPostgresDeliveredNotificationRepository(
       // reduced to "has some receipt". The receipt is what makes a notification exist, so
       // a `NotePinned` row carrying only an audit receipt is not one — and a check that
       // accepted any receipt would let a caller dismiss a delivery that had not happened.
+      //
+      // ⚠ **The recipient predicate lives inside each branch too**, because the kinds do
+      // not agree on the payload key: a `ConnectionRequested` payload addresses its
+      // recipient as `ownerId` (the request inbox's owner), the other two as
+      // `recipientId`. One shared predicate on either key would silently orphan the
+      // other kind's dismissals.
       const { rows } = await sql<DeliveredMatchExistsRow>`
         select exists (
           select 1
@@ -203,12 +240,16 @@ export function createPostgresDeliveredNotificationRepository(
             join app.consumer_receipts as receipt
               on receipt.event_id = delivered.event_id
            where delivered.event_id = ${notificationId}
-             and delivered.payload ->> 'recipientId' = ${recipientId}
              and (
                    (delivered.event_type = ${NOTIFY_ME_MATCHED}
-                    and receipt.consumer_name = ${SEND_GROUPED_PUSH_CONSUMER})
+                    and receipt.consumer_name = ${SEND_GROUPED_PUSH_CONSUMER}
+                    and delivered.payload ->> 'recipientId' = ${recipientId})
                 or (delivered.event_type = ${NOTE_PINNED}
-                    and receipt.consumer_name = ${DELIVER_NOTE_PINNED_CONSUMER})
+                    and receipt.consumer_name = ${DELIVER_NOTE_PINNED_CONSUMER}
+                    and delivered.payload ->> 'recipientId' = ${recipientId})
+                or (delivered.event_type = ${CONNECTION_REQUESTED}
+                    and receipt.consumer_name = ${DELIVER_CONNECTION_REQUESTED_CONSUMER}
+                    and delivered.payload ->> 'ownerId' = ${recipientId})
              )
         ) as exists
       `.execute(database);

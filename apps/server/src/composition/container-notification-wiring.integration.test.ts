@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { startPostgresTestDatabase, type PostgresTestDatabase } from '@playa-post/testing';
 
 import { CONNECT_INTRODUCED_PAIR_CONSUMER } from '../modules/connections/persistence/postgres-connect-introduced-pair.handler';
+import { DELIVER_CONNECTION_REQUESTED_CONSUMER } from '../modules/notifications/application/deliver-connection-requested.handler';
 import { DELIVER_NOTE_PINNED_CONSUMER } from '../modules/notifications/application/deliver-note-pinned.handler';
 
 import type { Configuration } from './config';
@@ -111,6 +112,44 @@ describe('buildAppContainer outbox consumer registration', () => {
            from app.consumer_receipts
           where consumer_name = $1 and event_id = $2`,
         [DELIVER_NOTE_PINNED_CONSUMER, eventId],
+      );
+      expect(rows[0]?.count).toBe('1');
+    });
+  });
+
+  describe('Scenario: A connection request is delivered by the drainer this container built (#218)', () => {
+    it('writes the DeliverConnectionRequestedHandler receipt for a claimed ConnectionRequested row', async () => {
+      const owner = await seedOnboardedUser('dusty_wired_owner');
+      const requester = await seedOnboardedUser('dusty_wired_asker');
+      const { rows: requestRows } = await testDatabase.client.query<{ id: string }>(
+        `insert into app.connection_requests (owner_id, requester_id, status, created_at)
+         values ($1, $2, 'pending', now()) returning id`,
+        [owner, requester],
+      );
+      const requestId = requestRows[0]?.id;
+      if (requestId === undefined) {
+        throw new Error('connection request insert returned no row');
+      }
+
+      // The same sanctioned seam as the NotePinned scenario, and the same payload shape
+      // `modules/connections` actually writes: the recipient is `ownerId`, not
+      // `recipientId` — the key this consumer reads for the opt-out question.
+      const eventId = randomUUID();
+      await testDatabase.client.query(
+        `insert into app.outbox_events
+           (event_id, event_type, occurred_at, actor_id, aggregate_id, payload)
+         values ($1, 'ConnectionRequested', now(), $2, $3, $4::jsonb)`,
+        [eventId, requester, requestId, JSON.stringify({ ownerId: owner, requesterId: requester })],
+      );
+
+      const result = await container.outboxDrainer.drainOnce();
+
+      expect(result.claimedEventIds).toContain(eventId);
+      const { rows } = await testDatabase.client.query<{ count: string }>(
+        `select count(*)::text as count
+           from app.consumer_receipts
+          where consumer_name = $1 and event_id = $2`,
+        [DELIVER_CONNECTION_REQUESTED_CONSUMER, eventId],
       );
       expect(rows[0]?.count).toBe('1');
     });

@@ -85,6 +85,21 @@ export interface PinnedNoteNotification extends NotificationBase {
 }
 
 /**
+ * One connection request aimed at the caller (issue #218).
+ *
+ * ⚠ **Never grouped**, for the note's reason: one request is one person asking.
+ *
+ * ⚠ **`connectionRequestId` and nothing else — no requester name, handle, or avatar.**
+ * Who asked is read through `connections.requests.list`, where visibility projects the
+ * requester card. A request that has since been decided or has lapsed simply stops
+ * being served here.
+ */
+export interface ConnectionRequestNotification extends NotificationBase {
+  readonly kind: 'connections';
+  readonly connectionRequestId: string;
+}
+
+/**
  * One notification — `notifications.list` output, one element.
  *
  * ⚠ **Branch on `kind`.** It is a discriminated union rather than one shape with optional
@@ -92,7 +107,10 @@ export interface PinnedNoteNotification extends NotificationBase {
  * copy that assumes every notification is a bulletin group. A future kind is added here
  * and the branch that forgets it fails to compile.
  */
-export type GroupedNotification = GroupedBulletinNotification | PinnedNoteNotification;
+export type GroupedNotification =
+  | GroupedBulletinNotification
+  | PinnedNoteNotification
+  | ConnectionRequestNotification;
 
 /**
  * Every notification kind a person can switch off — the discriminants of
@@ -103,7 +121,7 @@ export type GroupedNotification = GroupedBulletinNotification | PinnedNoteNotifi
  * the same PR; `notifications.settings.get` serves one entry per member of this list,
  * so a client renders the settings panel from the response and never hardcodes kinds.
  */
-export const NOTIFICATION_KINDS = ['bulletins', 'note'] as const;
+export const NOTIFICATION_KINDS = ['bulletins', 'note', 'connections'] as const;
 
 /** One member of {@link NOTIFICATION_KINDS}. */
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];

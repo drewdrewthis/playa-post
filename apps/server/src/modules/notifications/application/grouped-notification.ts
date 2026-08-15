@@ -108,6 +108,22 @@ export interface PinnedNoteNotification extends NotificationBase {
 }
 
 /**
+ * One connection request aimed at this viewer (issue #218).
+ *
+ * ⚠ **A singleton, never a window**, for the note's reason: a request is one deliberate
+ * act by one person, and "2 connection requests" would hide that two people asked.
+ *
+ * ⚠ **`connectionRequestId` and nothing more — never the requester.** Who asked is
+ * answered by the request inbox (`connections.requests.list`), where §6a projects the
+ * requester card at read time. A notification that named the requester would freeze an
+ * identity the graph may since have withdrawn.
+ */
+export interface ConnectionRequestNotification extends NotificationBase {
+  readonly kind: 'connections';
+  readonly connectionRequestId: string;
+}
+
+/**
  * One notification as a viewer reads it.
  *
  * **A discriminated union rather than one shape with optional fields**: `bulletinIds` and
@@ -116,4 +132,7 @@ export interface PinnedNoteNotification extends NotificationBase {
  * arrived. It also keeps "a bulletin group is never empty" and "a note always names one
  * note" as facts the compiler holds, instead of invariants a presenter has to defend.
  */
-export type GroupedNotification = GroupedBulletinNotification | PinnedNoteNotification;
+export type GroupedNotification =
+  | GroupedBulletinNotification
+  | PinnedNoteNotification
+  | ConnectionRequestNotification;

@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DELIVER_CONNECTION_REQUESTED_CONSUMER } from '../modules/notifications/application/deliver-connection-requested.handler';
 import { DELIVER_NOTE_PINNED_CONSUMER } from '../modules/notifications/application/deliver-note-pinned.handler';
 import {
+  CONNECTION_REQUESTED,
   NOTE_PINNED,
   SELF_DRAINED_EVENT_TYPES,
 } from '../modules/notifications/domain/notification.events';
@@ -74,6 +76,20 @@ describe('notification.events.ts SELF_DRAINED_EVENT_TYPES', () => {
     // `NotePinned` would leave every pinned note `pending` forever with nothing reading
     // it, because — unlike `NotifyMeMatched` — no scheduled job sweeps it.
     expect(SELF_DRAINED_EVENT_TYPES).not.toContain(NOTE_PINNED);
+  });
+
+  it('does NOT contain ConnectionRequested, which the generic drainer must deliver (#218)', () => {
+    // Same coupling, third kind: nothing self-drains a connection request, so excluding
+    // it would strand every request event `pending` with nothing reading it.
+    expect(SELF_DRAINED_EVENT_TYPES).not.toContain(CONNECTION_REQUESTED);
+  });
+});
+
+describe('DeliverConnectionRequestedHandler receipt name', () => {
+  it('is the literal DeliverConnectionRequestedHandler', () => {
+    // Pinned for the reason DeliverNotePinnedHandler's is, one paragraph down: the
+    // receipt IS the notification, and a rename empties every bell retroactively.
+    expect(DELIVER_CONNECTION_REQUESTED_CONSUMER).toBe('DeliverConnectionRequestedHandler');
   });
 });
 

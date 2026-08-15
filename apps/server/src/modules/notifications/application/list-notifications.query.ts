@@ -1,4 +1,5 @@
 import type { ViewerId } from '../../../shared/auth/viewer-id';
+import type { LiveConnectionRequestDirectory } from '../../connections/connections.module';
 import type { NotificationDismissalRepository } from '../domain/notification-dismissal.repository';
 import type { NotificationSeenWatermarkRepository } from '../domain/notification-seen-watermark.repository';
 import {
@@ -7,6 +8,7 @@ import {
 } from '../domain/notification-window';
 
 import type {
+  DeliveredConnectionRequestNotification,
   DeliveredNoteNotification,
   DeliveredNotificationMatch,
   DeliveredNotificationRepository,
@@ -34,6 +36,15 @@ export interface ListNotificationsDependencies {
   readonly deliveredNotifications: DeliveredNotificationRepository;
   readonly dismissals: NotificationDismissalRepository;
   readonly seenWatermarks: NotificationSeenWatermarkRepository;
+  /**
+   * `modules/connections`' liveness answer for the third kind (issue #218) — which of
+   * the requests this module notified an owner about are still waiting on them.
+   *
+   * A dependency rather than a repository because the question belongs to another
+   * module: `app.connection_requests` is connections' table, and this is its exported
+   * directory, the same seam `visiblePeople` crosses.
+   */
+  readonly liveConnectionRequests: LiveConnectionRequestDirectory;
 }
 
 /**
@@ -89,12 +100,15 @@ export function createListNotificationsQuery(
     async list(command: ListNotificationsCommand): Promise<readonly GroupedNotification[]> {
       // Concurrent, because neither read informs the other — and because a viewer with
       // both kinds waiting should not pay for them in series.
-      const [delivered, deliveredNotes] = await Promise.all([
+      const [delivered, deliveredNotes, deliveredRequests] = await Promise.all([
         dependencies.deliveredNotifications.findDeliveredMatches(command.viewerId),
         dependencies.deliveredNotifications.findDeliveredNoteNotifications(command.viewerId),
+        dependencies.deliveredNotifications.findDeliveredConnectionRequestNotifications(
+          command.viewerId,
+        ),
       ]);
 
-      if (delivered.length === 0 && deliveredNotes.length === 0) {
+      if (delivered.length === 0 && deliveredNotes.length === 0 && deliveredRequests.length === 0) {
         // Nothing has been delivered to this viewer, so there is no visibility question
         // to ask and no reason to pay for either authorized-set function.
         return [];
@@ -107,18 +121,26 @@ export function createListNotificationsQuery(
       // `modules/bulletins`' board read uses for its own two. Both visibility reads
       // answer `[]` for an empty candidate list, so a viewer with only one kind of
       // notification pays for only one function.
-      const [visibleBulletinIds, visibleNoteIds, dismissed, lastSeenAt] = await Promise.all([
-        dependencies.deliveredNotifications.findVisibleBulletinIds(command.viewerId, [
-          ...new Set(delivered.map((match) => match.bulletinId)),
-        ]),
-        dependencies.deliveredNotifications.findVisibleNoteIds(command.viewerId, [
-          ...new Set(deliveredNotes.map((note) => note.noteId)),
-        ]),
-        dependencies.dismissals.findDismissedFor(command.viewerId),
-        dependencies.seenWatermarks.findSeenWatermarkFor(command.viewerId),
-      ]);
+      const [visibleBulletinIds, visibleNoteIds, liveRequestIds, dismissed, lastSeenAt] =
+        await Promise.all([
+          dependencies.deliveredNotifications.findVisibleBulletinIds(command.viewerId, [
+            ...new Set(delivered.map((match) => match.bulletinId)),
+          ]),
+          dependencies.deliveredNotifications.findVisibleNoteIds(command.viewerId, [
+            ...new Set(deliveredNotes.map((note) => note.noteId)),
+          ]),
+          // Skipped entirely when nothing of this kind was delivered, matching the two
+          // visibility reads' answer-[]-for-[] shape — the directory itself takes no
+          // candidate list, so the short-circuit lives here.
+          deliveredRequests.length === 0
+            ? Promise.resolve<readonly string[]>([])
+            : dependencies.liveConnectionRequests.listLiveRequestIdsFor(command.viewerId),
+          dependencies.dismissals.findDismissedFor(command.viewerId),
+          dependencies.seenWatermarks.findSeenWatermarkFor(command.viewerId),
+        ]);
       const visibleBulletins = new Set(visibleBulletinIds);
       const visibleNotes = new Set(visibleNoteIds);
+      const liveRequests = new Set(liveRequestIds);
 
       return [
         ...windows.flatMap((window) =>
@@ -126,6 +148,9 @@ export function createListNotificationsQuery(
         ),
         ...deliveredNotes.flatMap((note) =>
           presentableNote(note, visibleNotes, dismissed, lastSeenAt),
+        ),
+        ...deliveredRequests.flatMap((request) =>
+          presentableConnectionRequest(request, liveRequests, dismissed, lastSeenAt),
         ),
       ].sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime());
     },
@@ -203,6 +228,34 @@ function presentableWindow(
  * There is no window and no de-duplication to do — one `NotePinned` event is one note is
  * one notification — so the whole rule is the visibility post-filter.
  */
+/**
+ * One delivered connection request as a notification, or nothing at all (issue #218).
+ *
+ * The exact shape of {@link presentableNote}: no window, no de-duplication, and the
+ * whole rule is the liveness post-filter — a request the owner has since decided, or
+ * that lapsed, or whose requester deactivated, is dropped rather than reported as a
+ * notification pointing at an inbox row that is no longer there.
+ */
+function presentableConnectionRequest(
+  request: DeliveredConnectionRequestNotification,
+  live: ReadonlySet<string>,
+  dismissed: ReadonlySet<string>,
+  lastSeenAt: Date | null,
+): readonly GroupedNotification[] {
+  return live.has(request.connectionRequestId)
+    ? [
+        {
+          kind: 'connections',
+          notificationId: request.eventId,
+          occurredAt: request.occurredAt,
+          connectionRequestId: request.connectionRequestId,
+          unread: !dismissed.has(request.eventId),
+          seen: wasSeen(request.occurredAt, lastSeenAt),
+        },
+      ]
+    : [];
+}
+
 function presentableNote(
   note: DeliveredNoteNotification,
   visible: ReadonlySet<string>,

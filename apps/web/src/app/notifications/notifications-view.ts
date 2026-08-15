@@ -68,6 +68,13 @@ export function notificationTitle(notification: GroupedNotification): string {
     return 'Someone pinned a note to your board';
   }
 
+  if (notification.kind === 'connections') {
+    // Same "Someone" stance as the note line, for the same reason: the contract carries
+    // the request's id and nothing else. Who is asking is answered on the graph screen,
+    // where the requester's own self-disclosed card is projected.
+    return 'Someone wants to connect with you';
+  }
+
   return notification.bulletinIds.length === 1
     ? 'A new bulletin matches your Notify Me query'
     : `${notification.bulletinIds.length} new bulletins match your Notify Me query`;
