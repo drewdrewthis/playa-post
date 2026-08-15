@@ -50,6 +50,12 @@ export function WelcomeRoute(): JSX.Element {
 
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
     pointerStart.current = { x: event.clientX, y: event.clientY };
+    // Capture, so a drag released outside the screen still delivers pointerup
+    // here — but not for presses on Next/Skip: capture retargets the eventual
+    // click at this div, which would swallow the buttons.
+    if (!(event.target instanceof Element) || event.target.closest('button') === null) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
   }
 
   function onPointerUp(event: ReactPointerEvent<HTMLDivElement>): void {
@@ -85,6 +91,9 @@ export function WelcomeRoute(): JSX.Element {
           onPointerDown={onPointerDown}
           onPointerUp={onPointerUp}
           onPointerCancel={() => {
+            pointerStart.current = null;
+          }}
+          onLostPointerCapture={() => {
             pointerStart.current = null;
           }}
         >
