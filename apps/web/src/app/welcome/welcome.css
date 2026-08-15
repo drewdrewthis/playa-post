@@ -17,6 +17,14 @@
   align-items: center;
   gap: var(--pp-space-4);
   text-align: center;
+  /* Vertical scrolling (the roll-call overflows small phones) stays native;
+   * horizontal gestures reach the route's pointer handlers, which page the
+   * carousel (#214). */
+  touch-action: pan-y;
+  /* A drag that selects text turns the next drag into a native text-drag, which
+   * cancels the pointer stream mid-swipe; the pitch copy has no reason to be
+   * selectable, so selection is off wholesale. */
+  user-select: none;
 }
 
 .welcome__icon {
@@ -42,17 +50,8 @@
   color: var(--pp-sub);
 }
 
-.welcome__code {
-  padding: var(--pp-space-2) var(--pp-space-3);
-  border: 1px dashed var(--pp-accent);
-  border-radius: var(--pp-radius);
-  font-family: var(--pp-font-mono);
-  font-size: var(--pp-text-xs);
-  color: var(--pp-accent);
-}
-
 /*
- * The closing step's principle roll-call: eleven name-over-gloss cells, two-up on a
+ * The roll-call step's principles: eleven name-over-gloss cells, two-up on a
  * phone and left-aligned against the screen's centred text so the names read as a
  * list rather than confetti. Two-up keeps the step short, not short enough to fit —
  * `safe center` above is what makes the overflow reachable. The +1 — Consent, marked
