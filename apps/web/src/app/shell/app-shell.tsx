@@ -7,6 +7,7 @@ import { OfflinePendingBadge } from '../offline/pending-badge';
 import { ThemeToggle } from '../theme/theme-toggle';
 
 import { TabBar } from './tab-bar';
+import { WelcomeInvitePopup } from './welcome-invite-popup';
 
 import './app-shell.css';
 
@@ -62,6 +63,10 @@ export function AppShell(): JSX.Element {
             }}
           />
         ) : null}
+
+        {/* Self-gating (issue #220): decides for itself whether this visit gets the
+            welcome, so the shell holds no invite-hint policy. */}
+        <WelcomeInvitePopup />
       </div>
     </div>
   );

@@ -54,3 +54,35 @@ export function personalLinkShareBlurb(): string {
 export function personalLinkShareText(url: string): string {
   return `${personalLinkShareBlurb()}\n${url}`;
 }
+
+/**
+ * Hand the link to the platform's share sheet, or to the clipboard.
+ *
+ * Moved here from `connect-card.tsx` when the welcome invite popup (issue #220) became
+ * the second thing that shares the link — the #160 rule below is exactly the kind of
+ * invariant a private second copy would silently break.
+ *
+ * ⚠ **`text` and `url` never overlap.** `navigator.share`'s `text` field carries only the
+ * blurb; the link travels solely in `url`. Passing both fields with the link folded into
+ * `text` too used to mean a share target that reads both fields verbatim — the OS share
+ * sheet's own Copy action among them — pasted the link twice (issue #160). The clipboard
+ * fallback has no separate `url` field to lean on, so it gets the combined, self-contained
+ * form instead.
+ *
+ * ⚠ Both branches can reject — `navigator.share` throws `AbortError` when the user dismisses
+ * the sheet, and the clipboard throws when the document is not focused. Neither is a failure
+ * worth interrupting anybody over, and neither leaves the app in a bad state, so both are
+ * swallowed. The link is on screen either way, which is the fallback that always works.
+ */
+export async function sharePersonalLink(url: string): Promise<void> {
+  try {
+    if (typeof navigator.share === 'function') {
+      await navigator.share({ text: personalLinkShareBlurb(), url });
+      return;
+    }
+
+    await navigator.clipboard.writeText(personalLinkShareText(url));
+  } catch {
+    // Deliberately silent; see above.
+  }
+}
