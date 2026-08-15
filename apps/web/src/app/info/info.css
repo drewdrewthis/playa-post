@@ -1,0 +1,67 @@
+/* The Info screen (issue #216). Section shapes mirror `your-profile.css` — same
+   tracked-caps labels, same QR frame — so the two settings-adjacent screens read as
+   siblings. */
+
+.info__title {
+  margin: 0;
+  font-family: var(--pp-font-display);
+  font-size: var(--pp-text-xl);
+}
+
+.info__section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--pp-space-2);
+}
+
+.info__section-label {
+  margin: 0;
+  font-weight: 700;
+  font-size: var(--pp-text-2xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pp-faint);
+}
+
+.info__link {
+  display: inline-block;
+}
+
+/*
+ * The support button wears Buy Me a Coffee's own brand purple (#BD5FFF, from the
+ * owner's widget config) rather than the app palette: it is the one control on the
+ * screen that leaves the app, and dressing it as an outbound brand is what says so.
+ * Literal, not a token — it is their colour, not ours, and the same in both themes.
+ *
+ * Doubled with `.button` because both selectors are single-class and CSS bundle order
+ * put the theme's `.button { background: transparent }` after this file — equal
+ * specificity handed the fill back to transparent.
+ */
+.button.info__coffee {
+  display: inline-block;
+  border-color: transparent;
+  background: #bd5fff;
+  color: #fff;
+  font-weight: 700;
+}
+
+.info__qr {
+  display: flex;
+  padding: var(--pp-space-2);
+  border: 1px solid var(--pp-card-border);
+  border-radius: var(--pp-radius-sm);
+
+  /* Literal, not a token: see the comment beside the `<QRCode>` in `info.tsx`. */
+  background: #fff;
+}
+
+/* Same treatment as the You screen's "Replay welcome →" line. */
+.info__replay {
+  align-self: flex-start;
+  font-size: var(--pp-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--pp-accent);
+  text-decoration: none;
+}

@@ -6,9 +6,9 @@ import { activeTabFor } from './active-tab';
 /**
  * The bottom tab bar, with the compose button breaking its top edge.
  *
- * Three tabs and a FAB. The comp drew a fourth, Saved, which went with the Saved Views
- * feature (issue #208). You is rendered even though the screen is not built: its route
- * exists and says honestly that it is coming.
+ * Four tabs and a FAB. The comp drew Saved in the fourth slot, which went with the
+ * Saved Views feature (issue #208); Info (issue #216) now stands there — the pitch,
+ * the repository, and the support link, permanently reachable.
  */
 export function TabBar(): JSX.Element {
   const { pathname } = useLocation();
@@ -34,6 +34,7 @@ export function TabBar(): JSX.Element {
         <span aria-hidden="true">+</span>
       </Link>
 
+      <Tab to="/info" glyph="✺" label="Info" active={active === 'info'} />
       <Tab to="/you" glyph="◍" label="You" active={active === 'you'} />
     </nav>
   );
