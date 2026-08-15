@@ -158,10 +158,11 @@ export function NotificationsPanel({ onClose }: { readonly onClose: () => void }
 /**
  * One row: the comp's serif title, its meta line, and its two affordances.
  *
- * The `→` opens the board rather than the bulletin that caused the notification. The
- * contract serves ids and no deep link exists for a single bulletin yet, and "the board,
- * where these are" is true — a link that claimed to open one specific item and did not
- * would be worse than an honest one.
+ * The `→` opens the screen where the cause of the notification lives, never the item
+ * itself: the board for bulletins and notes, the graph — whose header holds the request
+ * inbox — for a connection request. The contract serves ids and no per-item deep link
+ * exists, and "the screen, where these are" is true — a link that claimed to open one
+ * specific item and did not would be worse than an honest one.
  *
  * A dismissed row is given no `✕`: there is nothing left to dismiss, and a control whose
  * only outcome is an idempotent no-op is a control that teaches nothing.
@@ -185,6 +186,10 @@ function NotificationRow({
   readonly dismissing?: boolean;
 }): JSX.Element {
   const title = notificationTitle(notification);
+  // A connection request is answered on the graph screen, where the request inbox
+  // renders; everything else landed on the board.
+  const target = notification.kind === 'connections' ? '/graph' : '/board';
+  const place = notification.kind === 'connections' ? 'in your graph' : 'on your board';
 
   return (
     <li
@@ -196,11 +201,11 @@ function NotificationRow({
         <span className="notification-row__mark" aria-hidden="true" />
       ) : null}
 
-      <Link className="notification-row__open" to="/board" onClick={onOpen}>
+      <Link className="notification-row__open" to={target} onClick={onOpen}>
         <span className="notification-row__content">
           <span className="notification-row__title">{title}</span>
           <span className="notification-row__meta">
-            {notification.unread ? 'new on your board' : 'on your board'} ·{' '}
+            {notification.unread ? `new ${place}` : place} ·{' '}
             <time dateTime={notification.occurredAt}>
               {relativeTime(notification.occurredAt, now)}
             </time>

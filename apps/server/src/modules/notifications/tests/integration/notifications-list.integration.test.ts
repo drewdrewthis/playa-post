@@ -391,6 +391,155 @@ describe('notifications.list (issue #31, vertical-slice step 9)', () => {
     return { author, recipient, noteId, eventId: event.eventId, notifications };
   }
 
+  /**
+   * One owner with one pending connection request, already delivered by the
+   * `ConnectionRequested` consumer (issue #218) — the same seam discipline as
+   * `seedDeliveredNote`, with the recipient key named `ownerId` because that is the
+   * shape `modules/connections` actually writes.
+   */
+  async function seedDeliveredConnectionRequest(options: {
+    readonly ownerHandle: string;
+    readonly requesterHandle: string;
+    readonly occurredAt: Date;
+  }): Promise<{
+    owner: { userId: string; authUserId: string };
+    requester: { userId: string; authUserId: string };
+    requestId: string;
+    eventId: string;
+    notifications: NotificationsModule;
+  }> {
+    const owner = await seedOnboardedUser(options.ownerHandle);
+    const requester = await seedOnboardedUser(options.requesterHandle);
+
+    const { rows } = await testDatabase.client.query<{ id: string }>(
+      `insert into app.connection_requests (owner_id, requester_id, status, created_at)
+       values ($1, $2, 'pending', $3) returning id`,
+      [owner.userId, requester.userId, options.occurredAt],
+    );
+    const requestId = rows[0]?.id;
+    if (requestId === undefined) {
+      throw new Error('connection request insert returned no row');
+    }
+
+    const eventId = randomUUID();
+    const payload = { ownerId: owner.userId, requesterId: requester.userId };
+    await testDatabase.client.query(
+      `insert into app.outbox_events
+         (event_id, event_type, occurred_at, actor_id, aggregate_id, payload)
+       values ($1, 'ConnectionRequested', $2, $3, $4, $5::jsonb)`,
+      [eventId, options.occurredAt, requester.userId, requestId, JSON.stringify(payload)],
+    );
+
+    const notifications = buildNotificationsModule();
+    await notifications.deliverConnectionRequested.handle({
+      eventId,
+      eventType: 'ConnectionRequested',
+      occurredAt: options.occurredAt,
+      actorId: requester.userId,
+      aggregateId: requestId,
+      payload,
+    });
+
+    return { owner, requester, requestId, eventId, notifications };
+  }
+
+  describe('Scenario: A connection request reaches its owner’s bell (issue #218)', () => {
+    it('answers one connections notification carrying the request identifier and nothing else', async () => {
+      const occurredAt = new Date('2026-08-14T12:00:00.000Z');
+      const { owner, requestId, eventId, notifications } = await seedDeliveredConnectionRequest({
+        ownerHandle: 'dusty_conn_owner',
+        requesterHandle: 'dusty_conn_asker',
+        occurredAt,
+      });
+
+      const caller = callerFor(notifications, await bearerFor(owner.authUserId));
+      const listed = await caller.notifications.list();
+
+      expect(listed).toEqual([
+        {
+          kind: 'connections',
+          notificationId: eventId,
+          occurredAt: occurredAt.toISOString(),
+          connectionRequestId: requestId,
+          unread: true,
+          seen: false,
+        },
+      ]);
+      // Identifiers only — no requester handle, so the bell says someone asked without
+      // naming them until the owner opens the request itself.
+      expect(JSON.stringify(listed)).not.toMatch(/dusty_conn_asker/i);
+    });
+
+    it('drops the notification once the request is decided', async () => {
+      const { owner, requestId, notifications } = await seedDeliveredConnectionRequest({
+        ownerHandle: 'dusty_conn_decided_owner',
+        requesterHandle: 'dusty_conn_decided_asker',
+        occurredAt: new Date('2026-08-14T12:00:00.000Z'),
+      });
+
+      const caller = callerFor(notifications, await bearerFor(owner.authUserId));
+      await expect(caller.notifications.list()).resolves.toHaveLength(1);
+
+      await testDatabase.client.query(
+        `update app.connection_requests set status = 'accepted', decided_at = now() where id = $1`,
+        [requestId],
+      );
+
+      await expect(caller.notifications.list()).resolves.toEqual([]);
+    });
+
+    it('drops the notification once the request lapses past its fourteen days', async () => {
+      const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
+      const { owner, notifications } = await seedDeliveredConnectionRequest({
+        ownerHandle: 'dusty_conn_lapsed_owner',
+        requesterHandle: 'dusty_conn_lapsed_asker',
+        occurredAt: fifteenDaysAgo,
+      });
+
+      const caller = callerFor(notifications, await bearerFor(owner.authUserId));
+
+      await expect(caller.notifications.list()).resolves.toEqual([]);
+    });
+
+    it('marks the request read once its owner dismisses it', async () => {
+      // Exercises the ownerId branch of hasDeliveredMatch: a dismissal names the event,
+      // and the repository must recognize the owner as this event's recipient.
+      const { owner, eventId, notifications } = await seedDeliveredConnectionRequest({
+        ownerHandle: 'dusty_conn_dismiss_owner',
+        requesterHandle: 'dusty_conn_dismiss_asker',
+        occurredAt: new Date('2026-08-14T12:00:00.000Z'),
+      });
+
+      const caller = callerFor(notifications, await bearerFor(owner.authUserId));
+      await expect(
+        caller.notifications.dismiss({ notificationId: eventId }),
+      ).resolves.toMatchObject({ notificationId: eventId });
+
+      const listed = await caller.notifications.list();
+
+      expect(listed).toHaveLength(1);
+      expect(listed[0]?.unread).toBe(false);
+    });
+
+    it("refuses a dismissal of somebody else's connection notification", async () => {
+      const { eventId, notifications } = await seedDeliveredConnectionRequest({
+        ownerHandle: 'dusty_conn_theirs_owner',
+        requesterHandle: 'dusty_conn_theirs_asker',
+        occurredAt: new Date('2026-08-14T12:00:00.000Z'),
+      });
+      const stranger = await seedOnboardedUser('dusty_conn_theirs_stranger');
+
+      const caller = callerFor(notifications, await bearerFor(stranger.authUserId));
+
+      await expect(
+        caller.notifications.dismiss({ notificationId: eventId }),
+      ).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+        cause: expect.objectContaining({ code: 'NOTIFICATION_UNAVAILABLE' }),
+      });
+    });
+  });
+
   describe('Scenario: A viewer reads the grouped notification the flush produced', () => {
     it('answers one notification carrying the matched bulletin', async () => {
       const occurredAt = new Date('2026-08-01T12:00:00.000Z');

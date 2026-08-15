@@ -22,6 +22,17 @@ export const BULLETIN_CREATED = 'BulletinCreated';
  */
 export const NOTE_PINNED = 'NotePinned';
 
+/**
+ * The third event this module **subscribes to**, restated for the reason above.
+ *
+ * `modules/connections` publishes it and owns the name (issue #218). Its payload names
+ * the request's recipient as `ownerId` — the inbox owner, matching the request row's
+ * own column — not `recipientId`; every read that routes on this event filters on that
+ * key. Identifiers only, and deliberately no slug: which link was used is nobody's
+ * business but the owner's request inbox.
+ */
+export const CONNECTION_REQUESTED = 'ConnectionRequested';
+
 /** Event type name, past tense (addendum §20). Stable — consumers subscribe to it. */
 export const NOTIFY_ME_MATCHED = 'NotifyMeMatched';
 
@@ -44,10 +55,13 @@ export const NOTIFY_ME_MATCHED = 'NotifyMeMatched';
  * work" lists the grouping-window flush as its own job): the 60-second window is a
  * decision about time, and only a clock-driven reader can make it.
  *
- * `BULLETIN_CREATED` and `NOTE_PINNED` are deliberately **not** here — both arrive
+ * `BULLETIN_CREATED`, `NOTE_PINNED`, and `CONNECTION_REQUESTED` are deliberately
+ * **not** here — all arrive
  * through the drainer, which is exactly what
  * {@link import('../application/evaluate-notify-me.handler').EvaluateNotifyMeHandler}
- * and {@link import('../application/deliver-note-pinned.handler').DeliverNotePinnedHandler}
+ * {@link import('../application/deliver-note-pinned.handler').DeliverNotePinnedHandler}
+ * and
+ * {@link import('../application/deliver-connection-requested.handler').DeliverConnectionRequestedHandler}
  * are registered for.
  */
 export const SELF_DRAINED_EVENT_TYPES: readonly string[] = [NOTIFY_ME_MATCHED];

@@ -257,6 +257,7 @@ describe('notifications.settings and default-on delivery (issue #209, ADR-0020)'
         settings: [
           { kind: 'bulletins', enabled: true },
           { kind: 'note', enabled: true },
+          { kind: 'connections', enabled: true },
         ],
       });
     });
@@ -273,6 +274,7 @@ describe('notifications.settings and default-on delivery (issue #209, ADR-0020)'
         settings: [
           { kind: 'bulletins', enabled: true },
           { kind: 'note', enabled: false },
+          { kind: 'connections', enabled: true },
         ],
       });
 
@@ -286,6 +288,7 @@ describe('notifications.settings and default-on delivery (issue #209, ADR-0020)'
         settings: [
           { kind: 'bulletins', enabled: true },
           { kind: 'note', enabled: true },
+          { kind: 'connections', enabled: true },
         ],
       });
     });

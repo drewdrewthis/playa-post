@@ -1,8 +1,13 @@
 import type { DatabaseConnection } from '@playa-post/database';
 
+import { createLiveConnectionRequestDirectory } from '../connections/connections.module';
 import type { VisiblePeopleDirectory } from '../graph/graph.module';
 import { createNotifyMeQueryDirectory } from '../views/views.module';
 
+import {
+  createDeliverConnectionRequestedHandler,
+  type DeliverConnectionRequestedHandler,
+} from './application/deliver-connection-requested.handler';
 import {
   createDeliverNotePinnedHandler,
   type DeliverNotePinnedHandler,
@@ -22,6 +27,7 @@ import {
 import { createSubscribeToPushService } from './application/subscribe-to-push.service';
 import { SELF_DRAINED_EVENT_TYPES } from './domain/notification.events';
 import type { PushTransport } from './domain/push-transport';
+import { createPostgresConnectionRequestNotificationRepository } from './persistence/postgres-connection-request-notification.repository';
 import { createPostgresDeliveredNotificationRepository } from './persistence/postgres-delivered-notification.repository';
 import { createPostgresNoteNotificationRepository } from './persistence/postgres-note-notification.repository';
 import { createPostgresNotificationDismissalRepository } from './persistence/postgres-notification-dismissal.repository';
@@ -82,6 +88,14 @@ export interface NotificationsModule {
    */
   readonly deliverNotePinned: DeliverNotePinnedHandler;
   /**
+   * The `ConnectionRequested` consumer, for the outbox drainer to route to (issue #218).
+   *
+   * Leaves the module for the same reason {@link deliverNotePinned} does, and carries the
+   * same warning: its receipt is what makes a connection request appear in its owner's
+   * bell at all, so an unregistered consumer is a silently empty feature.
+   */
+  readonly deliverConnectionRequested: DeliverConnectionRequestedHandler;
+  /**
    * The grouping-window flush, for the scheduler to call (ADR-0006's scheduled work).
    *
    * Not a consumer: it is driven by a clock, not by an event, which is why its
@@ -130,6 +144,9 @@ export function createNotificationsModule(
   const pushSubscriptions = createPostgresPushSubscriptionRepository({ database });
   const deliveredNotifications = createPostgresDeliveredNotificationRepository({ database });
   const noteNotifications = createPostgresNoteNotificationRepository({ database });
+  const connectionRequestNotifications = createPostgresConnectionRequestNotificationRepository({
+    database,
+  });
   const dismissals = createPostgresNotificationDismissalRepository({ database });
   const seenWatermarks = createPostgresNotificationSeenWatermarkRepository({ database });
   const optouts = createPostgresNotificationOptoutRepository({ database });
@@ -141,6 +158,10 @@ export function createNotificationsModule(
         deliveredNotifications,
         dismissals,
         seenWatermarks,
+        // Composed from `modules/connections`' public factory the way the saved Notify
+        // Me queries come from views' — the liveness of a request inbox is that
+        // module's question, and this is its exported answer (issue #218).
+        liveConnectionRequests: createLiveConnectionRequestDirectory({ database }),
       }),
       // The read and the write share both collaborators on purpose: `unread` is the
       // negation of what `dismiss` writes, so a second store behind either one would be
@@ -161,6 +182,12 @@ export function createNotificationsModule(
     // `app.visible_notes` on the read path rather than by anything this handler holds.
     // `optouts` is the per-kind off-switch (issue #209, ADR-0020 D4).
     deliverNotePinned: createDeliverNotePinnedHandler({ noteNotifications, optouts }),
+    // Same shape as `deliverNotePinned`, third kind (issue #218): a receipt and the
+    // per-kind off-switch, with liveness left to the read path.
+    deliverConnectionRequested: createDeliverConnectionRequestedHandler({
+      connectionRequestNotifications,
+      optouts,
+    }),
     sendGroupedPush: createSendGroupedPushHandler({
       matches,
       pushSubscriptions,

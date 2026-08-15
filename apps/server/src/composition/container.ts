@@ -447,6 +447,9 @@ export function buildAppContainer(
       // out does not delay a notification — it means the notification never exists, and
       // nothing errors. `container-notification-wiring.unit.test.ts` holds the line.
       toDrainerConsumer(notifications.deliverNotePinned),
+      // ⚠ The whole of "a connection request reaches the bell" (issue #218), silent in
+      // exactly the same way as its note sibling: no receipt, no notification, no error.
+      toDrainerConsumer(notifications.deliverConnectionRequested),
       // ⚠ The whole of "accepting an introduction connects you" (issue #166, decision
       // D12), and its absence is silent in the same way: `modules/intros` would still
       // record the acceptance, nothing would throw, and the two people would simply never

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import type { GroupedBulletinNotification, PinnedNoteNotification } from '@playa-post/contracts';
+import type {
+  ConnectionRequestNotification,
+  GroupedBulletinNotification,
+  PinnedNoteNotification,
+} from '@playa-post/contracts';
 
 import {
   dismissedNotifications,
@@ -32,6 +36,20 @@ function noteNotification(
     notificationId: 'n-note',
     occurredAt: '2026-08-08T12:00:00.000Z',
     noteId: 'note-1',
+    unread: true,
+    seen: false,
+    ...overrides,
+  };
+}
+
+function connectionNotification(
+  overrides: Partial<ConnectionRequestNotification> = {},
+): ConnectionRequestNotification {
+  return {
+    kind: 'connections',
+    notificationId: 'n-conn',
+    occurredAt: '2026-08-08T12:00:00.000Z',
+    connectionRequestId: 'request-1',
     unread: true,
     seen: false,
     ...overrides,
@@ -173,6 +191,16 @@ describe('notificationTitle', () => {
       // people wrote to this viewer.
       expect(notificationTitle(noteNotification({ notificationId: 'n-note-2' }))).toBe(
         'Someone pinned a note to your board',
+      );
+    });
+  });
+
+  describe('given a connection request', () => {
+    it('says someone wants to connect, without naming who asked (#218)', () => {
+      // Same "Someone" stance as the note line: the contract carries the request id and
+      // nothing else, and who is asking is answered on the graph screen.
+      expect(notificationTitle(connectionNotification())).toBe(
+        'Someone wants to connect with you',
       );
     });
   });

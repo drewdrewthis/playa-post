@@ -122,6 +122,21 @@ describe('issue #209 migration — app.notification_optouts', () => {
     ).rejects.toThrow(/check/i);
   });
 
+  it('accepts the connections kind the widening migration added (#218)', async () => {
+    // Same superuser seam as the rejection above; the claim is the widened CHECK.
+    const owner = await database.client.query<{ id: string }>(
+      `insert into app.users (auth_user_id, handle, display_name, created_at)
+       values (gen_random_uuid(), 'optout_connections', 'Optout Connections', now()) returning id`,
+    );
+
+    await expect(
+      database.client.query(
+        `insert into app.notification_optouts (owner_id, kind) values ($1, 'connections')`,
+        [owner.rows[0]?.id],
+      ),
+    ).resolves.toBeDefined();
+  });
+
   it('references app.users with on delete cascade — an opt-out dies with its account', async () => {
     const { rows } = await database.client.query<{ referenced: string; delete_rule: string }>(
       `select ccu.table_name as referenced, rc.delete_rule

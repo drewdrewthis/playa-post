@@ -33,6 +33,7 @@ const ALL_ON: NotificationSettings = {
   settings: [
     { kind: 'bulletins', enabled: true },
     { kind: 'note', enabled: true },
+    { kind: 'connections', enabled: true },
   ],
 };
 
@@ -86,6 +87,7 @@ describe('NotificationSettingsControl', () => {
         settings: [
           { kind: 'bulletins', enabled: true },
           { kind: 'note', enabled: false },
+          { kind: 'connections', enabled: true },
         ],
       }),
     });
@@ -99,6 +101,8 @@ describe('NotificationSettingsControl', () => {
     expect(switchFor(mounted, 'note').getAttribute('aria-checked')).toBe('false');
     // Never colour alone: the state is also a word beside the switch.
     expect(switchFor(mounted, 'note').textContent).toContain('Off');
+    // The third kind (#218) renders from the same roster, no special casing.
+    expect(switchFor(mounted, 'connections').getAttribute('aria-checked')).toBe('true');
   });
 
   it('flips optimistically and sends the one mutation the tap means', async () => {

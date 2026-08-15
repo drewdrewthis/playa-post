@@ -9,7 +9,7 @@
  * the settings integration test round-trips every member of this list through the
  * table, so a copy that drifts fails on the CHECK.
  */
-export const NOTIFICATION_KINDS = ['bulletins', 'note'] as const;
+export const NOTIFICATION_KINDS = ['bulletins', 'note', 'connections'] as const;
 
 /** One member of {@link NOTIFICATION_KINDS}. */
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];

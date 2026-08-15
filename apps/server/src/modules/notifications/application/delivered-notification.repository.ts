@@ -39,6 +39,21 @@ export interface DeliveredNoteNotification {
 }
 
 /**
+ * One connection request this owner has already been notified about (issue #218).
+ *
+ * The exact shape of {@link DeliveredNoteNotification}, for the same reasons: not a
+ * {@link GroupableMatch} — one request is one person asking, so there is no window —
+ * and identifiers only: no requester, no slug.
+ */
+export interface DeliveredConnectionRequestNotification {
+  /** `app.outbox_events.event_id` of the `ConnectionRequested` row. The notification's id. */
+  readonly eventId: string;
+  readonly connectionRequestId: string;
+  /** When the request was sent, not when it was delivered. */
+  readonly occurredAt: Date;
+}
+
+/**
  * The port onto notifications a viewer may read.
  *
  * Separate from
@@ -121,8 +136,28 @@ export interface DeliveredNotificationRepository {
   findVisibleNoteIds(viewerId: ViewerId, noteIds: readonly string[]): Promise<readonly string[]>;
 
   /**
+   * Every connection request this viewer has already been notified about (issue #218).
+   *
+   * "Notified" is read from the
+   * {@link import('./deliver-connection-requested.handler').DeliverConnectionRequestedHandler}
+   * receipt, exactly as {@link findDeliveredNoteNotifications} reads its consumer's.
+   *
+   * ⚠ **Delivered, not necessarily still live.** Whether the request is still in the
+   * owner's inbox — pending, unlapsed — is `modules/connections`' question, answered
+   * through its exported directory at the application layer; this read reports only
+   * what the consumer delivered.
+   *
+   * @param viewerId - A {@link ViewerId}, never a `string` (ADR-0002 §5a).
+   * @returns Oldest first, matching its siblings so the caller sorts once.
+   */
+  findDeliveredConnectionRequestNotifications(
+    viewerId: ViewerId,
+  ): Promise<readonly DeliveredConnectionRequestNotification[]>;
+
+  /**
    * Whether `notificationId` names a delivered notification belonging to this recipient
-   * — a flushed `NotifyMeMatched` match, or a `NotePinned` note addressed to them.
+   * — a flushed `NotifyMeMatched` match, a `NotePinned` note addressed to them, or a
+   * `ConnectionRequested` request aimed at them.
    *
    * The pre-write check behind `notifications.dismiss` — see
    * {@link import('../domain/notification.errors').NotificationUnavailableError} for why

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { viewerIdFromActor, type ViewerId } from '../../../../shared/auth/viewer-id';
+import type { LiveConnectionRequestDirectory } from '../../../connections/connections.module';
 import type {
   DeliveredNoteNotification,
   DeliveredNotificationMatch,
@@ -72,11 +73,17 @@ describe('notifications seen watermark (issue #178)', () => {
       findDeliveredMatches: async () => matches,
       findVisibleBulletinIds: async (_viewer, bulletinIds) => bulletinIds,
       findDeliveredNoteNotifications: async () => notes,
+      findDeliveredConnectionRequestNotifications: async () => [],
       findVisibleNoteIds: async (_viewer, noteIds) => noteIds,
       hasDeliveredMatch: async (owner, notificationId) =>
         owner === recipientId &&
         [...matches, ...notes].some((candidate) => candidate.eventId === notificationId),
     };
+  }
+
+  /** No live requests, which keeps this file about the seen watermark alone. */
+  function fakeNoLiveRequests(): LiveConnectionRequestDirectory {
+    return { listLiveRequestIdsFor: async () => [] };
   }
 
   /** An in-memory `app.notification_dismissals`. */
@@ -117,6 +124,7 @@ describe('notifications seen watermark (issue #178)', () => {
   describe('list', () => {
     it('marks everything unseen while the caller has never opened the panel', async () => {
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         deliveredNotifications: fakeDelivered([match('event-1', 'bulletin-1')]),
         dismissals: fakeDismissals(),
         seenWatermarks: fakeSeenWatermarks(),
@@ -132,6 +140,7 @@ describe('notifications seen watermark (issue #178)', () => {
 
     it('marks a notification older than the watermark seen, and leaves it unread', async () => {
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         deliveredNotifications: fakeDelivered([match('event-1', 'bulletin-1')]),
         dismissals: fakeDismissals(),
         seenWatermarks: fakeSeenWatermarks(new Date(windowStart.getTime() + 1_000)),
@@ -149,6 +158,7 @@ describe('notifications seen watermark (issue #178)', () => {
       // comparison would leave that one row holding the badge up forever, because no
       // later open can ever move a watermark past a timestamp it equals on the nose.
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         deliveredNotifications: fakeDelivered([match('event-1', 'bulletin-1')]),
         dismissals: fakeDismissals(),
         seenWatermarks: fakeSeenWatermarks(windowStart),
@@ -159,6 +169,7 @@ describe('notifications seen watermark (issue #178)', () => {
 
     it('leaves a notification that arrived after the watermark unseen', async () => {
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         deliveredNotifications: fakeDelivered([match('event-1', 'bulletin-1', 1_000)]),
         dismissals: fakeDismissals(),
         seenWatermarks: fakeSeenWatermarks(windowStart),
@@ -172,6 +183,7 @@ describe('notifications seen watermark (issue #178)', () => {
       // between — the watermark is a fact about time, so it must cut across both kinds
       // rather than being a rule about Notify Me groups.
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         deliveredNotifications: fakeDelivered(
           [match('event-old', 'bulletin-1'), match('event-new', 'bulletin-2', 122_000)],
           [note('note-old', 'note-1', 1_000), note('note-new', 'note-2', 123_000)],
@@ -198,6 +210,7 @@ describe('notifications seen watermark (issue #178)', () => {
       // whose visible timestamp is older than the watermark — a badge counting a row the
       // reader is looking at.
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         deliveredNotifications: fakeDelivered([
           match('event-opener', 'bulletin-1'),
           match('event-joiner', 'bulletin-2', 59_000),
@@ -218,6 +231,7 @@ describe('notifications seen watermark (issue #178)', () => {
       // from the other. Two notifications, one dismissed and one not, under a watermark
       // that covers the older of them.
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         deliveredNotifications: fakeDelivered([
           match('seen-and-dismissed', 'bulletin-1'),
           match('seen-not-dismissed', 'bulletin-2', 61_000),
@@ -252,6 +266,7 @@ describe('notifications seen watermark (issue #178)', () => {
         now: () => new Date('2026-08-02T09:00:00.000Z'),
       });
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         deliveredNotifications,
         dismissals: fakeDismissals(),
         seenWatermarks,
@@ -305,6 +320,7 @@ describe('notifications seen watermark (issue #178)', () => {
       let clock = new Date(windowStart.getTime() + 30_000);
       const service = createMarkNotificationsSeenService({ seenWatermarks, now: () => clock });
       const query = createListNotificationsQuery({
+        liveConnectionRequests: fakeNoLiveRequests(),
         deliveredNotifications,
         dismissals: fakeDismissals(),
         seenWatermarks,

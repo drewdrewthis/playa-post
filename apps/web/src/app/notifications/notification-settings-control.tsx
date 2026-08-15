@@ -20,6 +20,10 @@ const KIND_COPY: Record<NotificationKind, { readonly label: string; readonly det
     label: 'Notes',
     detail: 'When somebody pins a note to your board.',
   },
+  connections: {
+    label: 'Connection requests',
+    detail: 'When somebody asks to connect with you.',
+  },
 };
 
 /**
