@@ -13,9 +13,9 @@ import '../welcome/welcome.css';
 const SWIPE_DISTANCE_PX = 48;
 
 /**
- * `/welcome` — the comp's onboarding takeover, as a route: three steps (#214 —
- * extended-family intro, the principle roll-call, the offers-and-privacy close; see
- * `welcome-steps.ts`).
+ * `/welcome` — the comp's onboarding takeover, as a route: four steps (#214 —
+ * extended-family intro, the principle roll-call, the offers-and-privacy step,
+ * the values close; see `welcome-steps.ts`).
  *
  * The comp draws it as an overlay the app shows when `playapost-onboarded` is unset;
  * here it is where an anonymous first visit lands (`RequireSession` sends a signed-out

@@ -1,9 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * The welcome flow (PR #78, cut to three steps in #214): three network-free steps a
+ * The welcome flow (PR #78, cut to four steps in #214): four network-free steps a
  * first-time visitor walks before sign-in — the extended-family intro, the eleven-name
- * principle roll-call, and the offers-and-privacy close.
+ * principle roll-call, the offers-and-privacy step, and the values close.
  *
  * The entry assertion is the routing one — an anonymous visitor who has never seen the
  * flow is sent to `/welcome`, not `/signin` — because that redirect
@@ -11,7 +11,7 @@ import { expect, test, type Page } from '@playwright/test';
  * Both exits stamp `playapost-onboarded` and land on `/signin`, and the replay
  * assertion proves the stamp sticks: the second anonymous visit skips the flow.
  *
- * Writes `docs/engineering/screenshots/m5-welcome-step-{1..3}.png` — one per step, the
+ * Writes `docs/engineering/screenshots/m5-welcome-step-{1..4}.png` — one per step, the
  * first before the walk and the rest as the walk advances — when
  * `E2E_WELCOME_SCREENSHOT_DIR` is set: the same opt-in shape as
  * `E2E_YOU_SCREENSHOT_DIR` in `you-screen.spec.ts`, so a normal run writes nothing.
@@ -61,9 +61,9 @@ test.describe('the welcome flow', () => {
       await page.screenshot({ path: `${directory}/m5-welcome-step-1.png`, fullPage: true });
     }
 
-    // Two advances land on the third, closing step — the count is pinned here on
+    // Three advances land on the fourth, closing step — the count is pinned here on
     // purpose, so adding or removing a step makes this walk fail loudly.
-    for (let advance = 0; advance < 2; advance += 1) {
+    for (let advance = 0; advance < 3; advance += 1) {
       await expect(page.getByTestId('welcome-next')).toHaveText('Next');
       await page.getByTestId('welcome-next').click();
       if (directory !== undefined && directory !== '') {
@@ -75,9 +75,9 @@ test.describe('the welcome flow', () => {
     }
     await expect(page.getByTestId('welcome-next')).toHaveText('Get started');
 
-    // The middle step carries the full principle roll-call, ten plus consent.
+    // A swipe back leaves the closing step, and a swipe forward returns to it.
     await swipe(page, 'right');
-    await expect(page.getByTestId('welcome-principle')).toHaveCount(11);
+    await expect(page.getByTestId('welcome-next')).toHaveText('Next');
     await swipe(page, 'left');
     await expect(page.getByTestId('welcome-next')).toHaveText('Get started');
 
@@ -98,18 +98,19 @@ test.describe('the welcome flow', () => {
     await expect(page.getByTestId('welcome-next')).toHaveText('Next');
     await expect(page.getByTestId('welcome-principle')).toHaveCount(0);
 
-    // Two swipes forward walk the whole flow; a third stays on the last step
+    // Three swipes forward walk the whole flow; a fourth stays on the last step
     // rather than exiting — only the button leaves.
     await swipe(page, 'left');
     await expect(page.getByTestId('welcome-principle')).toHaveCount(11);
+    await swipe(page, 'left');
     await swipe(page, 'left');
     await expect(page.getByTestId('welcome-next')).toHaveText('Get started');
     await swipe(page, 'left');
     await expect(page.getByTestId('welcome-next')).toHaveText('Get started');
     await expect(page).toHaveURL(/\/welcome$/);
 
-    // Back from the end returns to the roll-call.
+    // Swiping back from the end steps backwards, not out.
     await swipe(page, 'right');
-    await expect(page.getByTestId('welcome-principle')).toHaveCount(11);
+    await expect(page.getByTestId('welcome-next')).toHaveText('Next');
   });
 });

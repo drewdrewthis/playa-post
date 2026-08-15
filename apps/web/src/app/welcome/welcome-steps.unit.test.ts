@@ -58,16 +58,17 @@ describe('the welcome-seen flag', () => {
 });
 
 describe('the welcome steps', () => {
-  // Three steps by owner direction (#214), after feedback that eight was too long.
-  // The opening and closing copy is the owner's wording near-verbatim — a snapshot,
+  // Four steps by owner direction (#214), after feedback that eight was too long.
+  // All copy but the roll-call is the owner's wording near-verbatim — snapshots,
   // because "unchanged" is the assertion and any prose diff should be read.
-  it('runs three steps: the extended-family intro, the roll-call, the close', () => {
-    expect(WELCOME_STEPS).toHaveLength(3);
+  it('runs four steps: intro, roll-call, offers-and-privacy, values close', () => {
+    expect(WELCOME_STEPS).toHaveLength(4);
     expect(WELCOME_STEPS.map((step) => step.title)).toMatchInlineSnapshot(`
       [
         "Your extended family",
         "Ten principles, plus one",
         "Offer, ask, trust",
+        "Real people, real trust",
       ]
     `);
     expect(WELCOME_STEPS[0]?.body).toMatchInlineSnapshot(
@@ -75,6 +76,9 @@ describe('the welcome steps', () => {
     );
     expect(WELCOME_STEPS[2]?.body).toMatchInlineSnapshot(
       `"Offer events, gatherings, collaborations. A cup of tea or a place to crash. Ask for help if you need it. Everything is private by default, and only people you trust can find you or see your posts."`,
+    );
+    expect(WELCOME_STEPS[3]?.body).toMatchInlineSnapshot(
+      `"Privacy first, always free, always open-source. No ads, no influencers, no noise, no algorithms. Real people, real trust, real connections."`,
     );
   });
 

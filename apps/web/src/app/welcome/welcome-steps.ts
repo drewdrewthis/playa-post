@@ -2,10 +2,11 @@
  * The welcome carousel's steps, and the has-seen flag that decides whether an
  * anonymous visitor lands here or straight on `/signin`.
  *
- * Three steps, owner-directed (#214) after first-user feedback that the earlier
+ * Four steps, owner-directed (#214) after first-user feedback that the earlier
  * eight-step flow was too long: an extended-family framing, the principle roll-call,
- * and a concrete offers-and-privacy close. The opening and closing copy is the
- * owner's wording near-verbatim; the roll-call carries over unchanged. Each gloss in
+ * a concrete offers-and-privacy step, and a values close. All copy except the
+ * roll-call is the owner's wording near-verbatim; the roll-call carries over
+ * unchanged. Each gloss in
  * the roll-call is a claim about something the app actually does, so if a feature
  * changes, its gloss owes an edit. The roll-call runs in Burning Man's own published
  * order with Consent appended last, so it is deliberately not alphabetical — do not
@@ -59,6 +60,12 @@ export const WELCOME_STEPS: readonly WelcomeStep[] = [
     icon: '◉',
     title: 'Offer, ask, trust',
     body: 'Offer events, gatherings, collaborations. A cup of tea or a place to crash. Ask for help if you need it. Everything is private by default, and only people you trust can find you or see your posts.',
+    principles: null,
+  },
+  {
+    icon: '◇',
+    title: 'Real people, real trust',
+    body: 'Privacy first, always free, always open-source. No ads, no influencers, no noise, no algorithms. Real people, real trust, real connections.',
     principles: null,
   },
 ];
