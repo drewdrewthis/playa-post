@@ -51,6 +51,11 @@ async function bootstrapSession(page: Page, accessToken: string): Promise<void> 
     (
       globalThis as { localStorage: { setItem(key: string, value: string): void } }
     ).localStorage.setItem('playa-post:e2e-session', JSON.stringify({ accessToken: token }));
+    // The one-time welcome popup (#220) stays down: its scrim would swallow clicks
+    // mid-flow. Its own coverage is the popup's dedicated evidence spec.
+    (
+      globalThis as { localStorage: { setItem(key: string, value: string): void } }
+    ).localStorage.setItem('playapost-invite-hint-dismissed', 'true');
   }, accessToken);
   await page.goto('/');
 }
