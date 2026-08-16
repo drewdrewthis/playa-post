@@ -101,6 +101,9 @@ describe('the Info screen', () => {
     expect(card?.querySelector('[data-testid="info-coffee-qr"] svg')).not.toBeNull();
     expect(card?.querySelector('[data-testid="info-coffee-link"]')).not.toBeNull();
     expect(card?.querySelector('.screen__aside')).not.toBeNull();
+    // The explainer stops at "keeps the lights on." — the QR beside it already says
+    // "let them scan", so the clause was cut (owner request, follows #224).
+    expect(card?.textContent ?? '').not.toContain('hand your phone');
   });
 
   it('keeps the open-source promise but never says where the code lives (issue #224)', async () => {
