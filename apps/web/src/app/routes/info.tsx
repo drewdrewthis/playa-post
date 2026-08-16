@@ -69,7 +69,7 @@ export function InfoRoute(): JSX.Element {
           <div className="info__support-body">
             <p className="screen__aside">
               Playa Post is free and carries no ads. If it has been good to you, a coffee
-              keeps the lights on — or hand your phone to a friend and let them scan.
+              keeps the lights on.
             </p>
             <a
               className="button info__coffee"
