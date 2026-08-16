@@ -29,6 +29,32 @@
 }
 
 /*
+ * The support card (issue #224): the CONNECT card's shape — QR left, body right, one
+ * bordered box — washed in Buy Me a Coffee's brand purple instead of `--pp-card`. The
+ * color-mix keeps it a tint over the theme's card surface so text tokens stay readable
+ * in both themes while the box still reads unmistakably as the outbound brand's.
+ */
+.info__support-card {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: var(--pp-space-4);
+  padding: var(--pp-space-3) var(--pp-space-4);
+  border: 1px solid #bd5fff;
+  border-radius: var(--pp-radius);
+  background: color-mix(in srgb, #bd5fff 14%, var(--pp-card));
+}
+
+.info__support-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--pp-space-2);
+  min-width: 0;
+}
+
+/*
  * The support button wears Buy Me a Coffee's own brand purple (#BD5FFF, from the
  * owner's widget config) rather than the app palette: it is the one control on the
  * screen that leaves the app, and dressing it as an outbound brand is what says so.
@@ -47,6 +73,9 @@
 }
 
 .info__qr {
+  /* In the support card's flex row the code may not be squeezed narrower than it was
+     generated — same rule as `.profile__qr`, same reason: a squashed QR does not scan. */
+  flex: none;
   display: flex;
   padding: var(--pp-space-2);
   border: 1px solid var(--pp-card-border);
