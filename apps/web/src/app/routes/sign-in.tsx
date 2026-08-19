@@ -4,6 +4,7 @@ import { Navigate, useLocation } from 'react-router';
 import { returnPathFrom } from '../auth/return-path';
 import { useSession } from '../auth/session-provider';
 import { describeSignInFailure } from '../auth/sign-in-failure';
+import { hasSeenWelcome } from '../welcome/welcome-steps';
 
 import './sign-in.css';
 
@@ -34,6 +35,15 @@ export function SignInRoute(): JSX.Element {
     // if onboarding still stands in the way, `RequireSession` re-captures this same
     // address when it bounces to `/onboarding`.
     return <Navigate to={returnPathFrom(location.state) ?? '/'} replace />;
+  }
+
+  if (status === 'anonymous' && !hasSeenWelcome()) {
+    // The pitch comes before the email request on every entry point (issue #228).
+    // `RequireSession` already routes protected routes this way; this covers someone
+    // landing on `/signin` directly — a shared link, a bookmark — on a device that has
+    // never seen the tour. The tour drops back here, so nothing loops, and the state
+    // rides along so a deep link still resumes after sign-in (#205).
+    return <Navigate to="/welcome" replace state={location.state} />;
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {

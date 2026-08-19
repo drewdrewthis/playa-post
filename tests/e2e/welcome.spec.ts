@@ -89,6 +89,15 @@ test.describe('the welcome flow', () => {
     await expect(page).toHaveURL(/\/signin$/);
   });
 
+  test('greets a first-timer who lands directly on /signin (#228)', async ({ page }) => {
+    // The pitch precedes the email request on every entry point, not just `/`:
+    // a shared or bookmarked `/signin` address must forward a never-onboarded
+    // anonymous visitor to the tour first.
+    await page.goto('/signin');
+    await expect(page).toHaveURL(/\/welcome$/);
+    await expect(page.getByTestId('welcome')).toBeVisible();
+  });
+
   test('pages by swipe in both directions, staying put at the edges', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByTestId('welcome')).toBeVisible();
