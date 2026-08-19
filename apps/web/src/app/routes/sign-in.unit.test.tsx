@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import type { JSX } from 'react';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SessionProvider } from '../auth/session-provider';
 import type { AuthClient } from '../auth/supabase-auth-client';
@@ -11,6 +12,7 @@ import {
   setFieldValue,
   type MountedTree,
 } from '../testing/mount-with-api';
+import { markWelcomeSeen } from '../welcome/welcome-steps';
 
 import { SignInRoute } from './sign-in';
 
@@ -37,7 +39,14 @@ function createAnonymousAuthClient(): AuthClient {
 
 let tree: MountedTree | null = null;
 
+beforeEach(() => {
+  // Every existing test describes a visitor who has already been through the welcome
+  // tour — the never-seen case gets its own describe block below.
+  markWelcomeSeen();
+});
+
 afterEach(async () => {
+  globalThis.localStorage.clear();
   const mounted = tree;
 
   tree = null;
@@ -124,6 +133,61 @@ describe('SignInRoute install hint', () => {
     expect(stepFor('iPhone or iPad')).toContain('Add to Home Screen');
     expect(stepFor('Android')).toContain('Install app');
     expect(stepFor('Computer')).toContain('address bar');
+  });
+});
+
+/**
+ * Pins onboarding-before-email (issue #228): the pitch must come before the email
+ * request on *every* entry point. `RequireSession` already covers protected routes;
+ * this is the one address that could still put the form first — someone opening
+ * `/signin` directly on a device that has never seen the tour.
+ */
+describe('SignInRoute welcome-first', () => {
+  // Renders the router state it arrived with, so the deep-link forwarding is assertable.
+  function WelcomeStandIn(): JSX.Element {
+    return <div data-testid="welcome-stand-in">{JSON.stringify(useLocation().state)}</div>;
+  }
+
+  async function mountAtSignIn(state?: unknown): Promise<MountedTree> {
+    tree = await mountWithApi(
+      <MemoryRouter initialEntries={[{ pathname: '/signin', state }]}>
+        <SessionProvider authClient={createAnonymousAuthClient()}>
+          <Routes>
+            <Route path="/signin" element={<SignInRoute />} />
+            <Route path="/welcome" element={<WelcomeStandIn />} />
+          </Routes>
+        </SessionProvider>
+      </MemoryRouter>,
+      createFakeApi({}),
+    );
+
+    return tree;
+  }
+
+  it('sends an anonymous visitor who has never seen the tour to /welcome', async () => {
+    globalThis.localStorage.clear();
+
+    const mounted = await mountAtSignIn();
+
+    expect(mounted.container.querySelector('[data-testid="welcome-stand-in"]')).not.toBeNull();
+    expect(mounted.container.querySelector('input[type="email"]')).toBeNull();
+  });
+
+  it('forwards the interrupted address through the redirect (#205)', async () => {
+    globalThis.localStorage.clear();
+
+    const mounted = await mountAtSignIn({ returnPath: '/invite/tok' });
+
+    expect(
+      mounted.container.querySelector('[data-testid="welcome-stand-in"]')?.textContent,
+    ).toContain('/invite/tok');
+  });
+
+  it('keeps the email form first once the tour has been seen', async () => {
+    const mounted = await mountAtSignIn();
+
+    expect(mounted.container.querySelector('input[type="email"]')).not.toBeNull();
+    expect(mounted.container.querySelector('[data-testid="welcome-stand-in"]')).toBeNull();
   });
 });
 
