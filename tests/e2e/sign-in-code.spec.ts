@@ -70,6 +70,13 @@ async function mockSignInLinkSent(page: Page): Promise<void> {
 
 /** Advances the sign-in screen from the email form to the code form. */
 async function requestCode(page: Page): Promise<void> {
+  // These tests describe a visitor who has already been through the welcome tour —
+  // without the stamp, `/signin` now forwards a first-timer to `/welcome` (#228).
+  await page.addInitScript(() => {
+    (
+      globalThis as { localStorage: { setItem(key: string, value: string): void } }
+    ).localStorage.setItem('playapost-onboarded', '1');
+  });
   await page.goto('/signin');
   await expect(page.getByTestId('sign-in')).toBeVisible();
 

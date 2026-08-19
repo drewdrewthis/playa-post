@@ -107,6 +107,11 @@ async function seedTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
     (
       globalThis as { localStorage: { setItem(key: string, value: string): void } }
     ).localStorage.setItem('playapost-theme', value);
+    // The rate-limit tests below open `/signin` signed out; without the tour stamp a
+    // first-timer is now forwarded to `/welcome` first (#228).
+    (
+      globalThis as { localStorage: { setItem(key: string, value: string): void } }
+    ).localStorage.setItem('playapost-onboarded', '1');
   }, theme);
 }
 
