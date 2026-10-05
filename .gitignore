@@ -37,3 +37,9 @@ supabase/.temp/
 
 # Hand-run evidence-capture specs, never part of the suite
 tests/e2e/__scratch/
+
+# Claude Code local settings (contains secrets)
+.claude/settings.local.json
+
+# Claude Code local settings (contains secrets)
+.claude/settings.json
